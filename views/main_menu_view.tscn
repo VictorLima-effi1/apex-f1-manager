@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://c4l0emkc08cap"]
+
+[ext_resource type="Script" uid="uid://w15vaeebka8k" path="res://views/main_menu_view.gd" id="1_epvu4"]
+
+[node name="MainMenuView" type="Control" unique_id=953318180]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_epvu4")

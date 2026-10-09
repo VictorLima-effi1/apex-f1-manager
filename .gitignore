@@ -1,0 +1,13 @@
+# Cache e arquivos locais do Godot 4
+.godot/
+
+# Executáveis e Builds de Exportação
+*.exe
+*.pck
+*.console
+*.zip
+
+# Logs e arquivos do sistema
+*.log
+.DS_Store
+Thumbs.db
