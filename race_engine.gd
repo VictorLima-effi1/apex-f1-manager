@@ -12,16 +12,20 @@ var total_laps: int = 58
 var is_race_running: bool = false
 var is_race_finished: bool = false
 
+# Nível de Água na Pista (%) e Estado do Tempo
 var is_wet_race: bool = false
 var weather_state: String = "Pista Seca"
-var rain_intensity: float = 0.0
+var water_level: float = 0.0 # Varia de 0.0% a 100.0%
 
 var quali_phase: String = "Q1"
 var quali_time_elapsed: float = 0.0
 var quali_durations: Dictionary = {"Q1": 1080.0, "Q2": 900.0, "Q3": 720.0}
 
+# Estados da Pista: "NONE", "YELLOW", "VSC", "SC", "RED_FLAG"
 var safety_car_status: String = "NONE"
 var safety_car_laps_left: int = 0
+var red_flag_active: bool = false
+var pending_red_flag_modal: bool = false
 
 var race_logs: Array = []
 
@@ -54,17 +58,19 @@ func setup_race(selected_track: Dictionary) -> void:
 	quali_time_elapsed = 0.0
 	safety_car_status = "NONE"
 	safety_car_laps_left = 0
+	red_flag_active = false
+	pending_red_flag_modal = false
 	race_logs.clear()
 	
 	is_wet_race = randf() < track.get("ChanceChuva", 0.20)
 	if is_wet_race:
-		weather_state = "Pista Molhada"
-		rain_intensity = randf_range(0.3, 0.7)
-		race_logs.append("🌧️ CLIMA: Pista molhada para a sessão de qualificação.")
+		water_level = randf_range(40.0, 85.0)
+		weather_state = "Pista Molhada (" + str(snapped(water_level, 1.0)) + "% água)"
+		race_logs.append("🌧️ CLIMA: Pista molhada para a qualificação (" + str(snapped(water_level, 1.0)) + "% de água).")
 	else:
-		weather_state = "Pista Seca"
-		rain_intensity = 0.0
-		race_logs.append("☀️ CLIMA: Pista seca para a sessão de qualificação.")
+		water_level = 0.0
+		weather_state = "Pista Seca (0% água)"
+		race_logs.append("☀️ CLIMA: Pista seca para a qualificação.")
 
 	race_drivers.clear()
 	active_quali_drivers.clear()
@@ -86,7 +92,7 @@ func setup_race(selected_track: Dictionary) -> void:
 			entry["timer_state"] = randf_range(10.0, 40.0)
 			entry["pending_lap_time"] = 0.0
 			
-			entry["tire_compound"] = "Wet" if is_wet_race else "Soft"
+			entry["tire_compound"] = _get_ideal_compound_for_water(water_level)
 			entry["used_compounds"] = [entry["tire_compound"]]
 			entry["tire_wear"] = 100.0
 			entry["pit_stops"] = 0
@@ -96,6 +102,13 @@ func setup_race(selected_track: Dictionary) -> void:
 			active_quali_drivers.append(entry)
 
 	active_quali_drivers.sort_custom(func(a, b): return a["Nome"] < b["Nome"])
+
+func _get_ideal_compound_for_water(w_level: float) -> String:
+	if w_level > 55.0:
+		return "Wet"
+	elif w_level > 15.0:
+		return "Inter"
+	return "Medium"
 
 func process_quali_tick(delta_sec: float = 1.0) -> Dictionary:
 	if is_quali_done():
@@ -114,10 +127,8 @@ func process_quali_tick(delta_sec: float = 1.0) -> Dictionary:
 					d["timer_state"] -= delta_sec
 				else:
 					var driver_skill = d.get("Grau", 80) * 0.4 + d.get("Corrida", 80) * 0.4 + d.get("Overall", 80) * 0.2
-					
-					# Impacto da Moral no Treino Classificatório
 					var morale = d.get("Moral", 75)
-					var morale_factor = (morale - 50.0) / 100.0 # Varia entre -0.5s e +0.5s
+					var morale_factor = (morale - 50.0) / 100.0
 					
 					var calculated_hot_time = 78.0 - (driver_skill * 0.1) - morale_factor + randf_range(-0.6, 0.6)
 					
@@ -263,37 +274,14 @@ func _advance_quali_session() -> void:
 		race_logs.append("🏁 QUALIFICAÇÃO CONCLUÍDA! Grid de largada pronto.")
 
 func _initialize_driver_race_strategy(driver: Dictionary, start_pos: int) -> void:
-	if is_wet_race:
-		driver["tire_compound"] = "Wet"
-		driver["used_compounds"] = ["Wet"]
-		driver["planned_strategy"] = ["Wet", "Wet"]
-		return
-
-	var strategy_roll = randf()
-	if total_laps >= 60:
-		if strategy_roll < 0.45:
-			driver["planned_strategy"] = ["Soft", "Medium", "Soft"]
-		elif strategy_roll < 0.80:
-			driver["planned_strategy"] = ["Medium", "Hard"]
+	var first_compound = _get_ideal_compound_for_water(water_level)
+	if first_compound not in ["Wet", "Inter"]:
+		var strategy_roll = randf()
+		if total_laps >= 60:
+			first_compound = "Medium" if strategy_roll < 0.6 else "Soft"
 		else:
-			driver["planned_strategy"] = ["Hard", "Medium", "Soft"]
-	else:
-		if start_pos <= 10:
-			if strategy_roll < 0.60:
-				driver["planned_strategy"] = ["Medium", "Hard"]
-			elif strategy_roll < 0.85:
-				driver["planned_strategy"] = ["Soft", "Hard"]
-			else:
-				driver["planned_strategy"] = ["Soft", "Medium", "Soft"]
-		else:
-			if strategy_roll < 0.50:
-				driver["planned_strategy"] = ["Hard", "Medium"]
-			elif strategy_roll < 0.80:
-				driver["planned_strategy"] = ["Medium", "Hard"]
-			else:
-				driver["planned_strategy"] = ["Hard", "Soft"]
-
-	var first_compound = driver["planned_strategy"][0]
+			first_compound = "Medium" if start_pos <= 10 else "Hard"
+			
 	driver["tire_compound"] = first_compound
 	driver["used_compounds"] = [first_compound]
 
@@ -302,26 +290,35 @@ func process_lap() -> Dictionary:
 		is_race_finished = true
 		return {"finished": true}
 		
+	if pending_red_flag_modal:
+		return {"finished": false, "red_flag": true}
+
 	current_lap += 1
 	var lap_events: Array = []
 	
-	if randf() < 0.04:
-		if is_wet_race:
-			if randf() < 0.3:
-				is_wet_race = false
-				weather_state = "Pista Seca"
-				lap_events.append("☀️ CLIMA: Pista secou!")
+	# --- DINÂMICA DE CHUVA E TRILHO SECO (%) ---
+	if water_level > 0.0:
+		var drying_rate = randf_range(1.5, 3.5)
+		water_level = max(0.0, water_level - drying_rate)
+		
+		if water_level <= 0.0:
+			weather_state = "Pista Seca (0% água)"
+			lap_events.append("☀️ CLIMA: A pista secou completamente! (0% água)")
 		else:
-			if randf() < track.get("ChanceChuva", 0.20):
-				is_wet_race = true
-				weather_state = "Pista Molhada"
-				lap_events.append("🌧️ COMEÇOU A CHOVER! Pista molhada.")
+			weather_state = "Pista Molhada (" + str(snapped(water_level, 1.0)) + "% água)"
+	else:
+		if randf() < track.get("ChanceChuva", 0.20) * 0.1:
+			water_level = randf_range(20.0, 60.0)
+			weather_state = "Pista Molhada (" + str(snapped(water_level, 1.0)) + "% água)"
+			lap_events.append("🌧️ COMEÇOU A CHOVER! Pista com " + str(snapped(water_level, 1.0)) + "% de água.")
 
 	if safety_car_laps_left > 0:
 		safety_car_laps_left -= 1
 		if safety_car_laps_left <= 0:
 			safety_car_status = "NONE"
-			lap_events.append("🟢 BANDEIRA VERDE: Safety Car recolhido.")
+			lap_events.append("🟢 BANDEIRA VERDE: Pista liberada / SC recolhido.")
+
+	var accident_this_lap = false
 
 	for d in race_drivers:
 		if d["Status"] != "Na Pista":
@@ -331,22 +328,28 @@ func process_lap() -> Dictionary:
 			
 		var base_wear = 2.8 if d["tire_compound"] == "Soft" else (2.0 if d["tire_compound"] == "Medium" else (1.3 if d["tire_compound"] == "Hard" else 2.2))
 		var tire_skill_mod = (100.0 - d.get("Pneus", 80)) * 0.015
+		
+		if safety_car_status in ["SC", "VSC"]:
+			base_wear *= 0.4
+			
 		var wear = base_wear + tire_skill_mod + randf_range(-0.1, 0.2)
 		d["tire_wear"] = max(0.0, d["tire_wear"] - wear)
 		
+		var ideal_compound = _get_ideal_compound_for_water(water_level)
 		var needs_pit = false
 		var target_compound = d["tire_compound"]
 		var remaining_laps = total_laps - current_lap
 		
-		if is_wet_race and d["tire_compound"] != "Wet":
+		# Decisão do Pit pela Janela de Pneu Ideal
+		if ideal_compound in ["Wet", "Inter"] and d["tire_compound"] != ideal_compound:
 			needs_pit = true
-			target_compound = "Wet"
-		elif not is_wet_race and d["tire_compound"] == "Wet":
+			target_compound = ideal_compound
+		elif ideal_compound not in ["Wet", "Inter"] and d["tire_compound"] in ["Wet", "Inter"]:
 			needs_pit = true
 			target_compound = _select_next_dry_compound(d, remaining_laps)
 		elif d["tire_wear"] < 15.0 or (safety_car_status != "NONE" and d["tire_wear"] < 40.0 and remaining_laps > 10):
 			needs_pit = true
-			target_compound = _select_next_dry_compound(d, remaining_laps)
+			target_compound = ideal_compound if ideal_compound in ["Wet", "Inter"] else _select_next_dry_compound(d, remaining_laps)
 			
 		if needs_pit:
 			d["is_in_pit"] = true
@@ -356,8 +359,19 @@ func process_lap() -> Dictionary:
 			if not d["used_compounds"].has(target_compound):
 				d["used_compounds"].append(target_compound)
 				
-			var pit_lane_loss = randf_range(20.0, 26.0)
-			var stop_time = randf_range(2.1, 3.8)
+			# --- ERROS DE PIT STOP BASEADOS NA MORAL ---
+			var team_morale = d.get("Moral", 75)
+			var error_chance = clamp(0.15 - (team_morale * 0.0012), 0.02, 0.20)
+			
+			var stop_time = randf_range(2.1, 2.8)
+			var pit_error_msg = ""
+			
+			if randf() < error_chance:
+				var extra_time = randf_range(3.0, 6.0)
+				stop_time += extra_time
+				pit_error_msg = " ⚠️ ERRO NO PIT STOP (+%ss)" % str(snapped(extra_time, 0.1))
+				
+			var pit_lane_loss = randf_range(20.0, 24.0)
 			var total_pit_loss = pit_lane_loss + stop_time
 			
 			var base_lap = 80.0
@@ -371,72 +385,91 @@ func process_lap() -> Dictionary:
 				if other["Status"] == "Na Pista" and other["TempoTotal"] < d["TempoTotal"]:
 					reenter_pos += 1
 					
-			lap_events.append("🛠️ PIT STOP: " + d["Nome"] + " (" + d["Equipe"] + ") colocou pneus " + target_compound + " (" + str(snapped(stop_time, 0.1)) + "s) - Voltou em P" + str(reenter_pos) + ".")
+			lap_events.append("🛠️ PIT STOP: " + d["Nome"] + " (" + d["Equipe"] + ") colocou " + target_compound + " (" + str(snapped(stop_time, 0.1)) + "s)" + pit_error_msg + " - P" + str(reenter_pos) + ".")
 		else:
 			var base_lap = 80.0
 			var compound_delta = 0.0
-			match d["tire_compound"]:
-				"Soft": compound_delta = 0.0
-				"Medium": compound_delta = 0.5
-				"Hard": compound_delta = 1.1
-				"Wet": compound_delta = 8.0
+			
+			# Penalidade pesada por pneu errado para o nível de água
+			if water_level > 55.0 and d["tire_compound"] != "Wet":
+				compound_delta += 12.0
+			elif water_level > 15.0 and water_level <= 55.0 and d["tire_compound"] != "Inter":
+				compound_delta += 6.0
+			elif water_level <= 15.0 and d["tire_compound"] in ["Wet", "Inter"]:
+				compound_delta += 8.0
+			else:
+				match d["tire_compound"]:
+					"Soft": compound_delta = 0.0
+					"Medium": compound_delta = 0.5
+					"Hard": compound_delta = 1.1
 				
 			var driver_speed = (d.get("Corrida", 80) * 0.4 + d.get("Grau", 80) * 0.3) * 0.1
-			
-			# --- CÁLCULO DO IMPACTO DA MORAL NO RITMO DA CORRIDA ---
 			var morale = d.get("Moral", 75)
-			var morale_time_modifier = (50.0 - morale) * 0.008 # Moral baixa adiciona tempo (+0.2s por volta se moral for 25)
+			var morale_time_modifier = (50.0 - morale) * 0.008
 			
-			var wear_penalty = 0.0
-			if d["tire_wear"] < 15.0:
-				wear_penalty = (15.0 - d["tire_wear"]) * 0.35
-			else:
-				wear_penalty = (100.0 - d["tire_wear"]) * 0.012
-			
+			var wear_penalty = (15.0 - d["tire_wear"]) * 0.35 if d["tire_wear"] < 15.0 else (100.0 - d["tire_wear"]) * 0.012
 			var lap_time = base_lap + compound_delta - driver_speed + wear_penalty + morale_time_modifier + randf_range(-0.3, 0.3)
-			if safety_car_status == "SC":
-				lap_time += 15.0
-			elif safety_car_status == "VSC":
-				lap_time += 7.0
+			
+			if safety_car_status == "SC" or safety_car_status == "VSC":
+				lap_time *= 1.60
+			elif safety_car_status == "YELLOW":
+				lap_time *= 1.20
 				
 			d["TempoTotal"] += lap_time
 			d["LastLapTime"] = lap_time
 			
-		# --- CHANCE DE ABANDONO/ERRO POR MORAL BAIXA ---
 		var morale_val = d.get("Moral", 75)
-		var crash_chance = 0.002
-		if morale_val < 40:
-			crash_chance = 0.006 # Moral crítica aumenta em 3x a chance de erro/abandono na volta
+		var crash_chance = 0.006 if morale_val < 40 else 0.002
 			
 		if randf() < crash_chance:
-			d["Status"] = "Abandonou (Quebra)" if randf() < 0.6 else "Abandonou (Acidente)"
+			var is_crash = randf() >= 0.6
+			d["Status"] = "Abandonou (Acidente)" if is_crash else "Abandonou (Quebra)"
 			d["retired_lap"] = current_lap
 			d["is_in_pit"] = false
-			lap_events.append("💥 ABANDONO: " + d["Nome"] + " (" + d["Equipe"] + ") fora da corrida na volta " + str(current_lap) + ".")
-			
-			if safety_car_status == "NONE" and randf() < 0.4:
-				safety_car_status = "SC" if randf() < 0.5 else "VSC"
-				safety_car_laps_left = randi_range(2, 4)
-				lap_events.append("⚠️ " + safety_car_status + " ENTROU NA PISTA!")
+			accident_this_lap = is_crash or accident_this_lap
+			lap_events.append("💥 ABANDONO: " + d["Nome"] + " (" + d["Equipe"] + ") fora na volta " + str(current_lap) + ".")
+
+	# --- GERAÇÃO DE SAFETY CAR / VSC / BANDEIRAS ---
+	if accident_this_lap and safety_car_status == "NONE":
+		var roll = randf()
+		if roll < 0.35:
+			safety_car_status = "SC"
+			safety_car_laps_left = randi_range(2, 3)
+			lap_events.append("🚨 SAFETY CAR ENTROU NA PISTA! (2-3 Voltas)")
+		elif roll < 0.60:
+			safety_car_status = "VSC"
+			safety_car_laps_left = randi_range(1, 2)
+			lap_events.append("🟡 VIRTUAL SAFETY CAR (VSC) ACIONADO!")
+		elif roll < 0.85:
+			safety_car_status = "YELLOW"
+			safety_car_laps_left = randi_range(1, 2)
+			lap_events.append("⚠️ BANDEIRA AMARELA NO SETOR!")
+		else:
+			safety_car_status = "RED_FLAG"
+			red_flag_active = true
+			pending_red_flag_modal = true
+			lap_events.append("🔴 BANDEIRA VERMELHA! Corrida paralisada.")
 
 	race_drivers.sort_custom(func(a, b):
 		var a_active = a["Status"] == "Na Pista"
 		var b_active = b["Status"] == "Na Pista"
-		
-		if a_active and not b_active:
-			return true
-		if not a_active and b_active:
-			return false
-		if a_active and b_active:
-			return a["TempoTotal"] < b["TempoTotal"]
-		
-		var a_ret = int(a.get("retired_lap", 0))
-		var b_ret = int(b.get("retired_lap", 0))
-		if a_ret != b_ret:
-			return a_ret > b_ret
-		return a["TempoTotal"] < b["TempoTotal"]
+		if a_active and not b_active: return true
+		if not a_active and b_active: return false
+		if a_active and b_active: return a["TempoTotal"] < b["TempoTotal"]
+		return int(a.get("retired_lap", 0)) > int(b.get("retired_lap", 0))
 	)
-	
+
+	if safety_car_status == "SC":
+		var current_accumulated_gap = 0.0
+		for i in range(race_drivers.size()):
+			if race_drivers[i]["Status"] == "Na Pista":
+				if i == 0:
+					race_drivers[i]["TempoTotal"] = race_drivers[0]["TempoTotal"]
+				else:
+					var delta = randf_range(0.150, 0.380)
+					current_accumulated_gap += delta
+					race_drivers[i]["TempoTotal"] = race_drivers[0]["TempoTotal"] + current_accumulated_gap
+
 	race_logs.append_array(lap_events)
 	if current_lap >= total_laps:
 		is_race_finished = true
@@ -445,32 +478,36 @@ func process_lap() -> Dictionary:
 		"finished": is_race_finished,
 		"lap": current_lap,
 		"events": lap_events,
-		"standings": race_drivers
+		"standings": race_drivers,
+		"red_flag": pending_red_flag_modal
 	}
+
+# Troca automatizada da IA sob Bandeira Vermelha
+func resolve_red_flag_restart(_ignored_user_choice: String = "") -> void:
+	pending_red_flag_modal = false
+	red_flag_active = false
+	safety_car_status = "NONE"
+	
+	for d in race_drivers:
+		if d["Status"] == "Na Pista":
+			var choice = _get_ideal_compound_for_water(water_level)
+			if choice not in ["Wet", "Inter"]:
+				choice = _select_next_dry_compound(d, total_laps - current_lap)
+			d["tire_compound"] = choice
+			d["tire_wear"] = 100.0
+			if not d["used_compounds"].has(choice):
+				d["used_compounds"].append(choice)
+
+	var accumulated_start_gap = 0.0
+	for i in range(race_drivers.size()):
+		if race_drivers[i]["Status"] == "Na Pista":
+			race_drivers[i]["TempoTotal"] = accumulated_start_gap
+			accumulated_start_gap += 0.200
+
+	race_logs.append("🟢 RELARGADA EM GRID DE LARGADA REALIZADA NA VOLTA " + str(current_lap) + ".")
 
 func _select_next_dry_compound(driver: Dictionary, remaining_laps: int) -> String:
 	var used: Array = driver.get("used_compounds", [])
-	var planned: Array = driver.get("planned_strategy", [])
-	var current_stop = driver["pit_stops"]
-	
-	if current_stop < planned.size():
-		var candidate = planned[current_stop]
-		if not used.has(candidate) or remaining_laps < 15:
-			return candidate
-
-	if used.size() == 1:
-		var mandatory_options = []
-		for c in ["Soft", "Medium", "Hard"]:
-			if not used.has(c):
-				mandatory_options.append(c)
-				
-		if remaining_laps <= 15:
-			return "Soft" if mandatory_options.has("Soft") else mandatory_options[0]
-		elif remaining_laps <= 28:
-			return "Medium" if mandatory_options.has("Medium") else mandatory_options[0]
-		else:
-			return "Hard" if mandatory_options.has("Hard") else mandatory_options[0]
-			
 	if remaining_laps <= 16:
 		return "Soft"
 	elif remaining_laps <= 30:

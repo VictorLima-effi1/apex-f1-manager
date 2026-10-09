@@ -28,11 +28,11 @@ func _apply_saved_settings() -> void:
 			window.mode = Window.MODE_WINDOWED
 			window.borderless = false
 		1:
-			window.mode = Window.MODE_FULLSCREEN
+			window.mode = Window.MODE_EXCLUSIVE_FULLSCREEN
 		2:
 			window.mode = Window.MODE_WINDOWED
 			window.borderless = true
-			
+	
 	# 3. Aplica Resolução / Proporção (apenas se em modo Janela/Sem Borda)
 	if Database.window_mode_index != 1:
 		match Database.aspect_index:
@@ -179,7 +179,7 @@ func _on_btn_new_game_pressed() -> void:
 		Database.reset_database()
 	
 	Database.current_view = "dashboard"
-	get_tree().change_scene_to_file("res://main.tscn") # Ajuste o caminho da cena principal se necessário
+	get_tree().change_scene_to_file("res://main.tscn")
 
 func _on_load_game() -> void:
 	var success = false
@@ -193,7 +193,9 @@ func _on_load_game() -> void:
 		_show_custom_modal("CARREGAR JOGO", "Nenhum arquivo de save válido foi encontrado na pasta do jogo.")
 
 func _on_options() -> void:
-	_show_custom_modal("OPÇÕES", "Em construção, volte na próxima atualização.")
+	var options_script = preload("res://views/options_view.gd")
+	var options_node = options_script.new()
+	add_child(options_node)
 
 func _on_exit() -> void:
 	_show_exit_confirmation_modal()

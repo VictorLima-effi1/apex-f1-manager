@@ -16,8 +16,13 @@ var race_timer: Timer
 @onready var race_grid_node: GridContainer
 @onready var log_text_node: RichTextLabel
 
+var left_vbox: VBoxContainer
+var banner_container: PanelContainer
+var banner_label: Label
+
 var timer_speed: float = 1.0
 var sim_step_delta: float = 1.0
+var active_modal: Control = null
 
 func _ready() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -91,9 +96,14 @@ func build_ui() -> void:
 	main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_hbox.add_theme_constant_override("separation", 12)
 	
+	# Painel Esquerdo (Grid do Leaderboard + Banner de Segurança)
 	var left_panel = PanelContainer.new()
 	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_panel.size_flags_stretch_ratio = 2.0
+	
+	left_vbox = VBoxContainer.new()
+	left_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_vbox.add_theme_constant_override("separation", 8)
 	
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -104,9 +114,30 @@ func build_ui() -> void:
 	race_grid_node.add_theme_constant_override("h_separation", 10)
 	race_grid_node.add_theme_constant_override("v_separation", 6)
 	scroll.add_child(race_grid_node)
-	left_panel.add_child(scroll)
+	left_vbox.add_child(scroll)
+
+	# FAIXA DE SEGURANÇA ABAIXO DO LEADERBOARD
+	banner_container = PanelContainer.new()
+	banner_container.visible = false
+	banner_container.custom_minimum_size.y = 48
+
+	var margin_b = MarginContainer.new()
+	margin_b.add_theme_constant_override("margin_left", 12)
+	margin_b.add_theme_constant_override("margin_right", 12)
+	margin_b.add_theme_constant_override("margin_top", 10)
+	margin_b.add_theme_constant_override("margin_bottom", 10)
+
+	banner_label = Label.new()
+	banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner_label.add_theme_font_size_override("font_size", 16)
+	margin_b.add_child(banner_label)
+	banner_container.add_child(margin_b)
+
+	left_vbox.add_child(banner_container)
+	left_panel.add_child(left_vbox)
 	main_hbox.add_child(left_panel)
 	
+	# Painel Direito (Feed)
 	var right_panel = PanelContainer.new()
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
@@ -153,7 +184,10 @@ func _skip_to_end_of_session() -> void:
 		_update_ui()
 	elif not engine.is_finished():
 		while not engine.is_finished():
-			engine.process_lap()
+			var res = engine.process_lap()
+			if res.get("red_flag", false):
+				_show_red_flag_modal()
+				break
 		race_timer.stop()
 		btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
 		_update_ui()
@@ -179,16 +213,119 @@ func _on_tick() -> void:
 		else:
 			btn_start.text = "▶ INICIAR CORRIDA"
 	elif not engine.is_finished():
-		engine.process_lap()
+		# REDUZ A VELOCIDADE DA SIMULAÇÃO PARA 1X EM QUALQUER INCIDENTE/BANDEIRA
+		if engine.safety_car_status != "NONE" and timer_speed < 1.0:
+			_set_speed_mode(1.0, 1.0)
+			
+		var res = engine.process_lap()
 		_update_ui()
+		
+		if res.get("red_flag", false):
+			race_timer.stop()
+			btn_start.text = "▶ CONTINUAR"
+			_show_red_flag_modal()
+			return
+
 		if not engine.is_finished():
 			race_timer.start(timer_speed)
 		else:
 			btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
 
+func _show_red_flag_modal() -> void:
+	if is_instance_valid(active_modal):
+		active_modal.queue_free()
+		
+	active_modal = ColorRect.new()
+	active_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	active_modal.color = Color(0, 0, 0, 0.85)
+	add_child(active_modal)
+	
+	var center = CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	active_modal.add_child(center)
+	
+	var card = PanelContainer.new()
+	card.custom_minimum_size = Vector2(440, 220)
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.11, 0.16, 0.98)
+	style.border_width_top = 3
+	style.border_color = Color("#ef4444")
+	style.set_corner_radius_all(6)
+	style.shadow_size = 20
+	card.add_theme_stylebox_override("panel", style)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_bottom", 20)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 16)
+	
+	var lbl_title = Label.new()
+	lbl_title.text = "🔴 BANDEIRA VERMELHA!"
+	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_title.add_theme_font_size_override("font_size", 16)
+	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
+	vbox.add_child(lbl_title)
+	
+	var lbl_msg = Label.new()
+	lbl_msg.text = "A corrida foi interrompida na Volta %d. Todos os carros recolheram aos boxes e as equipes estão realizando a troca de pneus para a relargada em Grid Parado." % engine.current_lap
+	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_msg.add_theme_font_size_override("font_size", 12)
+	lbl_msg.add_theme_color_override("font_color", Color("#cbd5e1"))
+	vbox.add_child(lbl_msg)
+
+	# Botão de Ação Único (Apenas Continuar / Relargar)
+	var btn_restart = Button.new()
+	btn_restart.text = "▶ RELARGAR CORRIDA"
+	btn_restart.custom_minimum_size.y = 38
+	btn_restart.add_theme_font_size_override("font_size", 12)
+	
+	var style_btn = StyleBoxFlat.new()
+	style_btn.bg_color = Color(0.8, 0.15, 0.15, 1.0)
+	style_btn.set_corner_radius_all(4)
+	btn_restart.add_theme_stylebox_override("normal", style_btn)
+	
+	btn_restart.pressed.connect(func():
+		engine.resolve_red_flag_restart("") # IA decide automaticamente para todos
+		active_modal.queue_free()
+		active_modal = null
+		_update_ui()
+	)
+	
+	vbox.add_child(btn_restart)
+	margin.add_child(vbox)
+	card.add_child(margin)
+	center.add_child(card)
+
 func _update_ui() -> void:
 	var current_track = Database.tracks[Database.current_gp - 1]
-	weather_lbl.text = "Pista: " + str(engine.weather_state) + " | Safety Car: " + str(engine.safety_car_status)
+	
+	var flag_text = "NENHUMA (Normal)"
+	var flag_color = Color("#22c55e")
+	
+	match engine.safety_car_status:
+		"SC":
+			flag_text = "🚨 SAFETY CAR (SC)"
+			flag_color = Color("#ef4444")
+		"VSC":
+			flag_text = "🟡 VIRTUAL SAFETY CAR (VSC)"
+			flag_color = Color("#f59e0b")
+		"YELLOW":
+			flag_text = "⚠️ BANDEIRA AMARELA"
+			flag_color = Color("#facc15")
+		"RED_FLAG":
+			flag_text = "🔴 BANDEIRA VERMELHA"
+			flag_color = Color("#ef4444")
+
+	weather_lbl.text = "Pista: " + str(engine.weather_state) + " | Status da Pista: " + flag_text
+	weather_lbl.add_theme_color_override("font_color", flag_color)
+
+	_update_safety_banner()
 	
 	if not engine.is_quali_done():
 		race_grid_node.columns = 7
@@ -204,6 +341,46 @@ func _update_ui() -> void:
 	log_text_node.clear()
 	for entry in engine.race_logs:
 		log_text_node.append_text(entry + "\n")
+
+func _update_safety_banner() -> void:
+	if engine == null or engine.safety_car_status == "NONE":
+		banner_container.visible = false
+		return
+
+	banner_container.visible = true
+	var b_style = StyleBoxFlat.new()
+	b_style.set_corner_radius_all(4)
+
+	match engine.safety_car_status:
+		"SC":
+			b_style.bg_color = Color(0.8, 0.15, 0.15, 0.25)
+			b_style.border_color = Color("#ef4444")
+			b_style.border_width_left = 6
+			banner_label.text = "🚨 SAFETY CAR EM PISTA — ULTRA-PASGENS PROIBIDAS — VELOCIDADE REDUZIDA"
+			banner_label.add_theme_color_override("font_color", Color("#ef4444"))
+
+		"VSC":
+			b_style.bg_color = Color(0.9, 0.6, 0.1, 0.25)
+			b_style.border_color = Color("#f59e0b")
+			b_style.border_width_left = 6
+			banner_label.text = "🟡 VIRTUAL SAFETY CAR (VSC) — MANTENHA O DELTA POSITIVO"
+			banner_label.add_theme_color_override("font_color", Color("#f59e0b"))
+
+		"YELLOW":
+			b_style.bg_color = Color(0.9, 0.8, 0.1, 0.25)
+			b_style.border_color = Color("#facc15")
+			b_style.border_width_left = 6
+			banner_label.text = "⚠️ BANDEIRA AMARELA NO SETOR — REDUZA O RITMO"
+			banner_label.add_theme_color_override("font_color", Color("#facc15"))
+
+		"RED_FLAG":
+			b_style.bg_color = Color(0.9, 0.1, 0.1, 0.35)
+			b_style.border_color = Color("#dc2626")
+			b_style.border_width_left = 6
+			banner_label.text = "🔴 BANDEIRA VERMELHA — SESSÃO INTERROMPIDA — RETORNE AOS BOXES"
+			banner_label.add_theme_color_override("font_color", Color("#ef4444"))
+
+	banner_container.add_theme_stylebox_override("panel", b_style)
 
 func _render_quali_grid() -> void:
 	for c in race_grid_node.get_children():
@@ -384,7 +561,6 @@ func _get_compound_color(compound: String) -> Color:
 func _finish_race_and_advance() -> void:
 	var standings = engine.race_drivers.duplicate(true)
 	
-	# Mapeia posições finais, posições de largada e flags para o processamento do Database
 	for i in range(standings.size()):
 		standings[i]["pos"] = i + 1
 		var grid_pos = standings[i].get("grid_start_pos", i + 1)
@@ -395,7 +571,6 @@ func _finish_race_and_advance() -> void:
 			standings[i]["dnf"] = true
 			standings[i]["abandonou"] = true
 
-	# Registra histórico de pódio da corrida
 	var podium = []
 	for i in range(min(3, standings.size())):
 		podium.append({"Nome": standings[i].get("Nome", "-"), "Equipe": standings[i].get("Equipe", "-")})
@@ -407,7 +582,6 @@ func _finish_race_and_advance() -> void:
 		"podium": podium
 	})
 
-	# Envia para a rotina central do Database para computar Pontos, Moral, DNFs, etc.
 	Database.process_post_race_morale_and_respect(standings)
 	Database.process_ai_team_upgrades()
 	

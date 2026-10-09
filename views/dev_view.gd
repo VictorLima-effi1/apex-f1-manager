@@ -136,3 +136,19 @@ func _create_progress_bar(val: int) -> ProgressBar:
 	pb.custom_minimum_size = Vector2(140, 16) # Largura e altura elegantes
 	pb.show_percentage = true
 	return pb
+
+func render_budget_cap_ui(container: VBoxContainer) -> void:
+	var user_expenses = Database.team_season_expenses.get(Database.user_team, 0.0)
+	var limit = Database.COST_CAP_LIMIT
+	var percent_used = (user_expenses / limit) * 100.0
+	
+	var lbl_cap = Label.new()
+	lbl_cap.text = "📊 Teto Orçamentário da Temporada: $%.1fM / $%.1fM (%.1f%%)" % [user_expenses / 1_000_000.0, limit / 1_000_000.0, percent_used]
+	lbl_cap.add_theme_font_size_override("font_size", 13)
+	
+	if percent_used >= 100.0:
+		lbl_cap.add_theme_color_override("font_color", Color("#ef4444")) # Vermelho (Limite)
+	else:
+		lbl_cap.add_theme_color_override("font_color", Color("#22c55e")) # Verde (Ok)
+		
+	container.add_child(lbl_cap)

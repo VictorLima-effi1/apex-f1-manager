@@ -1,6 +1,7 @@
 extends Control
 
 var time_passed: float = 0.0
+var sim_modal: Control = null
 
 func _ready() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -61,7 +62,7 @@ func build_ui() -> void:
 		if eq != "Free Agent" and eq != "Aposentado" and eq != "":
 			active_drivers.append(d)
 			
-	# --- CORREÇÃO DO CÁLCULO DE GP E ÍNDICE DE PISTA ---
+	# Cálculo do GP e Índice de Pista
 	var max_tracks = max(1, Database.tracks.size())
 	var gp_num = clampi(int(Database.current_gp), 1, max_tracks)
 	var track_idx = gp_num - 1
@@ -77,7 +78,7 @@ func build_ui() -> void:
 	stats_hbox.add_child(_create_stat_card("PILOTOS", str(active_drivers.size()) + " Pilotos"))
 	canvas.add_child(stats_hbox)
 	
-	# --- CÁLCULO PROPORCIONAL DAS 4 COLUNAS EM TELA CHEIA ---
+	# Cálculo das 4 Colunas Proporcionais
 	var margin_x = 10.0
 	var margin_y = 90.0
 	var gap_x = 12.0
@@ -90,7 +91,7 @@ func build_ui() -> void:
 	var col3_x = col2_x + col_w + gap_x
 	var col4_x = col3_x + col_w + gap_x
 
-	# COLUNA 1: Pilotos + Notícias
+	# COLUNA 1
 	var col1_h1 = avail_height * 0.60
 	var col1_h2 = avail_height * 0.38
 	
@@ -102,7 +103,7 @@ func build_ui() -> void:
 	_build_news_content(news_win.get_content_node(), str(track_curr.get("Nome", "")), gp_num)
 	_apply_fixed_transform(news_win, Vector2(col1_x, margin_y + col1_h1 + gap_y), Vector2(col_w, col1_h2))
 
-	# COLUNA 2: Construtores + Hierarquia Técnica
+	# COLUNA 2
 	var col2_h1 = avail_height * 0.52
 	var col2_h2 = avail_height * 0.46
 	
@@ -114,7 +115,7 @@ func build_ui() -> void:
 	_build_tech_power_content(tech_win.get_content_node())
 	_apply_fixed_transform(tech_win, Vector2(col2_x, margin_y + col2_h1 + gap_y), Vector2(col_w, col2_h2))
 
-	# COLUNA 3: Mercado & Contratos + Info GP
+	# COLUNA 3
 	var col3_h1 = avail_height * 0.72
 	var col3_h2 = avail_height * 0.26
 	
@@ -126,7 +127,7 @@ func build_ui() -> void:
 	_build_track_info_content(track_win.get_content_node(), track_curr)
 	_apply_fixed_transform(track_win, Vector2(col3_x, margin_y + col3_h1 + gap_y), Vector2(col_w, col3_h2))
 
-	# COLUNA 4: Etapas Próximas + Simulação Acelerada + Estatísticas da Temporada
+	# COLUNA 4
 	var col4_h1 = avail_height * 0.30
 	var col4_h2 = avail_height * 0.30
 	var col4_h3 = avail_height * 0.37
@@ -174,7 +175,7 @@ func _build_season_stats_content(parent: Control) -> void:
 	tab_container.add_theme_font_size_override("font_size", 11)
 	parent.add_child(tab_container)
 
-	# --- ABA 1: PILOTOS ---
+	# ABA 1: PILOTOS
 	var tab_drivers = MarginContainer.new()
 	tab_drivers.name = "Pilotos"
 	tab_drivers.add_theme_constant_override("margin_left", 6)
@@ -185,7 +186,7 @@ func _build_season_stats_content(parent: Control) -> void:
 
 	_build_driver_stats_tab(tab_drivers)
 
-	# --- ABA 2: EQUIPES ---
+	# ABA 2: EQUIPES
 	var tab_teams = MarginContainer.new()
 	tab_teams.name = "Equipes"
 	tab_teams.add_theme_constant_override("margin_left", 6)
@@ -352,14 +353,11 @@ func _add_stat_row(container: VBoxContainer, label_text: String, value_text: Str
 	hbox.add_child(lbl_val)
 	container.add_child(hbox)
 
-# --- CONTEÚDOS DOS DEMAIS PAINÉIS ---
+# --- PAINÉIS DE DADOS ---
 
 func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
-	if parent == null:
-		return
-
-	for child in parent.get_children():
-		child.queue_free()
+	if parent == null: return
+	for child in parent.get_children(): child.queue_free()
 
 	var scroll = ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -400,7 +398,6 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 		_add_cell(grid, str(int(d.get("VitoriasAno", 0))))
 		_add_cell(grid, str(int(d.get("PodiosAno", 0))))
 		
-		# Exibe o total acumulado de DNFs
 		var dnf_cnt = int(d.get("DNFsAno", 0))
 		var dnf_color = Color("#ef4444") if dnf_cnt > 0 else Color("#94a3b8")
 		_add_cell(grid, str(dnf_cnt), dnf_color)
@@ -411,11 +408,8 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 	parent.add_child(scroll)
 
 func _build_teams_content(parent: Control, active_drivers: Array) -> void:
-	if parent == null:
-		return
-
-	for child in parent.get_children():
-		child.queue_free()
+	if parent == null: return
+	for child in parent.get_children(): child.queue_free()
 
 	var scroll = ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -472,8 +466,7 @@ func _build_teams_content(parent: Control, active_drivers: Array) -> void:
 
 func _build_market_content(parent: Control) -> void:
 	if parent == null: return
-	for child in parent.get_children():
-		child.queue_free()
+	for child in parent.get_children(): child.queue_free()
 
 	var tab_container = TabContainer.new()
 	tab_container.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -670,11 +663,24 @@ func _build_track_info_content(parent: Control, track: Dictionary) -> void:
 	wear_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
 	vbox.add_child(wear_lbl)
 	
-	var drs_lbl = Label.new()
-	drs_lbl.text = "⚡ Zonas de DRS: 3 Zonas"
-	drs_lbl.add_theme_font_size_override("font_size", 12)
-	drs_lbl.add_theme_color_override("font_color", Color("#22c55e"))
-	vbox.add_child(drs_lbl)
+	var zones_count = str(track.get("ZonasDRS", track.get("drs_zones", 2)))
+	var ultrapassagem_lbl = Label.new()
+	ultrapassagem_lbl.text = "⚡ Zonas de Ultrapassagem: " + zones_count + " Zonas"
+	ultrapassagem_lbl.add_theme_font_size_override("font_size", 12)
+	ultrapassagem_lbl.add_theme_color_override("font_color", Color("#22c55e"))
+	vbox.add_child(ultrapassagem_lbl)
+	
+	var last_winner_driver = str(track.get("UltimoVencedorPiloto", track.get("last_winner_driver", "Nenhum")))
+	var last_winner_team = str(track.get("UltimoVencedorEquipe", track.get("last_winner_team", "")))
+	var winner_text = last_winner_driver
+	if last_winner_team != "":
+		winner_text += " (" + last_winner_team + ")"
+		
+	var winner_lbl = Label.new()
+	winner_lbl.text = "🏆 Última Vitória: " + winner_text
+	winner_lbl.add_theme_font_size_override("font_size", 12)
+	winner_lbl.add_theme_color_override("font_color", Color("#38bdf8"))
+	vbox.add_child(winner_lbl)
 	
 	parent.add_child(vbox)
 
@@ -712,11 +718,8 @@ func _build_tech_power_content(parent: Control) -> void:
 	parent.add_child(scroll)
 
 func _build_news_content(parent: Control, track_name: String, gp_num: int) -> void:
-	if parent == null:
-		return
-
-	for child in parent.get_children():
-		child.queue_free()
+	if parent == null: return
+	for child in parent.get_children(): child.queue_free()
 
 	var scroll = ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -792,27 +795,115 @@ func _build_fast_sim_content(parent: Control) -> void:
 
 	parent.add_child(vbox)
 
+# --- MODAL ESTILIZADO E LÓGICA DE SIMULAÇÃO ---
+
 func _confirm_and_run_fast_simulation(by_season: bool, amount: int) -> void:
-	var confirm_dialog = ConfirmationDialog.new()
-	confirm_dialog.title = "Confirmar Simulação Acelerada"
-	
-	var mode_text = str(amount) + " temporada(s)" if by_season else str(amount) + " corrida(s) (GP)"
-	confirm_dialog.dialog_text = "Tem certeza de que deseja simular automaticamente " + mode_text + "?\n\nEssa ação irá processar os resultados e atualizações de forma acelerada."
-	
-	confirm_dialog.ok_button_text = "Sim, Simular"
-	confirm_dialog.cancel_button_text = "Cancelar"
-	
-	add_child(confirm_dialog)
-	confirm_dialog.popup_centered(Vector2i(420, 160))
-	
-	confirm_dialog.confirmed.connect(func():
+	_show_fast_sim_modal(by_season, amount)
+
+func _show_fast_sim_modal(by_season: bool, amount: int) -> void:
+	_close_sim_modal()
+
+	sim_modal = ColorRect.new()
+	sim_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sim_modal.color = Color(0, 0, 0, 0.8)
+	add_child(sim_modal)
+
+	var center = CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sim_modal.add_child(center)
+
+	var card = PanelContainer.new()
+	card.custom_minimum_size = Vector2(420, 220)
+
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.11, 0.16, 0.98)
+	style.border_width_top = 3
+	style.border_color = Color("#ef4444")
+	style.set_corner_radius_all(6)
+	style.shadow_color = Color(0, 0, 0, 0.6)
+	style.shadow_size = 20
+	card.add_theme_stylebox_override("panel", style)
+
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_bottom", 20)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 14)
+
+	var lbl_title = Label.new()
+	lbl_title.text = "CONFIRMAR SIMULAÇÃO ACELERADA"
+	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_title.add_theme_font_size_override("font_size", 15)
+	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
+	vbox.add_child(lbl_title)
+
+	var lbl_msg = Label.new()
+	if by_season:
+		lbl_msg.text = "Tem certeza de que deseja simular automaticamente %d temporada(s) completa(s)?" % amount
+	else:
+		lbl_msg.text = "Tem certeza de que deseja simular automaticamente %d corrida(s) (GP)?" % amount
+
+	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_msg.add_theme_font_size_override("font_size", 12)
+	lbl_msg.add_theme_color_override("font_color", Color("#e2e8f0"))
+	vbox.add_child(lbl_msg)
+
+	var lbl_sub = Label.new()
+	lbl_sub.text = "Essa ação irá processar os resultados e atualizações de forma acelerada."
+	lbl_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_sub.add_theme_font_size_override("font_size", 11)
+	lbl_sub.add_theme_color_override("font_color", Color("#94a3b8"))
+	vbox.add_child(lbl_sub)
+
+	var btn_hbox = HBoxContainer.new()
+	btn_hbox.add_theme_constant_override("separation", 12)
+
+	var btn_confirm = Button.new()
+	btn_confirm.text = "⚡ Sim, Simular"
+	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_confirm.custom_minimum_size.y = 38
+	btn_confirm.add_theme_font_size_override("font_size", 12)
+
+	var style_confirm = StyleBoxFlat.new()
+	style_confirm.bg_color = Color(0.8, 0.15, 0.15, 1.0)
+	style_confirm.set_corner_radius_all(4)
+	btn_confirm.add_theme_stylebox_override("normal", style_confirm)
+
+	btn_confirm.pressed.connect(func():
+		_close_sim_modal()
 		_run_fast_simulation(by_season, amount)
-		confirm_dialog.queue_free()
 	)
-	
-	confirm_dialog.canceled.connect(func():
-		confirm_dialog.queue_free()
-	)
+
+	var btn_cancel = Button.new()
+	btn_cancel.text = "Cancelar"
+	btn_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_cancel.custom_minimum_size.y = 38
+	btn_cancel.add_theme_font_size_override("font_size", 12)
+
+	var style_cancel = StyleBoxFlat.new()
+	style_cancel.bg_color = Color(0.18, 0.22, 0.30, 1.0)
+	style_cancel.set_corner_radius_all(4)
+	btn_cancel.add_theme_stylebox_override("normal", style_cancel)
+
+	btn_cancel.pressed.connect(_close_sim_modal)
+
+	btn_hbox.add_child(btn_confirm)
+	btn_hbox.add_child(btn_cancel)
+	vbox.add_child(btn_hbox)
+
+	margin.add_child(vbox)
+	card.add_child(margin)
+	center.add_child(card)
+
+func _close_sim_modal() -> void:
+	if is_instance_valid(sim_modal):
+		sim_modal.queue_free()
+		sim_modal = null
 
 func _run_fast_simulation(by_season: bool, amount: int) -> void:
 	if by_season:
@@ -828,6 +919,8 @@ func _run_fast_simulation(by_season: bool, amount: int) -> void:
 				Database.end_season_and_advance_year()
 
 	build_ui()
+
+# --- UTILITÁRIOS DA UI ---
 
 func _create_stat_card(title: String, val: String) -> PanelContainer:
 	var card = PanelContainer.new()
@@ -880,6 +973,5 @@ func _add_micro_cell(grid: GridContainer, text: String, color: Color) -> void:
 	grid.add_child(lbl)
 
 func _notification(what: int) -> void:
-	# Sempre que o painel do Dashboard se tornar visível na tela, ele recria a UI com os dados atualizados
 	if what == NOTIFICATION_VISIBILITY_CHANGED and is_visible_in_tree():
 		build_ui()

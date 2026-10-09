@@ -9,33 +9,232 @@ var active_engine: RaceEngine = null
 # Variáveis Globais de Configuração
 var ui_scale: float = 1.0
 var aspect_index: int = 0
-var window_mode_index: int = 0
+var window_mode_index: int = 1
+
+# --- TETO ORÇAMENTÁRIO (COST CAP) ---
+const COST_CAP_LIMIT: float = 135_000_000.0 # $135 Milhões por temporada
+const UPGRADE_COST: float = 8_500_000.0       # Custo por pacote de evolução (+1 Power Index)
+
+var user_team: String = "McLaren" # Equipe selecionada pelo jogador
+var team_season_expenses: Dictionary = {}
 
 var tracks: Array = [
-	{"Nome": "Albert Park", "Pais": "Austrália", "Voltas": 58, "ChanceChuva": 0.20},
-	{"Nome": "Shanghai", "Pais": "China", "Voltas": 56, "ChanceChuva": 0.15},
-	{"Nome": "Suzuka", "Pais": "Japão", "Voltas": 53, "ChanceChuva": 0.30},
-	{"Nome": "Sakhir", "Pais": "Bahrein", "Voltas": 57, "ChanceChuva": 0.05},
-	{"Nome": "Jeddah", "Pais": "Arábia Saudita", "Voltas": 50, "ChanceChuva": 0.05},
-	{"Nome": "Miami", "Pais": "EUA", "Voltas": 57, "ChanceChuva": 0.25},
-	{"Nome": "Imola", "Pais": "Itália", "Voltas": 63, "ChanceChuva": 0.35},
-	{"Nome": "Monaco", "Pais": "Mônaco", "Voltas": 78, "ChanceChuva": 0.30},
-	{"Nome": "Catalunya", "Pais": "Espanha", "Voltas": 66, "ChanceChuva": 0.20},
-	{"Nome": "Gilles Villeneuve", "Pais": "Canadá", "Voltas": 70, "ChanceChuva": 0.40},
-	{"Nome": "Red Bull Ring", "Pais": "Áustria", "Voltas": 71, "ChanceChuva": 0.30},
-	{"Nome": "Silverstone", "Pais": "Reino Unido", "Voltas": 52, "ChanceChuva": 0.45},
-	{"Nome": "Hungaroring", "Pais": "Hungria", "Voltas": 70, "ChanceChuva": 0.20},
-	{"Nome": "Spa-Francorchamps", "Pais": "Bélgica", "Voltas": 44, "ChanceChuva": 0.50},
-	{"Nome": "Zandvoort", "Pais": "Holanda", "Voltas": 72, "ChanceChuva": 0.35},
-	{"Nome": "Monza", "Pais": "Itália", "Voltas": 53, "ChanceChuva": 0.15},
-	{"Nome": "Baku", "Pais": "Azerbaijão", "Voltas": 51, "ChanceChuva": 0.10},
-	{"Nome": "Marina Bay", "Pais": "Cingapura", "Voltas": 62, "ChanceChuva": 0.35},
-	{"Nome": "COTA", "Pais": "EUA", "Voltas": 56, "ChanceChuva": 0.20},
-	{"Nome": "Hermanos Rodríguez", "Pais": "México", "Voltas": 71, "ChanceChuva": 0.25},
-	{"Nome": "Interlagos", "Pais": "Brasil", "Voltas": 71, "ChanceChuva": 0.45},
-	{"Nome": "Las Vegas", "Pais": "EUA", "Voltas": 50, "ChanceChuva": 0.05},
-	{"Nome": "Lusail", "Pais": "Catar", "Voltas": 57, "ChanceChuva": 0.05},
-	{"Nome": "Yas Marina", "Pais": "Abu Dhabi", "Voltas": 58, "ChanceChuva": 0.05}
+	{
+		"Nome": "Albert Park",
+		"Pais": "Austrália",
+		"Voltas": 58,
+		"ChanceChuva": 0.20,
+		"ZonasDRS": 4,
+		"UltimoVencedorPiloto": "Lando Norris",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Shanghai",
+		"Pais": "China",
+		"Voltas": 56,
+		"ChanceChuva": 0.15,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Oscar Piastri",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Suzuka",
+		"Pais": "Japão",
+		"Voltas": 53,
+		"ChanceChuva": 0.30,
+		"ZonasDRS": 1,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	},
+	{
+		"Nome": "Sakhir",
+		"Pais": "Bahrein",
+		"Voltas": 57,
+		"ChanceChuva": 0.05,
+		"ZonasDRS": 3,
+		"UltimoVencedorPiloto": "Oscar Piastri",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Jeddah",
+		"Pais": "Arábia Saudita",
+		"Voltas": 50,
+		"ChanceChuva": 0.05,
+		"ZonasDRS": 3,
+		"UltimoVencedorPiloto": "Oscar Piastri",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Miami",
+		"Pais": "EUA",
+		"Voltas": 57,
+		"ChanceChuva": 0.25,
+		"ZonasDRS": 3,
+		"UltimoVencedorPiloto": "Oscar Piastri",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Imola",
+		"Pais": "Itália",
+		"Voltas": 63,
+		"ChanceChuva": 0.35,
+		"ZonasDRS": 1,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	},
+	{
+		"Nome": "Monaco",
+		"Pais": "Mônaco",
+		"Voltas": 78,
+		"ChanceChuva": 0.30,
+		"ZonasDRS": 1,
+		"UltimoVencedorPiloto": "Lando Norris",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Catalunya",
+		"Pais": "Espanha",
+		"Voltas": 66,
+		"ChanceChuva": 0.20,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Oscar Piastri",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Gilles Villeneuve",
+		"Pais": "Canadá",
+		"Voltas": 70,
+		"ChanceChuva": 0.40,
+		"ZonasDRS": 3,
+		"UltimoVencedorPiloto": "George Russell",
+		"UltimoVencedorEquipe": "Mercedes"
+	},
+	{
+		"Nome": "Red Bull Ring",
+		"Pais": "Áustria",
+		"Voltas": 71,
+		"ChanceChuva": 0.30,
+		"ZonasDRS": 3,
+		"UltimoVencedorPiloto": "Lando Norris",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Silverstone",
+		"Pais": "Reino Unido",
+		"Voltas": 52,
+		"ChanceChuva": 0.45,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Lando Norris",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Hungaroring",
+		"Pais": "Hungria",
+		"Voltas": 70,
+		"ChanceChuva": 0.20,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Lando Norris",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Spa-Francorchamps",
+		"Pais": "Bélgica",
+		"Voltas": 44,
+		"ChanceChuva": 0.50,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Oscar Piastri",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Zandvoort",
+		"Pais": "Holanda",
+		"Voltas": 72,
+		"ChanceChuva": 0.35,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Oscar Piastri",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Monza",
+		"Pais": "Itália",
+		"Voltas": 53,
+		"ChanceChuva": 0.15,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	},
+	{
+		"Nome": "Baku",
+		"Pais": "Azerbaijão",
+		"Voltas": 51,
+		"ChanceChuva": 0.10,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	},
+	{
+		"Nome": "Marina Bay",
+		"Pais": "Cingapura",
+		"Voltas": 62,
+		"ChanceChuva": 0.35,
+		"ZonasDRS": 3,
+		"UltimoVencedorPiloto": "George Russell",
+		"UltimoVencedorEquipe": "Mercedes"
+	},
+	{
+		"Nome": "COTA",
+		"Pais": "EUA",
+		"Voltas": 56,
+		"ChanceChuva": 0.20,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	},
+	{
+		"Nome": "Hermanos Rodríguez",
+		"Pais": "México",
+		"Voltas": 71,
+		"ChanceChuva": 0.25,
+		"ZonasDRS": 3,
+		"UltimoVencedorPiloto": "Lando Norris",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Interlagos",
+		"Pais": "Brasil",
+		"Voltas": 71,
+		"ChanceChuva": 0.45,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Lando Norris",
+		"UltimoVencedorEquipe": "McLaren"
+	},
+	{
+		"Nome": "Las Vegas",
+		"Pais": "EUA",
+		"Voltas": 50,
+		"ChanceChuva": 0.05,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	},
+	{
+		"Nome": "Lusail",
+		"Pais": "Catar",
+		"Voltas": 57,
+		"ChanceChuva": 0.05,
+		"ZonasDRS": 1,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	},
+	{
+		"Nome": "Yas Marina",
+		"Pais": "Abu Dhabi",
+		"Voltas": 58,
+		"ChanceChuva": 0.05,
+		"ZonasDRS": 2,
+		"UltimoVencedorPiloto": "Max Verstappen",
+		"UltimoVencedorEquipe": "Red Bull Racing"
+	}
 ]
 
 var teams: Array = [
@@ -84,6 +283,28 @@ var transfer_history: Array = [
 
 func _ready() -> void:
 	load_drivers_from_json()
+	init_season_budget_cap()
+
+func init_season_budget_cap() -> void:
+	team_season_expenses.clear()
+	for team in teams:
+		team_season_expenses[team["Nome"]] = 0.0
+
+func purchase_team_upgrade(team_name: String) -> bool:
+	var current_expense = team_season_expenses.get(team_name, 0.0)
+	
+	if current_expense + UPGRADE_COST > COST_CAP_LIMIT:
+		print("⚠️ ALERTA: Teto Orçamentário atingido para ", team_name)
+		return false
+		
+	team_season_expenses[team_name] = current_expense + UPGRADE_COST
+	
+	for team in teams:
+		if team["Nome"] == team_name:
+			team["PowerIndex"] = team.get("PowerIndex", 75.0) + 1.0
+			break
+			
+	return true
 
 func load_drivers_from_json() -> void:
 	var path = "res://drivers_data.json"
@@ -123,7 +344,6 @@ func add_news(msg: String) -> void:
 func add_news_event(text: String) -> void:
 	add_news(text)
 
-# --- SISTEMA ROBUSTO DE DETECÇÃO DE DNF ---
 func _check_is_dnf(res: Dictionary) -> bool:
 	if bool(res.get("dnf", false)) or bool(res.get("is_dnf", false)) or bool(res.get("abandonou", false)) or bool(res.get("retired", false)):
 		return true
@@ -148,7 +368,6 @@ func _check_is_dnf(res: Dictionary) -> bool:
 
 	return false
 
-# --- PROCESSAMENTO PÓS-CORRIDA CORRIGIDO ---
 func process_post_race_morale_and_respect(race_results: Array) -> void:
 	var team_points_this_race: Dictionary = {}
 	var team_has_breakdown: Dictionary = {}
@@ -166,7 +385,6 @@ func process_post_race_morale_and_respect(race_results: Array) -> void:
 		var finish_pos = int(res.get("pos", res.get("position", 20)))
 		var grid_start = int(res.get("grid_pos", res.get("grid", finish_pos)))
 		
-		# Detecção abrangente de DNF
 		var is_dnf = _check_is_dnf(res)
 		
 		var driver = _get_driver_by_name(p_name)
@@ -177,7 +395,6 @@ func process_post_race_morale_and_respect(race_results: Array) -> void:
 			team_drivers_finish[t_name] = []
 		team_drivers_finish[t_name].append({"driver": driver, "pos": finish_pos, "abandonou": is_dnf})
 
-		# Atualiza estatísticas acumuladas de DNF, posições ganhas/perdidas e sequência
 		_update_driver_stats_after_race(driver, grid_start, finish_pos, is_dnf)
 
 		if not is_dnf:
@@ -196,6 +413,8 @@ func process_post_race_morale_and_respect(race_results: Array) -> void:
 				driver["VitoriasCarreira"] = int(driver.get("VitoriasCarreira", 0)) + 1
 				driver["Moral"] = clamp(int(driver.get("Moral", 70)) + 12, 0, 100)
 				var track_idx = clamp(current_gp - 1, 0, tracks.size() - 1)
+				
+				record_gp_winner(track_idx, str(driver.get("Nome", "")), str(driver.get("Equipe", "")))
 				add_news("🏁 " + driver["Nome"] + " vence o GP de " + tracks[track_idx]["Nome"] + "!")
 			elif finish_pos <= 3:
 				driver["PodiosAno"] = int(driver.get("PodiosAno", 0)) + 1
@@ -276,7 +495,6 @@ func simulate_current_gp_fast() -> void:
 	
 	engine.skip_to_end_of_quali_session()
 	
-	# Salva a posição de largada da qualificação
 	var grid_positions: Dictionary = {}
 	for idx in range(engine.race_drivers.size()):
 		var d_name = engine.race_drivers[idx].get("Nome", engine.race_drivers[idx].get("nome", ""))
@@ -295,8 +513,11 @@ func simulate_current_gp_fast() -> void:
 	process_ai_team_upgrades()
 	
 	var winner_name = results[0].get("Nome", results[0].get("nome", "-")) if results.size() > 0 else "-"
+	var winner_team = results[0].get("Equipe", results[0].get("equipe", "-")) if results.size() > 0 else "-"
 	var second_name = results[1].get("Nome", results[1].get("nome", "-")) if results.size() > 1 else "-"
 	var third_name = results[2].get("Nome", results[2].get("nome", "-")) if results.size() > 2 else "-"
+	
+	record_gp_winner(current_gp - 1, winner_name, winner_team)
 	
 	race_history.append({
 		"gp_num": current_gp,
@@ -325,7 +546,11 @@ func process_ai_team_upgrades() -> void:
 		else:
 			t["Confiabilidade"] = min(99, t["Confiabilidade"] + gain)
 			add_news(t["Nome"] + " reforçou a confiabilidade dos componentes.")
-
+	
+	for team in teams:
+		if team["Nome"] != user_team and randf() < 0.25:
+			purchase_team_upgrade(team["Nome"])
+	
 func _reset_team_development_cycle() -> void:
 	for t in teams:
 		t["Motor"] = randi_range(65, 90)
@@ -442,6 +667,8 @@ func end_season_and_advance_year() -> void:
 	current_gp = 1
 	race_history.clear()
 	
+	init_season_budget_cap() # Reseta o Teto Orçamentário para a nova temporada
+	
 	if (current_year - 2026) % 4 == 0:
 		_reset_team_development_cycle()
 	
@@ -520,19 +747,16 @@ func _get_driver_by_name(p_name: String) -> Dictionary:
 	if clean_input.is_empty():
 		return {}
 
-	# 1. Busca Exata
 	for d in drivers:
 		var d_name = str(d.get("Nome", d.get("nome", d.get("name", "")))).strip_edges().to_lower()
 		if d_name == clean_input:
 			return d
 
-	# 2. Busca por Sobrenome / Parcial (Fallback)
 	for d in drivers:
 		var d_name = str(d.get("Nome", d.get("nome", d.get("name", "")))).strip_edges().to_lower()
 		if clean_input.contains(d_name) or d_name.contains(clean_input):
 			return d
 			
-		# Checa se o último nome coincide
 		var parts_input = clean_input.split(" ")
 		var parts_driver = d_name.split(" ")
 		if parts_input.size() > 0 and parts_driver.size() > 0:
@@ -573,7 +797,8 @@ func save_game() -> bool:
 		"tracks": tracks,
 		"champions_history": champions_history,
 		"transfer_history": transfer_history,
-		"dashboard_layout": dashboard_layout
+		"dashboard_layout": dashboard_layout,
+		"team_season_expenses": team_season_expenses
 	}
 	
 	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -603,6 +828,7 @@ func load_game() -> bool:
 			champions_history = data.get("champions_history", champions_history)
 			transfer_history = data.get("transfer_history", transfer_history)
 			dashboard_layout = data.get("dashboard_layout", dashboard_layout)
+			team_season_expenses = data.get("team_season_expenses", team_season_expenses)
 			return true
 	return false
 
@@ -614,6 +840,7 @@ func reset_database() -> void:
 	current_gp = 1
 	race_finished = false
 	active_engine = null
+	init_season_budget_cap()
 	
 	if news_feed != null:
 		news_feed.clear()
@@ -637,3 +864,8 @@ func reset_database() -> void:
 
 	if has_method("load_drivers_from_json"):
 		call("load_drivers_from_json")
+
+func record_gp_winner(track_index: int, winner_driver_name: String, winner_team_name: String) -> void:
+	if track_index >= 0 and track_index < tracks.size():
+		tracks[track_index]["UltimoVencedorPiloto"] = winner_driver_name
+		tracks[track_index]["UltimoVencedorEquipe"] = winner_team_name
