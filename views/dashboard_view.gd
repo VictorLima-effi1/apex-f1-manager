@@ -175,7 +175,18 @@ func _build_season_stats_content(parent: Control) -> void:
 	tab_container.add_theme_font_size_override("font_size", 11)
 	parent.add_child(tab_container)
 
-	# ABA 1: PILOTOS
+	# ABA 1: RIVALIDADES
+	var tab_rivalry = MarginContainer.new()
+	tab_rivalry.name = "⚔️ Rivalidades"
+	tab_rivalry.add_theme_constant_override("margin_left", 6)
+	tab_rivalry.add_theme_constant_override("margin_top", 6)
+	tab_rivalry.add_theme_constant_override("margin_right", 6)
+	tab_rivalry.add_theme_constant_override("margin_bottom", 6)
+	tab_container.add_child(tab_rivalry)
+
+	_build_rivalry_tab(tab_rivalry)
+
+	# ABA 2: PILOTOS
 	var tab_drivers = MarginContainer.new()
 	tab_drivers.name = "Pilotos"
 	tab_drivers.add_theme_constant_override("margin_left", 6)
@@ -186,7 +197,7 @@ func _build_season_stats_content(parent: Control) -> void:
 
 	_build_driver_stats_tab(tab_drivers)
 
-	# ABA 2: EQUIPES
+	# ABA 3: EQUIPES
 	var tab_teams = MarginContainer.new()
 	tab_teams.name = "Equipes"
 	tab_teams.add_theme_constant_override("margin_left", 6)
@@ -196,6 +207,65 @@ func _build_season_stats_content(parent: Control) -> void:
 	tab_container.add_child(tab_teams)
 
 	_build_team_stats_tab(tab_teams)
+
+func _build_rivalry_tab(parent: Control) -> void:
+	var scroll = ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	var vbox = VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 8)
+
+	# Disputa P1 vs P2
+	var sorted_drivers = Database.drivers.duplicate()
+	sorted_drivers.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+	
+	var p1_name = sorted_drivers[0].get("Nome", "Piloto A") if sorted_drivers.size() > 0 else "-"
+	var p1_pts = sorted_drivers[0].get("Pontos", 0) if sorted_drivers.size() > 0 else 0
+	var p2_name = sorted_drivers[1].get("Nome", "Piloto B") if sorted_drivers.size() > 1 else "-"
+	var p2_pts = sorted_drivers[1].get("Pontos", 0) if sorted_drivers.size() > 1 else 0
+	var gap = p1_pts - p2_pts
+
+	var title_lbl = Label.new()
+	title_lbl.text = "🏆 Disputa do Título"
+	title_lbl.add_theme_font_size_override("font_size", 12)
+	title_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
+	vbox.add_child(title_lbl)
+
+	var title_battle_lbl = Label.new()
+	title_battle_lbl.text = "• %s (%dP) vs %s (%dP)\n  ➔ Diferença: %d pts" % [p1_name, p1_pts, p2_name, p2_pts, gap]
+	title_battle_lbl.add_theme_font_size_override("font_size", 11)
+	title_battle_lbl.add_theme_color_override("font_color", Color("#e2e8f0"))
+	vbox.add_child(title_battle_lbl)
+
+	vbox.add_child(HSeparator.new())
+
+	# Duelo entre Construtores (P1 vs P2 Construtores)
+	var sorted_teams = Database.teams.duplicate()
+	sorted_teams.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+	if sorted_teams.size() >= 2:
+		var t1 = sorted_teams[0]
+		var t2 = sorted_teams[1]
+		var t_gap = int(t1.get("Pontos", 0)) - int(t2.get("Pontos", 0))
+
+		var const_title = Label.new()
+		const_title.text = "🏎️ Disputa de Construtores"
+		const_title.add_theme_font_size_override("font_size", 12)
+		const_title.add_theme_color_override("font_color", Color("#38bdf8"))
+		vbox.add_child(const_title)
+
+		var const_lbl = Label.new()
+		const_lbl.text = "• %s (%dP) vs %s (%dP)\n  ➔ Diferença: %d pts" % [
+			t1.get("Nome", "-"), t1.get("Pontos", 0),
+			t2.get("Nome", "-"), t2.get("Pontos", 0),
+			t_gap
+		]
+		const_lbl.add_theme_font_size_override("font_size", 11)
+		const_lbl.add_theme_color_override("font_color", Color("#cbd5e1"))
+		vbox.add_child(const_lbl)
+
+	scroll.add_child(vbox)
+	parent.add_child(scroll)
 
 func _build_driver_stats_tab(parent: Control) -> void:
 	var scroll = ScrollContainer.new()
@@ -686,36 +756,208 @@ func _build_track_info_content(parent: Control, track: Dictionary) -> void:
 
 func _build_tech_power_content(parent: Control) -> void:
 	if parent == null: return
+	for child in parent.get_children(): child.queue_free()
+
+	var tab_container = TabContainer.new()
+	tab_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tab_container.add_theme_font_size_override("font_size", 11)
+	parent.add_child(tab_container)
+
+	# ABA 1: RANKING DO GRID (POWER INDEX)
+	var tab_grid = MarginContainer.new()
+	tab_grid.name = "Ranking do Grid"
+	tab_grid.add_theme_constant_override("margin_left", 6)
+	tab_grid.add_theme_constant_override("margin_top", 6)
+	tab_grid.add_theme_constant_override("margin_right", 6)
+	tab_grid.add_theme_constant_override("margin_bottom", 6)
+	tab_container.add_child(tab_grid)
+
 	var scroll = ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	
+
 	var grid = GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 5)
-	
+
 	_add_grid_header(grid, "POS", 30)
 	_add_grid_header(grid, "EQUIPE", 120)
 	_add_grid_header(grid, "POWER INDEX", 90)
-	
+
 	var teams_power = []
 	for t in Database.teams:
 		var t_name = str(t.get("Nome", ""))
 		var p_info = Database.get_team_power_index(t_name)
 		var p_val = float(p_info.get("overall", 0.0)) if p_info is Dictionary else 0.0
 		teams_power.append({"Nome": t_name, "Power": p_val})
-		
+
 	teams_power.sort_custom(func(a, b): return a["Power"] > b["Power"])
-	
+
 	var rank = 1
 	for tp in teams_power:
-		_add_cell(grid, str(rank) + "º")
-		_add_cell(grid, str(tp["Nome"]))
+		_add_cell(grid, str(rank) + "º", Color("#ffffff"))
+		_add_cell(grid, str(tp["Nome"]), Color("#ffffff"))
 		_add_cell(grid, str(snapped(tp["Power"], 0.1)) + " Pts", Color("#38bdf8"))
 		rank += 1
-		
+
 	scroll.add_child(grid)
-	parent.add_child(scroll)
+	tab_grid.add_child(scroll)
+
+	# ABA 2: LÍDERES POR QUESITO TÉCNICO
+	var tab_top = MarginContainer.new()
+	tab_top.name = "Líderes do Grid"
+	tab_top.add_theme_constant_override("margin_left", 6)
+	tab_top.add_theme_constant_override("margin_top", 6)
+	tab_top.add_theme_constant_override("margin_right", 6)
+	tab_top.add_theme_constant_override("margin_bottom", 6)
+	tab_container.add_child(tab_top)
+
+	var scroll_top = ScrollContainer.new()
+	scroll_top.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	var vbox_top = VBoxContainer.new()
+	vbox_top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox_top.add_theme_constant_override("separation", 6)
+
+	# Busca as equipes líderes por quesito considerando pontos no campeonato como desempate
+	var best_engine = _find_best_team_by_stat("Motor")
+	var best_aero = _find_best_team_by_stat("Aero")
+	var best_chassis = _find_best_team_by_stat("Chassi")
+	var best_reliability = _find_best_team_by_stat("Confiabilidade")
+	var best_overall = _find_best_team_by_overall()
+
+	_add_leader_stat_bar(vbox_top, "Melhor Motor", best_engine, "Motor", Color("#ef4444"))
+	_add_leader_stat_bar(vbox_top, "Melhor Aerodinâmica", best_aero, "Aero", Color("#22c55e"))
+	_add_leader_stat_bar(vbox_top, "Melhor Chassi", best_chassis, "Chassi", Color("#facc15"))
+	_add_leader_stat_bar(vbox_top, "Melhor Confiabilidade", best_reliability, "Confiabilidade", Color("#a855f7"))
+	_add_leader_stat_bar(vbox_top, "Melhor Carro (Overall)", best_overall, "Overall", Color("#38bdf8"))
+
+	scroll_top.add_child(vbox_top)
+	tab_top.add_child(scroll_top)
+
+
+# --- FUNÇÕES AUXILIARES DE CÁLCULO E EXIBIÇÃO DE LÍDERES ---
+
+func _find_best_team_by_stat(stat_key: String) -> Dictionary:
+	var best_team: Dictionary = {}
+	var max_val: float = -1.0
+	
+	for t in Database.teams:
+		var val = float(t.get(stat_key, 0.0))
+		var pts = int(t.get("Pontos", 0))
+		
+		if val > max_val:
+			max_val = val
+			best_team = t
+		elif val == max_val and not best_team.is_empty():
+			# Critério de desempate: maior quantidade de pontos no campeonato
+			var best_pts = int(best_team.get("Pontos", 0))
+			if pts > best_pts:
+				best_team = t
+				
+	return best_team
+
+func _find_best_team_by_overall() -> Dictionary:
+	var best_team: Dictionary = {}
+	var max_val: float = -1.0
+	
+	for t in Database.teams:
+		var t_name = str(t.get("Nome", ""))
+		var p_info = Database.get_team_power_index(t_name)
+		var val = float(p_info.get("overall", 0.0)) if p_info is Dictionary else 0.0
+		var pts = int(t.get("Pontos", 0))
+		
+		if val > max_val:
+			max_val = val
+			best_team = t
+		elif val == max_val and not best_team.is_empty():
+			var best_pts = int(best_team.get("Pontos", 0))
+			if pts > best_pts:
+				best_team = t
+				
+	return best_team
+
+func _add_leader_stat_bar(parent: VBoxContainer, label_title: String, team: Dictionary, stat_key: String, color: Color) -> void:
+	if team.is_empty():
+		return
+
+	var team_name = str(team.get("Nome", "-"))
+	var stat_val: float = 0.0
+	
+	if stat_key == "Overall":
+		var p_info = Database.get_team_power_index(team_name)
+		stat_val = float(p_info.get("overall", 0.0))
+	else:
+		stat_val = float(team.get(stat_key, 0.0))
+
+	var vbox_item = VBoxContainer.new()
+	vbox_item.add_theme_constant_override("separation", 2)
+
+	# Título do Quesito + Nome da Equipe Líder
+	var lbl_info = Label.new()
+	lbl_info.text = "%s: %s" % [label_title, team_name]
+	lbl_info.add_theme_font_size_override("font_size", 13)
+	lbl_info.add_theme_color_override("font_color", Color("#e2e8f0"))
+	vbox_item.add_child(lbl_info)
+
+	var hbox = HBoxContainer.new()
+
+	var pbar = ProgressBar.new()
+	pbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pbar.custom_minimum_size.y = 12
+	pbar.min_value = 50
+	pbar.max_value = 100
+	pbar.value = stat_val
+	pbar.show_percentage = false
+
+	var fill_style = StyleBoxFlat.new()
+	fill_style.bg_color = color
+	fill_style.set_corner_radius_all(3)
+	pbar.add_theme_stylebox_override("fill", fill_style)
+
+	hbox.add_child(pbar)
+
+	var val_lbl = Label.new()
+	val_lbl.text = " " + str(int(stat_val))
+	val_lbl.custom_minimum_size.x = 24
+	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	val_lbl.add_theme_font_size_override("font_size", 13)
+	val_lbl.add_theme_color_override("font_color", Color("#ffffff"))
+	hbox.add_child(val_lbl)
+
+	vbox_item.add_child(hbox)
+	parent.add_child(vbox_item)
+
+func _add_stat_bar(parent: VBoxContainer, label_text: String, value: float, color: Color) -> void:
+	var hbox = HBoxContainer.new()
+
+	var lbl = Label.new()
+	lbl.text = label_text
+	lbl.custom_minimum_size.x = 120
+	lbl.add_theme_font_size_override("font_size", 10)
+	hbox.add_child(lbl)
+
+	var pbar = ProgressBar.new()
+	pbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pbar.custom_minimum_size.y = 12
+	pbar.min_value = 50
+	pbar.max_value = 100
+	pbar.value = value
+	pbar.show_percentage = false
+
+	var fill_style = StyleBoxFlat.new()
+	fill_style.bg_color = color
+	fill_style.set_corner_radius_all(3)
+	pbar.add_theme_stylebox_override("fill", fill_style)
+
+	hbox.add_child(pbar)
+
+	var val_lbl = Label.new()
+	val_lbl.text = " " + str(int(value))
+	val_lbl.add_theme_font_size_override("font_size", 10)
+	hbox.add_child(val_lbl)
+
+	parent.add_child(hbox)
 
 func _build_news_content(parent: Control, track_name: String, gp_num: int) -> void:
 	if parent == null: return
@@ -908,15 +1150,17 @@ func _close_sim_modal() -> void:
 func _run_fast_simulation(by_season: bool, amount: int) -> void:
 	if by_season:
 		for s in range(amount):
-			var remaining_gps = Database.tracks.size() - Database.current_gp + 1
-			for g in range(remaining_gps):
+			while Database.current_gp <= Database.tracks.size():
 				Database.simulate_current_gp_fast()
+				await get_tree().process_frame
 			Database.end_season_and_advance_year()
+			await get_tree().process_frame
 	else:
 		for g in range(amount):
 			Database.simulate_current_gp_fast()
 			if Database.current_gp > Database.tracks.size():
 				Database.end_season_and_advance_year()
+			await get_tree().process_frame
 
 	build_ui()
 

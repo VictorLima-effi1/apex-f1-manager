@@ -15,6 +15,7 @@ var race_timer: Timer
 
 @onready var race_grid_node: GridContainer
 @onready var log_text_node: RichTextLabel
+@onready var pit_log_text_node: RichTextLabel
 
 var left_vbox: VBoxContainer
 var banner_container: PanelContainer
@@ -96,7 +97,6 @@ func build_ui() -> void:
 	main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_hbox.add_theme_constant_override("separation", 12)
 	
-	# Painel Esquerdo (Grid do Leaderboard + Banner de Segurança)
 	var left_panel = PanelContainer.new()
 	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_panel.size_flags_stretch_ratio = 2.0
@@ -109,14 +109,13 @@ func build_ui() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
 	race_grid_node = GridContainer.new()
-	race_grid_node.columns = 8
+	race_grid_node.columns = 9
 	race_grid_node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	race_grid_node.add_theme_constant_override("h_separation", 10)
 	race_grid_node.add_theme_constant_override("v_separation", 6)
 	scroll.add_child(race_grid_node)
 	left_vbox.add_child(scroll)
 
-	# FAIXA DE SEGURANÇA ABAIXO DO LEADERBOARD
 	banner_container = PanelContainer.new()
 	banner_container.visible = false
 	banner_container.custom_minimum_size.y = 48
@@ -137,23 +136,30 @@ func build_ui() -> void:
 	left_panel.add_child(left_vbox)
 	main_hbox.add_child(left_panel)
 	
-	# Painel Direito (Feed)
 	var right_panel = PanelContainer.new()
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
-	var right_vbox = VBoxContainer.new()
-	var feed_title = Label.new()
-	feed_title.text = "FEED DE INCIDENTES / EVENTOS"
-	feed_title.add_theme_color_override("font_color", Color("#ef4444"))
-	feed_title.add_theme_font_size_override("font_size", 13)
-	right_vbox.add_child(feed_title)
+	var tab_container = TabContainer.new()
+	tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tab_container.add_theme_font_size_override("font_size", 12)
 	
+	var tab_events = VBoxContainer.new()
+	tab_events.name = "📢 INCIDENTES & CLIMA"
 	log_text_node = RichTextLabel.new()
 	log_text_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	log_text_node.scroll_following = true
-	right_vbox.add_child(log_text_node)
-	right_panel.add_child(right_vbox)
+	tab_events.add_child(log_text_node)
+	tab_container.add_child(tab_events)
 	
+	var tab_pits = VBoxContainer.new()
+	tab_pits.name = "🛠️ PIT STOPS"
+	pit_log_text_node = RichTextLabel.new()
+	pit_log_text_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pit_log_text_node.scroll_following = true
+	tab_pits.add_child(pit_log_text_node)
+	tab_container.add_child(tab_pits)
+	
+	right_panel.add_child(tab_container)
 	main_hbox.add_child(right_panel)
 	main_vbox.add_child(main_hbox)
 	
@@ -213,7 +219,6 @@ func _on_tick() -> void:
 		else:
 			btn_start.text = "▶ INICIAR CORRIDA"
 	elif not engine.is_finished():
-		# REDUZ A VELOCIDADE DA SIMULAÇÃO PARA 1X EM QUALQUER INCIDENTE/BANDEIRA
 		if engine.safety_car_status != "NONE" and timer_speed < 1.0:
 			_set_speed_mode(1.0, 1.0)
 			
@@ -279,7 +284,6 @@ func _show_red_flag_modal() -> void:
 	lbl_msg.add_theme_color_override("font_color", Color("#cbd5e1"))
 	vbox.add_child(lbl_msg)
 
-	# Botão de Ação Único (Apenas Continuar / Relargar)
 	var btn_restart = Button.new()
 	btn_restart.text = "▶ RELARGAR CORRIDA"
 	btn_restart.custom_minimum_size.y = 38
@@ -291,7 +295,7 @@ func _show_red_flag_modal() -> void:
 	btn_restart.add_theme_stylebox_override("normal", style_btn)
 	
 	btn_restart.pressed.connect(func():
-		engine.resolve_red_flag_restart("") # IA decide automaticamente para todos
+		engine.resolve_red_flag_restart("")
 		active_modal.queue_free()
 		active_modal = null
 		_update_ui()
@@ -322,25 +326,33 @@ func _update_ui() -> void:
 			flag_text = "🔴 BANDEIRA VERMELHA"
 			flag_color = Color("#ef4444")
 
-	weather_lbl.text = "Pista: " + str(engine.weather_state) + " | Status da Pista: " + flag_text
-	weather_lbl.add_theme_color_override("font_color", flag_color)
+	var weather_str = "Clima: " + engine.weather_state + " (" + str(snapped(engine.water_level, 0.1)) + "% água) | Radar: " + engine.weather_forecast
+	weather_lbl.text = weather_str + " | Status da Pista: " + flag_text
+	weather_lbl.add_theme_color_override("font_color", flag_color if engine.safety_car_status != "NONE" else Color("#38bdf8"))
 
 	_update_safety_banner()
 	
 	if not engine.is_quali_done():
-		race_grid_node.columns = 7
+		race_grid_node.columns = 8
 		var limit = engine.quali_durations.get(engine.quali_phase, 1080.0)
 		var remaining = max(0.0, limit - engine.quali_time_elapsed)
-		top_title.text = "QUALIFICAÇÃO (" + str(engine.quali_phase) + ") - GP " + str(Database.current_gp) + " (" + str(current_track["Nome"]) + ") - Tempo Restante: " + engine.format_session_clock(remaining)
+		var clock_str = engine.format_session_clock(remaining)
+		if engine.quali_checker_flag:
+			clock_str = "00:00 (⏱️ AGUARDANDO VOLTAS FINAIS)"
+		top_title.text = "QUALIFICAÇÃO (" + str(engine.quali_phase) + ") - GP " + str(Database.current_gp) + " (" + str(current_track["Nome"]) + ") - Tempo Restante: " + clock_str
 		_render_quali_grid()
 	else:
-		race_grid_node.columns = 8
+		race_grid_node.columns = 9
 		top_title.text = "GP " + str(Database.current_gp) + " (" + str(current_track["Nome"]) + ") - Volta " + str(engine.current_lap) + "/" + str(engine.total_laps)
 		_render_race_grid()
 		
 	log_text_node.clear()
 	for entry in engine.race_logs:
 		log_text_node.append_text(entry + "\n")
+		
+	pit_log_text_node.clear()
+	for pit_entry in engine.pit_logs:
+		pit_log_text_node.append_text(pit_entry + "\n")
 
 func _update_safety_banner() -> void:
 	if engine == null or engine.safety_car_status == "NONE":
@@ -356,7 +368,7 @@ func _update_safety_banner() -> void:
 			b_style.bg_color = Color(0.8, 0.15, 0.15, 0.25)
 			b_style.border_color = Color("#ef4444")
 			b_style.border_width_left = 6
-			banner_label.text = "🚨 SAFETY CAR EM PISTA — ULTRA-PASGENS PROIBIDAS — VELOCIDADE REDUZIDA"
+			banner_label.text = "🚨 SAFETY CAR EM PISTA — ULTRAPASSAGENS PROIBIDAS — VELOCIDADE REDUZIDA"
 			banner_label.add_theme_color_override("font_color", Color("#ef4444"))
 
 		"VSC":
@@ -370,7 +382,8 @@ func _update_safety_banner() -> void:
 			b_style.bg_color = Color(0.9, 0.8, 0.1, 0.25)
 			b_style.border_color = Color("#facc15")
 			b_style.border_width_left = 6
-			banner_label.text = "⚠️ BANDEIRA AMARELA NO SETOR — REDUZA O RITMO"
+			var sec_str = " NO SETOR " + str(engine.incident_sector) if engine.incident_sector > 0 else ""
+			banner_label.text = "⚠️ BANDEIRA AMARELA" + sec_str + " — REDUZA O RITMO"
 			banner_label.add_theme_color_override("font_color", Color("#facc15"))
 
 		"RED_FLAG":
@@ -390,14 +403,16 @@ func _render_quali_grid() -> void:
 	_add_grid_header("PILOTO", 150)
 	_add_grid_header("PNEU", 60)
 	_add_grid_header("SITUAÇÃO", 100)
+	_add_grid_header("SETORES", 80)
 	_add_grid_header("MELHOR VOLTA", 100)
 	_add_grid_header("ÚLTIMA VOLTA", 160)
 	_add_grid_header("ZONA STATUS", 120)
 
 	var pos = 1
-	var list = engine.active_quali_drivers.duplicate()
+	var list: Array = []
 	
-	list.sort_custom(func(a, b):
+	var current_actives = engine.active_quali_drivers.duplicate()
+	current_actives.sort_custom(func(a, b):
 		var time_a = float(a.get("BestQualiTime", 999.0))
 		var time_b = float(b.get("BestQualiTime", 999.0))
 		if time_a >= 900.0 and time_b >= 900.0:
@@ -411,6 +426,9 @@ func _render_quali_grid() -> void:
 		return time_a < time_b
 	)
 	
+	for act in current_actives:
+		list.append(act)
+		
 	for elim in engine.eliminated_drivers:
 		list.append(elim)
 		
@@ -419,7 +437,7 @@ func _render_quali_grid() -> void:
 		var is_in_danger_zone = false
 		
 		if not is_eliminated:
-			if engine.quali_phase == "Q1" and pos >= 16:
+			if engine.quali_phase == "Q1" and pos >= 17:
 				is_in_danger_zone = true
 			elif engine.quali_phase == "Q2" and pos >= 11:
 				is_in_danger_zone = true
@@ -450,6 +468,10 @@ func _render_quali_grid() -> void:
 					state_color = Color("#f97316")
 		_add_cell(state_text, state_color)
 		
+		var sec_colors = d.get("sector_colors", {"s1": "🟡", "s2": "🟡", "s3": "🟡"})
+		var sectors_str = "%s %s %s" % [sec_colors.get("s1", "🟡"), sec_colors.get("s2", "🟡"), sec_colors.get("s3", "🟡")]
+		_add_cell(sectors_str, Color("#ffffff"))
+		
 		var best_t = float(d.get("BestQualiTime", 999.0))
 		var best_str = engine.format_time_f1(best_t) if best_t < 900.0 else "--:--.---"
 		_add_cell(best_str, Color("#22c55e") if best_t < 900.0 else Color("#ffffff"))
@@ -478,6 +500,7 @@ func _render_race_grid() -> void:
 	_add_grid_header("PNEU / DESGASTE", 140)
 	_add_grid_header("PARADAS", 70)
 	_add_grid_header("STATUS", 90)
+	_add_grid_header("SETORES", 80)
 	_add_grid_header("GAP", 70)
 	_add_grid_header("ÚLTIMA VOLTA", 100)
 	_add_grid_header("POSIÇÕES GANHAS", 120)
@@ -513,6 +536,10 @@ func _render_race_grid() -> void:
 			_add_cell("🛠️ EM PIT", Color("#f97316"))
 		else:
 			_add_cell("🟢 Em pista", Color("#22c55e"))
+			
+		var sec_colors = d.get("sector_colors", {"s1": "🟡", "s2": "🟡", "s3": "🟡"})
+		var sectors_str = "%s %s %s" % [sec_colors.get("s1", "🟡"), sec_colors.get("s2", "🟡"), sec_colors.get("s3", "🟡")]
+		_add_cell(sectors_str, text_color)
 		
 		if driver_status != "Na Pista":
 			_add_cell(driver_status, Color("#ef4444"))
@@ -582,6 +609,10 @@ func _finish_race_and_advance() -> void:
 		"podium": podium
 	})
 
+	# --- APLICAÇÃO OFICIAL DE PONTOS NO CAMPEONATO ---
+	Database.apply_race_points(standings)
+
+	# Atualizações de Moral, Respeito e Teto de Gastos das equipes
 	Database.process_post_race_morale_and_respect(standings)
 	Database.process_ai_team_upgrades()
 	

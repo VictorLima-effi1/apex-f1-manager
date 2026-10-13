@@ -11,28 +11,47 @@ func build_ui() -> void:
 		
 	var main_vbox = VBoxContainer.new()
 	main_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	main_vbox.add_theme_constant_override("separation", 15)
+	main_vbox.add_theme_constant_override("separation", 16)
 	add_child(main_vbox)
 	
-	# Header
+	# --- HEADER DA TELA ---
+	var header_hbox = HBoxContainer.new()
 	var title = Label.new()
 	title.text = "DESENVOLVIMENTO TÉCNICO & HIERARQUIA DE MAQUINÁRIO"
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color("#ef4444"))
-	main_vbox.add_child(title)
+	header_hbox.add_child(title)
+	main_vbox.add_child(header_hbox)
 	
-	# Scroll Container para a lista de equipes
+	# --- HUD DE MONITORAMENTO DO TETO ORÇAMENTÁRIO DO GRID ---
+	_render_grid_budget_cap_summary(main_vbox)
+	
+	# --- SCROLLCONTAINER DA HIERARQUIA DE EQUIPES ---
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_vbox.add_child(scroll)
 	
-	var teams_vbox = VBoxContainer.new()
-	teams_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	teams_vbox.add_theme_constant_override("separation", 10)
-	scroll.add_child(teams_vbox)
+	# GRID CONTAINER DE 2 COLUNAS (COM MAIOR ESPAÇAMENTO VERTICAL/HORIZONTAL)
+	var teams_grid = GridContainer.new()
+	teams_grid.columns = 2
+	teams_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	teams_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	teams_grid.add_theme_constant_override("h_separation", 18)
+	teams_grid.add_theme_constant_override("v_separation", 16)
+	scroll.add_child(teams_grid)
 	
-	# Copia e ordena equipes pelo poder total do carro (Car Power)
+	# 1. Identifica a posição das equipes no Construtores
+	var teams_by_points = Database.teams.duplicate()
+	teams_by_points.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+	
+	var team_points_rank: Dictionary = {}
+	for idx in range(teams_by_points.size()):
+		var t_name = str(teams_by_points[idx].get("Nome", ""))
+		var stored_rank = int(teams_by_points[idx].get("LastSeasonRank", idx + 1))
+		team_points_rank[t_name] = stored_rank
+
+	# 2. Ordena equipes pelo Car Power para exibição
 	var sorted_teams = Database.teams.duplicate()
 	sorted_teams.sort_custom(func(a, b):
 		var p_a = a["Motor"] + a["Aero"] + a["Chassi"]
@@ -41,38 +60,57 @@ func build_ui() -> void:
 	)
 	
 	var rank = 1
+	
 	for t in sorted_teams:
+		var team_name = str(t.get("Nome", ""))
+		var spent = Database.team_season_expenses.get(team_name, 0.0)
+		
+		# Obtém o teto orçamentário personalizado da equipe ($135M a $155M)
+		var max_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else Database.COST_CAP_LIMIT
+		var remaining = max(0.0, max_cap - spent)
+		
+		var spent_m = snapped(spent / 1_000_000.0, 0.1)
+		var remaining_m = snapped(remaining / 1_000_000.0, 0.1)
+		var max_cap_m = snapped(max_cap / 1_000_000.0, 0.1)
+		
+		# --- ESTILIZAÇÃO DO CARD ---
 		var panel = PanelContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		
+		var car_power = int(t["Motor"] + t["Aero"] + t["Chassi"])
+		var tag_info = _get_performance_tag(car_power)
+		
 		var p_style = StyleBoxFlat.new()
-		p_style.bg_color = Color("#121417")
-		p_style.content_margin_left = 12
-		p_style.content_margin_right = 12
-		p_style.content_margin_top = 10
-		p_style.content_margin_bottom = 10
+		p_style.bg_color = Color("#0f1216")
+		p_style.border_width_left = 4
+		p_style.border_color = tag_info["color"]
+		p_style.set_corner_radius_all(6)
+		p_style.content_margin_left = 14
+		p_style.content_margin_right = 14
+		p_style.content_margin_top = 12
+		p_style.content_margin_bottom = 12
 		panel.add_theme_stylebox_override("panel", p_style)
 		
 		var main_hbox = HBoxContainer.new()
-		main_hbox.add_theme_constant_override("separation", 20)
+		main_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		main_hbox.add_theme_constant_override("separation", 14)
 		
-		# Info da Equipe + Ranking
+		# --- BLOCO 1: RANKING, NOME E HANDICAP ---
 		var team_info = VBoxContainer.new()
 		team_info.custom_minimum_size.x = 210
+		team_info.add_theme_constant_override("separation", 3)
 		
 		var r_lbl = Label.new()
 		r_lbl.text = "RANK #" + str(rank) + " NO GRID"
-		r_lbl.add_theme_font_size_override("font_size", 11)
+		r_lbl.add_theme_font_size_override("font_size", 12)
 		r_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 		team_info.add_child(r_lbl)
 		
 		var t_name = Label.new()
-		t_name.text = t["Nome"]
-		t_name.add_theme_font_size_override("font_size", 17)
-		t_name.add_theme_color_override("font_color", Color("#38bdf8"))
+		t_name.text = team_name
+		t_name.add_theme_font_size_override("font_size", 16)
+		t_name.add_theme_color_override("font_color", Color("#ffffff"))
 		team_info.add_child(t_name)
-		
-		var car_power = int(t["Motor"] + t["Aero"] + t["Chassi"])
-		var tag_info = _get_performance_tag(car_power)
 		
 		var tag_lbl = Label.new()
 		tag_lbl.text = tag_info["text"]
@@ -80,36 +118,101 @@ func build_ui() -> void:
 		tag_lbl.add_theme_font_size_override("font_size", 12)
 		team_info.add_child(tag_lbl)
 		
+		# INDICADOR DE GANHO DE UPGRADE
+		var const_rank = team_points_rank.get(team_name, 5)
+		var is_top_3 = const_rank <= 3
+		var dev_rate_str = "🚀 Ganho: +1~2% (Top 3)" if is_top_3 else "⚡ Ganho: +3~4% (Handicap)"
+		
+		var dev_lbl = Label.new()
+		dev_lbl.text = dev_rate_str
+		dev_lbl.add_theme_font_size_override("font_size", 12)
+		dev_lbl.add_theme_color_override("font_color", Color("#f59e0b") if is_top_3 else Color("#38bdf8"))
+		team_info.add_child(dev_lbl)
+		
+		# INDICADOR COMPLETO: GASTOS + VERBA RESTANTE + TETO
 		var budget_lbl = Label.new()
-		budget_lbl.text = "💰 Verba P&D: $" + str(t["Orcamento"]) + "M"
-		budget_lbl.add_theme_color_override("font_color", Color("#22c55e"))
+		if remaining <= 0:
+			budget_lbl.text = "💰 Gastou: $%sM | Teto Atingido ($0M Restantes)" % str(spent_m)
+			budget_lbl.add_theme_color_override("font_color", Color("#ef4444"))
+		else:
+			budget_lbl.text = "💰 Gastou: $%sM | Restante: $%sM (Teto: $%sM)" % [str(spent_m), str(remaining_m), str(max_cap_m)]
+			if remaining_m <= 25.0:
+				budget_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
+			else:
+				budget_lbl.add_theme_color_override("font_color", Color("#22c55e"))
+				
+		budget_lbl.add_theme_font_size_override("font_size", 11)
 		team_info.add_child(budget_lbl)
 		
 		main_hbox.add_child(team_info)
-		main_hbox.add_child(VSeparator.new())
 		
-		# Grid de Componentes com Barras Compactas
-		var stats_grid = GridContainer.new()
-		stats_grid.columns = 2
-		stats_grid.add_theme_constant_override("h_separation", 15)
-		stats_grid.add_theme_constant_override("v_separation", 6)
+		# Separador vertical fino
+		var v_sep = VSeparator.new()
+		main_hbox.add_child(v_sep)
 		
-		stats_grid.add_child(_create_stat_label("🚀 Motor (" + str(t["Motor"]) + "):"))
-		stats_grid.add_child(_create_progress_bar(t["Motor"]))
+		# --- BLOCO 2: BARRAS COLORIDAS DOS COMPONENTES TÉCNICOS ---
+		var stats_vbox = VBoxContainer.new()
+		stats_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stats_vbox.add_theme_constant_override("separation", 6)
 		
-		stats_grid.add_child(_create_stat_label("💨 Aero (" + str(t["Aero"]) + "):"))
-		stats_grid.add_child(_create_progress_bar(t["Aero"]))
+		_add_component_bar(stats_vbox, "🚀 Motor", t["Motor"], Color("#ef4444"))
+		_add_component_bar(stats_vbox, "💨 Aero", t["Aero"], Color("#22c55e"))
+		_add_component_bar(stats_vbox, "🏎️ Chassi", t["Chassi"], Color("#facc15"))
+		_add_component_bar(stats_vbox, "🔧 Confiab.", t["Confiabilidade"], Color("#a855f7"))
 		
-		stats_grid.add_child(_create_stat_label("🏎️ Chassi (" + str(t["Chassi"]) + "):"))
-		stats_grid.add_child(_create_progress_bar(t["Chassi"]))
-		
-		stats_grid.add_child(_create_stat_label("🔧 Confiabilidade (" + str(t["Confiabilidade"]) + "%):"))
-		stats_grid.add_child(_create_progress_bar(t["Confiabilidade"]))
-		
-		main_hbox.add_child(stats_grid)
+		main_hbox.add_child(stats_vbox)
 		panel.add_child(main_hbox)
-		teams_vbox.add_child(panel)
+		teams_grid.add_child(panel)
 		rank += 1
+
+func _render_grid_budget_cap_summary(parent: VBoxContainer) -> void:
+	var card = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color("#141820")
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	card.add_theme_stylebox_override("panel", style)
+	
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 20)
+	
+	var total_spent = 0.0
+	var teams_at_cap = 0
+	
+	for t in Database.teams:
+		var team_name = str(t.get("Nome", ""))
+		var spent = Database.team_season_expenses.get(team_name, 0.0)
+		var max_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else Database.COST_CAP_LIMIT
+		
+		total_spent += spent
+		if spent >= max_cap:
+			teams_at_cap += 1
+			
+	var avg_spent_m = snapped((total_spent / max(1, Database.teams.size())) / 1_000_000.0, 0.1)
+	
+	var lbl_cap_title = Label.new()
+	lbl_cap_title.text = "📊 ESCALA DE TETO ($135M a $155M dependendo da posição do ano anterior)"
+	lbl_cap_title.add_theme_font_size_override("font_size", 13)
+	lbl_cap_title.add_theme_color_override("font_color", Color("#94a3b8"))
+	hbox.add_child(lbl_cap_title)
+	
+	var lbl_avg = Label.new()
+	lbl_avg.text = "• Média gasta: $%sM" % str(avg_spent_m)
+	lbl_avg.add_theme_font_size_override("font_size", 13)
+	lbl_avg.add_theme_color_override("font_color", Color("#38bdf8"))
+	hbox.add_child(lbl_avg)
+	
+	var lbl_blocked = Label.new()
+	lbl_blocked.text = "• Equipes com teto esgotado: %d / %d" % [teams_at_cap, Database.teams.size()]
+	lbl_blocked.add_theme_font_size_override("font_size", 13)
+	lbl_blocked.add_theme_color_override("font_color", Color("#ef4444") if teams_at_cap > 0 else Color("#22c55e"))
+	hbox.add_child(lbl_blocked)
+	
+	card.add_child(hbox)
+	parent.add_child(card)
 
 func _get_performance_tag(power: int) -> Dictionary:
 	if power >= 273:
@@ -119,36 +222,38 @@ func _get_performance_tag(power: int) -> Dictionary:
 	elif power >= 250:
 		return {"text": "🟡 Pelotão Intermediário", "color": Color("#eab308")}
 	else:
-		return {"text": "⚪ Retaguarda / Em Busca de Ritmo", "color": Color("#94a3b8")}
+		return {"text": "⚪ Retaguarda", "color": Color("#94a3b8")}
 
-func _create_stat_label(txt: String) -> Label:
+func _add_component_bar(parent: VBoxContainer, label_text: String, value: int, color: Color) -> void:
+	var hbox = HBoxContainer.new()
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_theme_constant_override("separation", 8)
+	
 	var lbl = Label.new()
-	lbl.text = txt
-	lbl.custom_minimum_size.x = 160
-	return lbl
-
-func _create_progress_bar(val: int) -> ProgressBar:
-	var pb = ProgressBar.new()
-	pb.min_value = 50
-	pb.max_value = 99
-	pb.value = val
-	pb.size_flags_horizontal = 0 # Mantém a barra fixa sem esticar pela tela
-	pb.custom_minimum_size = Vector2(140, 16) # Largura e altura elegantes
-	pb.show_percentage = true
-	return pb
-
-func render_budget_cap_ui(container: VBoxContainer) -> void:
-	var user_expenses = Database.team_season_expenses.get(Database.user_team, 0.0)
-	var limit = Database.COST_CAP_LIMIT
-	var percent_used = (user_expenses / limit) * 100.0
+	lbl.text = label_text
+	lbl.custom_minimum_size.x = 95
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", Color("#cbd5e1"))
+	hbox.add_child(lbl)
 	
-	var lbl_cap = Label.new()
-	lbl_cap.text = "📊 Teto Orçamentário da Temporada: $%.1fM / $%.1fM (%.1f%%)" % [user_expenses / 1_000_000.0, limit / 1_000_000.0, percent_used]
-	lbl_cap.add_theme_font_size_override("font_size", 13)
+	var pbar = ProgressBar.new()
+	pbar.min_value = 50
+	pbar.max_value = 99
+	pbar.value = value
+	pbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pbar.custom_minimum_size = Vector2(90, 15) # Barra mais encorpada
+	pbar.show_percentage = false
 	
-	if percent_used >= 100.0:
-		lbl_cap.add_theme_color_override("font_color", Color("#ef4444")) # Vermelho (Limite)
-	else:
-		lbl_cap.add_theme_color_override("font_color", Color("#22c55e")) # Verde (Ok)
-		
-	container.add_child(lbl_cap)
+	var fill_style = StyleBoxFlat.new()
+	fill_style.bg_color = color
+	fill_style.set_corner_radius_all(3)
+	pbar.add_theme_stylebox_override("fill", fill_style)
+	hbox.add_child(pbar)
+	
+	var val_lbl = Label.new()
+	val_lbl.text = str(value) + "%"
+	val_lbl.add_theme_font_size_override("font_size", 12)
+	val_lbl.add_theme_color_override("font_color", Color("#ffffff"))
+	hbox.add_child(val_lbl)
+	
+	parent.add_child(hbox)

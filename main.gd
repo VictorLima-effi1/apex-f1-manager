@@ -176,12 +176,10 @@ func _advance_gp() -> void:
 	switch_view("dashboard")
 
 func _on_save_game_pressed() -> void:
-	var success: bool = Database.save_game() if Database.has_method("save_game") else false
-	
-	if success:
+	var modal = SaveSlotModal.new()
+	modal.open_modal(self, SaveSlotModal.Mode.SAVE, func():
 		_show_bottom_popup("💾 Jogo salvo com sucesso!")
-	else:
-		_show_bottom_popup("❌ Erro ao salvar o jogo.")
+	)
 
 func _show_bottom_popup(msg: String) -> void:
 	var old_popup = get_node_or_null("SaveToastPopup")
