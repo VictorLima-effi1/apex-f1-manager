@@ -45,14 +45,13 @@ func setup_layout() -> void:
 	sidebar_vbox.add_theme_constant_override("separation", 10)
 	sidebar.add_child(sidebar_vbox)
 	
-	var logo_label = Label.new()
-	logo_label.text = "APEX F1\nMANAGER"
-	logo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	logo_label.add_theme_color_override("font_color", Color("f60210ff"))
-	logo_label.add_theme_font_size_override("font_size", 22)
-	sidebar_vbox.add_child(logo_label)
-	
-	sidebar_vbox.add_child(HSeparator.new())
+	# --- LOGO DO JOGO NO LUGAR DO TEXTO ---
+	var logo_texture = TextureRect.new()
+	logo_texture.texture = load("res://icon.png") 
+	logo_texture.expand_mode = TextureRect.EXPAND_KEEP_SIZE 
+	logo_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo_texture.custom_minimum_size = Vector2(160, 60)
+	sidebar_vbox.add_child(logo_texture)
 	
 	var nav_items = [
 		{"label": "📊 Dashboard", "view": "dashboard"},
@@ -79,7 +78,7 @@ func setup_layout() -> void:
 
 	sidebar_vbox.add_child(HSeparator.new())
 
-	# Botão Salvar Jogo com Pop-up no Canto Inferior
+	# Botão Salvar Jogo
 	var btn_save = Button.new()
 	btn_save.text = "  💾 Salvar Jogo"
 	btn_save.alignment = HORIZONTAL_ALIGNMENT_LEFT

@@ -13,7 +13,7 @@ config_version=5
 config/name="ApexF1Manager"
 run/main_scene="uid://c4l0emkc08cap"
 config/features=PackedStringArray("4.7", "Forward Plus")
-config/icon="res://icon.svg"
+config/icon="uid://com4kkk3atx0r"
 
 [autoload]
 

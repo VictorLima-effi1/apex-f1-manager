@@ -1111,3 +1111,6 @@ func record_gp_winner(track_index: int, winner_driver_name: String, winner_team_
 	if track_index >= 0 and track_index < tracks.size():
 		tracks[track_index]["UltimoVencedorPiloto"] = winner_driver_name
 		tracks[track_index]["UltimoVencedorEquipe"] = winner_team_name
+
+func save_game() -> bool:
+	return save_game_slot(current_slot)

@@ -155,7 +155,6 @@ func _on_resolution_selected(index: int) -> void:
 	if index >= 0 and index < resolutions.size():
 		var res = resolutions[index]
 		DisplayServer.window_set_size(res)
-		# Centraliza a janela na tela se estiver em modo janela
 		if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED:
 			var screen_center = DisplayServer.screen_get_position() + (DisplayServer.screen_get_size() / 2)
 			DisplayServer.window_set_position(screen_center - (res / 2))
@@ -163,12 +162,14 @@ func _on_resolution_selected(index: int) -> void:
 func _on_ui_scale_changed(value: float) -> void:
 	Database.ui_scale = value
 	lbl_scale_val.text = "%d%%" % [int(value * 100.0)]
-	
-	# Aplica o ajuste de escala global na árvore da UI do Godot
 	get_tree().root.content_scale_factor = value
 
 func _save_and_close() -> void:
-	Database.save_game()
+	# Agora chama a função de salvamento de slot corretamente através do método intermediário ou direto
+	if Database.has_method("save_game"):
+		Database.save_game()
+	else:
+		Database.save_game_slot(Database.current_slot)
 	_close_options()
 
 func _close_options() -> void:
