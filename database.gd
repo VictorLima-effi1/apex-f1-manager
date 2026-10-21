@@ -315,17 +315,17 @@ var tracks: Array = [
 ]
 
 var teams: Array = [
-	{"Nome": "Red Bull Racing", "Orcamento": 145, "Motor": 92, "Aero": 94, "Chassi": 91, "Confiabilidade": 90, "Respeito": 90, "Pontos": 0, "LastSeasonRank": 1},
-	{"Nome": "Ferrari", "Orcamento": 150, "Motor": 94, "Aero": 90, "Chassi": 89, "Confiabilidade": 88, "Respeito": 85, "Pontos": 0, "LastSeasonRank": 2},
-	{"Nome": "McLaren", "Orcamento": 145, "Motor": 92, "Aero": 91, "Chassi": 90, "Confiabilidade": 92, "Respeito": 88, "Pontos": 0, "LastSeasonRank": 3},
-	{"Nome": "Mercedes", "Orcamento": 135, "Motor": 91, "Aero": 87, "Chassi": 88, "Confiabilidade": 93, "Respeito": 82, "Pontos": 0, "LastSeasonRank": 4},
-	{"Nome": "Aston Martin", "Orcamento": 120, "Motor": 88, "Aero": 85, "Chassi": 85, "Confiabilidade": 86, "Respeito": 75, "Pontos": 0, "LastSeasonRank": 5},
-	{"Nome": "Alpine", "Orcamento": 100, "Motor": 84, "Aero": 82, "Chassi": 83, "Confiabilidade": 80, "Respeito": 68, "Pontos": 0, "LastSeasonRank": 6},
-	{"Nome": "Haas", "Orcamento": 95, "Motor": 86, "Aero": 80, "Chassi": 80, "Confiabilidade": 85, "Respeito": 62, "Pontos": 0, "LastSeasonRank": 7},
-	{"Nome": "Racing Bulls", "Orcamento": 95, "Motor": 83, "Aero": 81, "Chassi": 81, "Confiabilidade": 83, "Respeito": 65, "Pontos": 0, "LastSeasonRank": 8},
-	{"Nome": "Williams", "Orcamento": 90, "Motor": 85, "Aero": 78, "Chassi": 79, "Confiabilidade": 82, "Respeito": 60, "Pontos": 0, "LastSeasonRank": 9},
-	{"Nome": "Audi", "Orcamento": 110, "Motor": 81, "Aero": 79, "Chassi": 80, "Confiabilidade": 78, "Respeito": 64, "Pontos": 0, "LastSeasonRank": 10},
-	{"Nome": "Cadillac", "Orcamento": 105, "Motor": 80, "Aero": 78, "Chassi": 78, "Confiabilidade": 81, "Respeito": 58, "Pontos": 0, "LastSeasonRank": 11}
+	{"Nome": "Red Bull Racing", "Orcamento": 145, "Motor": 92, "Aero": 94, "Chassi": 91, "Confiabilidade": 90, "Respeito": 90, "Pontos": 0, "LastSeasonRank": 1, "Ativa": true},
+	{"Nome": "Ferrari", "Orcamento": 150, "Motor": 94, "Aero": 90, "Chassi": 89, "Confiabilidade": 88, "Respeito": 85, "Pontos": 0, "LastSeasonRank": 2, "Ativa": true},
+	{"Nome": "McLaren", "Orcamento": 145, "Motor": 92, "Aero": 91, "Chassi": 90, "Confiabilidade": 92, "Respeito": 88, "Pontos": 0, "LastSeasonRank": 3, "Ativa": true},
+	{"Nome": "Mercedes", "Orcamento": 135, "Motor": 91, "Aero": 87, "Chassi": 88, "Confiabilidade": 93, "Respeito": 82, "Pontos": 0, "LastSeasonRank": 4, "Ativa": true},
+	{"Nome": "Aston Martin", "Orcamento": 120, "Motor": 88, "Aero": 85, "Chassi": 85, "Confiabilidade": 86, "Respeito": 75, "Pontos": 0, "LastSeasonRank": 5, "Ativa": true},
+	{"Nome": "Alpine", "Orcamento": 100, "Motor": 84, "Aero": 82, "Chassi": 83, "Confiabilidade": 80, "Respeito": 68, "Pontos": 0, "LastSeasonRank": 6, "Ativa": true},
+	{"Nome": "Haas", "Orcamento": 95, "Motor": 86, "Aero": 80, "Chassi": 80, "Confiabilidade": 85, "Respeito": 62, "Pontos": 0, "LastSeasonRank": 7, "Ativa": true},
+	{"Nome": "Racing Bulls", "Orcamento": 95, "Motor": 83, "Aero": 81, "Chassi": 81, "Confiabilidade": 83, "Respeito": 65, "Pontos": 0, "LastSeasonRank": 8, "Ativa": true},
+	{"Nome": "Williams", "Orcamento": 90, "Motor": 85, "Aero": 78, "Chassi": 79, "Confiabilidade": 82, "Respeito": 60, "Pontos": 0, "LastSeasonRank": 9, "Ativa": true},
+	{"Nome": "Audi", "Orcamento": 110, "Motor": 81, "Aero": 79, "Chassi": 80, "Confiabilidade": 78, "Respeito": 64, "Pontos": 0, "LastSeasonRank": 10, "Ativa": true},
+	{"Nome": "Cadillac", "Orcamento": 105, "Motor": 80, "Aero": 78, "Chassi": 78, "Confiabilidade": 81, "Respeito": 58, "Pontos": 0, "LastSeasonRank": 11, "Ativa": true}
 ]
 
 var drivers: Array = []
@@ -395,6 +395,9 @@ func purchase_team_upgrade(team_name: String) -> bool:
 
 func process_ai_team_upgrades() -> void:
 	for t in teams:
+		if not bool(t.get("Ativa", true)):
+			continue
+			
 		var team_name = str(t.get("Nome", ""))
 		var current_expense = team_season_expenses.get(team_name, 0.0)
 		var max_cap = get_team_budget_cap(team_name)
@@ -405,11 +408,9 @@ func process_ai_team_upgrades() -> void:
 			continue
 			
 		# --- LÓGICA DE AGRESSIVIDADE DINÂMICA ---
-		# Conforme os GPs passam, a chance de comprar upgrade aumenta se a equipe tiver verba sobrando
 		var gp_progress = float(current_gp) / float(max(1, tracks.size())) # 0.0 a 1.0
 		var budget_ratio = remaining / max_cap                       # quanto % de verba ainda tem
 		
-		# Aumenta a chance base de 25% para 60% se houver muita verba acumulada
 		var buy_chance = 0.60 if budget_ratio > (1.0 - gp_progress) else 0.35
 		
 		if randf() > buy_chance:
@@ -452,7 +453,6 @@ func process_ai_team_upgrades() -> void:
 					str(snapped(max_cap / 1000000.0, 0.1))
 				])
 		else:
-			# Se todos os componentes já estiverem em 99%, investe a verba restante no carro do próximo ano
 			if remaining >= UPGRADE_COST:
 				team_season_expenses[team_name] = current_expense + UPGRADE_COST
 				add_news("🔬 P&D AVANÇADO (%s): Investimento no projeto do ano seguinte ($%sM restantes)" % [
@@ -861,6 +861,11 @@ func _process_driver_evolution() -> void:
 			add_news("🛑 " + str(d.get("Nome", "Piloto")) + " anunciou sua aposentadoria oficial!")
 
 func _process_ai_transfer_market() -> void:
+	# 1. Ativa todas as novas equipes cadastradas para a nova temporada
+	for t in teams:
+		t["Ativa"] = true
+
+	# 2. Varre todas as equipes para garantir OBRIGATORIAMENTE 2 pilotos por time
 	for t in teams:
 		var team_name = str(t.get("Nome", ""))
 		var active_team_drivers = []
@@ -887,7 +892,15 @@ func _process_ai_transfer_market() -> void:
 				active_team_drivers.append(best_candidate)
 				add_news("✍️ " + team_name + " contratou " + str(best_candidate.get("Nome", "")) + " por " + str(best_candidate["AnosContrato"]) + " ano(s)!")
 			else:
-				break
+				# Se não houver Free Agents no banco de dados, cria um piloto novato automaticamente
+				var new_promoted_name = "Novato " + team_name.substr(0, 3).to_upper() + " " + str(randi_range(10, 99))
+				add_new_driver(new_promoted_name, randi_range(18, 22), randi_range(68, 75), randi_range(68, 75), randi_range(68, 75), team_name)
+				add_news("🌟 PROMOÇÃO: %s promoveu o jovem %s da base para preencher a vaga!" % [team_name, new_promoted_name])
+				
+				active_team_drivers.clear()
+				for d in drivers:
+					if str(d.get("Equipe", "")) == team_name:
+						active_team_drivers.append(d)
 
 func _get_driver_by_name(p_name: String) -> Dictionary:
 	var clean_input = p_name.strip_edges().to_lower()
@@ -1114,3 +1127,114 @@ func record_gp_winner(track_index: int, winner_driver_name: String, winner_team_
 
 func save_game() -> bool:
 	return save_game_slot(current_slot)
+
+func add_new_team(team_name: String, respeto: int = 50, aero: int = 75, motor: int = 75, chassi: int = 75) -> void:
+	if not _get_team_by_name(team_name).is_empty():
+		return
+		
+	var new_rank = teams.size() + 1
+	var new_team = {
+		"Nome": team_name,
+		"Orcamento": 100,
+		"Motor": motor,
+		"Aero": aero,
+		"Chassi": chassi,
+		"Confiabilidade": 80,
+		"Respeito": respeto,
+		"Pontos": 0,                   # OBRIGATÓRIO: Começa zerado
+		"LastSeasonRank": new_rank,
+		"Ativa": false                # REGRA: Fica inativa aguardando a próxima temporada
+	}
+	teams.append(new_team)
+	
+	team_season_expenses[team_name] = 0.0
+	var bonus_ratio = float(new_rank - 1) / float(max(1, teams.size() - 1))
+	team_budget_caps[team_name] = COST_CAP_LIMIT + (20_000_000.0 * bonus_ratio)
+	
+	add_news("📋 REGISTRO DE EQUIPE: %s foi cadastrada e fará sua estreia na próxima temporada!" % team_name)
+
+func add_new_driver(driver_name: String, age: int = 20, overall: int = 75, pace: int = 75, tire: int = 75, team_name: String = "Free Agent") -> void:
+	var new_driver = {
+		"Nome": driver_name,
+		"Idade": age,
+		"Overall": overall,
+		"Grau": overall,
+		"Corrida": pace,
+		"Pace": pace,
+		"Pneus": tire,
+		"Equipe": team_name,
+		"Moral": 75,
+		"AnosContrato": 1 if team_name != "Free Agent" else 0,
+		# ESTATÍSTICAS ZERADAS OBRIGATORIAMENTE
+		"Pontos": 0,
+		"VitoriasAno": 0,
+		"PodiosAno": 0,
+		"DNFsAno": 0,
+		"SequenciaPontos": 0,
+		"PosicoesGanhaAno": 0,
+		"PosicoesPerdidasAno": 0
+	}
+	drivers.append(new_driver)
+	add_news("🏎️ NOVO PILOTO INSCRITO: %s está disponível no banco de dados!" % driver_name)
+
+func run_automated_test_season_and_export_telemetry(file_name: String = "telemetry_report.json") -> void:
+	var test_report: Dictionary = {
+		"test_date": Time.get_datetime_string_from_system(),
+		"season_year": current_year,
+		"gp_results": [],
+		"team_final_expenses": {},
+		"drivers_final_standings": [],
+		"anomalies_detected_by_game": []
+	}
+	
+	# Simula todos os GPs da temporada atual
+	for i in range(tracks.size()):
+		var gp_num = current_gp
+		var track_info = tracks[i]
+		simulate_current_gp_fast()
+		
+		# Registra dados do GP simulado
+		if race_history.size() > 0:
+			var last_race = race_history.back()
+			test_report["gp_results"].append({
+				"gp_num": gp_num,
+				"track": track_info.get("Nome", "Pista"),
+				"winner": last_race.get("winner", ""),
+				"second": last_race.get("second", ""),
+				"third": last_race.get("third", "")
+			})
+	
+	# Captura classificação final dos pilotos
+	var sorted_drivers = drivers.duplicate()
+	sorted_drivers.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+	
+	for d in sorted_drivers:
+		test_report["drivers_final_standings"].append({
+			"nome": d.get("Nome", ""),
+			"equipe": d.get("Equipe", ""),
+			"overall": d.get("Overall", 0),
+			"pontos": d.get("Pontos", 0),
+			"vitorias": d.get("VitoriasAno", 0),
+			"podios": d.get("PodiosAno", 0),
+			"dnfs": d.get("DNFsAno", 0),
+			"moral": d.get("Moral", 75)
+		})
+		
+	# Captura finanças e teto orçamentário
+	for team_name in team_season_expenses.keys():
+		var spent = team_season_expenses[team_name]
+		var cap = get_team_budget_cap(team_name) if has_method("get_team_budget_cap") else 135000000
+		test_report["team_final_expenses"][team_name] = {
+			"spent_usd": spent,
+			"cap_usd": cap,
+			"over_budget": spent > cap
+		}
+		
+	# Salva o arquivo no diretório user://
+	var safe_data = _make_json_safe(test_report)
+	var json_str = JSON.stringify(safe_data, "\t")
+	var file = FileAccess.open("user://" + file_name, FileAccess.WRITE)
+	if file:
+		file.store_string(json_str)
+		file.close()
+		print("📊 RELATÓRIO DE TELEMETRIA EXPORTADO COM SUCESSO EM: user://", file_name)
