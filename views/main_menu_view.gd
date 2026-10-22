@@ -502,3 +502,9 @@ func _show_custom_modal(title_text: String, message_text: String) -> void:
 	margin.add_child(vbox)
 	card.add_child(margin)
 	center.add_child(card)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_T:
+			print("🤖 Gerando relatório de telemetria para a IA...")
+			Database.run_automated_test_season_and_export_telemetry()

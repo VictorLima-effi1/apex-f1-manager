@@ -91,6 +91,10 @@ func setup_race(selected_track: Dictionary) -> void:
 	red_flag_active = false
 	pending_red_flag_modal = false
 	
+	# TRAVA DE SEGURANÇA: Garante 22 pilotos ativos no Database antes de montar a sessão
+	if Database.has_method("ensure_full_grid"):
+		Database.ensure_full_grid()
+	
 	session_best_sectors = {"s1": 999.0, "s2": 999.0, "s3": 999.0}
 	session_fastest_lap = {"driver": "", "time": 999.0}
 	
@@ -117,7 +121,8 @@ func setup_race(selected_track: Dictionary) -> void:
 	full_grid.clear()
 	
 	for d in Database.drivers:
-		if d.get("Equipe", "") != "Free Agent" and d.get("Equipe", "") != "Aposentado":
+		var eq_name = str(d.get("Equipe", "")).strip_edges()
+		if eq_name != "Free Agent" and eq_name != "Aposentado" and not eq_name.is_empty():
 			var entry = d.duplicate()
 			entry["TempoTotal"] = 0.0
 			entry["Status"] = "Na Pista"
@@ -142,6 +147,9 @@ func setup_race(selected_track: Dictionary) -> void:
 			entry["pit_stops"] = 0
 			entry["grid_start_pos"] = 0
 			entry["pit_window_offset"] = randi_range(-2, 2)
+			
+			var team_info = Database._get_team_by_name(eq_name)
+			entry["Confiabilidade"] = float(team_info.get("Confiabilidade", 80.0)) if not team_info.is_empty() else 80.0
 			
 			race_drivers.append(entry)
 			active_quali_drivers.append(entry)
@@ -361,6 +369,17 @@ func process_lap() -> Dictionary:
 		var stint_lap = int(d.get("stint_lap", 0)) + 1
 		d["stint_lap"] = stint_lap
 		
+		# --- CHECAGEM DE DNF MECÂNICO BALANCEADO ---
+		var rel_val = float(d.get("Confiabilidade", 80.0))
+		if calculate_mechanical_dnf_chance(rel_val):
+			d["Status"] = "Abandonou (Quebra)"
+			d["retired_lap"] = current_lap
+			d["is_in_pit"] = false
+			d["dnf"] = true
+			d["abandonou"] = true
+			lap_events.append("⚙️ ABANDONO MECÂNICO: " + d["Nome"] + " (" + d["Equipe"] + ") teve uma falha de motor/câmbio na volta " + str(current_lap) + ".")
+			continue
+
 		var compound = str(d.get("tire_compound", "Medium"))
 		var wear_rate = 3.5 if compound in ["Soft", "Macio"] else (2.2 if compound in ["Medium", "Médio", "Inter", "Wet"] else 1.5)
 		if safety_car_status in ["SC", "VSC"]: wear_rate *= 0.35
@@ -439,15 +458,14 @@ func process_lap() -> Dictionary:
 				pit_error_msg
 			])
 		else:
-			# --- FÓRMULA REBALANCEADA DE RITMO (70% CARRO / 30% PILOTO) ---
 			var team_name = str(d.get("Equipe", ""))
 			var team = Database._get_team_by_name(team_name)
 			
 			var car_power = float(team.get("Motor", 80)) * 0.35 + float(team.get("Aero", 80)) * 0.40 + float(team.get("Chassi", 80)) * 0.25
-			var car_time_bonus = (car_power - 50.0) * 0.060 # Máximo de ~2.8s pelo carro
+			var car_time_bonus = (car_power - 50.0) * 0.060
 			
-			var driver_skill = float(d.get("Corrida", d.get("Overall", 80)))
-			var driver_time_bonus = (driver_skill - 50.0) * 0.013 # Máximo de ~0.65s pelo piloto
+			var driver_skill = _get_effective_driver_skill(d, "Corrida")
+			var driver_time_bonus = (driver_skill - 50.0) * 0.013
 			
 			var tire_delta = _calculate_tire_lap_delta(compound, stint_lap)
 			var compound_weather_penalty = 0.0
@@ -480,6 +498,8 @@ func process_lap() -> Dictionary:
 			
 		var morale_val = float(d.get("Moral", 75))
 		var crash_chance = 0.005 if morale_val < 40 else 0.002
+		if water_level > 15.0 and _check_wet_race_dnf_risk(d):
+			crash_chance += 0.004
 			
 		if randf() < crash_chance:
 			var is_crash = randf() >= 0.6
@@ -487,8 +507,13 @@ func process_lap() -> Dictionary:
 			d["Status"] = "Abandonou (Acidente)" if is_crash else "Abandonou (Quebra)"
 			d["retired_lap"] = current_lap
 			d["is_in_pit"] = false
+			d["dnf"] = true
+			d["abandonou"] = true
 			accident_this_lap = is_crash or accident_this_lap
 			lap_events.append("💥 ABANDONO: " + d["Nome"] + " (" + d["Equipe"] + ") fora no SETOR " + str(accident_sector) + " na volta " + str(current_lap) + ".")
+
+	# Executa os duelos roda a roda em carros com gap < 0.3s
+	_process_wheel_to_wheel_battles()
 
 	if accident_this_lap and safety_car_status == "NONE":
 		incident_sector = accident_sector
@@ -547,6 +572,49 @@ func process_lap() -> Dictionary:
 
 var quali_weather_timer: float = 0.0
 
+func _calculate_driver_lap_pace(driver_data: Dictionary, base_track_time: float, is_wet_flag: bool) -> float:
+	var overall = _get_effective_driver_skill(driver_data, "Corrida")
+	var rain_skill = _get_effective_driver_skill(driver_data, "HabilidadeChuva")
+	
+	var effective_skill = rain_skill if is_wet_flag else overall
+	var skill_time_bonus = (effective_skill - 50.0) * 0.015
+	
+	return base_track_time - skill_time_bonus
+
+func _check_wet_race_dnf_risk(driver_data: Dictionary) -> bool:
+	var rain_skill = _get_effective_driver_skill(driver_data, "HabilidadeChuva")
+	var wet_mistake_risk = (100.0 - rain_skill) * 0.0001
+	return randf() < wet_mistake_risk
+
+func _process_wheel_to_wheel_battles() -> void:
+	var active_drivers: Array = []
+	for d in race_drivers:
+		if d.get("Status", "Na Pista") == "Na Pista":
+			active_drivers.append(d)
+			
+	if active_drivers.size() < 2:
+		return
+		
+	for i in range(1, active_drivers.size()):
+		var attacker = active_drivers[i]
+		var defender = active_drivers[i - 1]
+		
+		var gap = float(attacker.get("TempoTotal", 0.0)) - float(defender.get("TempoTotal", 0.0))
+		
+		if gap > 0.0 and gap <= 0.3:
+			var ovt_skill = _get_effective_driver_skill(attacker, "Ultrapassagem")
+			var def_skill = _get_effective_driver_skill(defender, "Defesa")
+			
+			var success_rate = 0.50 + ((ovt_skill - def_skill) / 200.0)
+			success_rate = clampf(success_rate, 0.15, 0.85)
+			
+			if randf() < success_rate:
+				var swap_time = float(defender["TempoTotal"]) - 0.05
+				attacker["TempoTotal"] = swap_time
+				
+				var log_msg = "⚔️ ULTRAPASSAGEM: " + str(attacker["Nome"]) + " ultrapassou " + str(defender["Nome"]) + " na disputa por posição!"
+				race_logs.append(log_msg)
+
 func process_quali_tick(delta_sec: float = 1.0) -> Dictionary:
 	if is_quali_done():
 		return {"finished": true}
@@ -589,7 +657,7 @@ func process_quali_tick(delta_sec: float = 1.0) -> Dictionary:
 						var team = Database._get_team_by_name(team_name)
 						var car_power = float(team.get("Motor", 80)) * 0.35 + float(team.get("Aero", 80)) * 0.40 + float(team.get("Chassi", 80)) * 0.25
 						
-						var driver_skill = float(d.get("Grau", d.get("Overall", 80)))
+						var driver_skill = _get_effective_driver_skill(d, "Grau")
 						var compound = str(d.get("tire_compound", "Soft"))
 						var compound_delta = _calculate_tire_lap_delta(compound, 1)
 						var base_lap = _get_base_track_lap_time()
@@ -746,3 +814,17 @@ func _select_next_dry_compound(driver: Dictionary, remaining_laps: int) -> Strin
 			return c
 			
 	return candidates[0]
+
+func calculate_mechanical_dnf_chance(team_reliability: float) -> bool:
+	var total_team_failure_chance = maxf(100.0 - team_reliability, 0.4) 
+	var driver_failure_chance_gp = (total_team_failure_chance / 100.0) / 4.0 
+	var lap_failure_chance = driver_failure_chance_gp / float(max(total_laps, 1))
+	return randf() < lap_failure_chance
+
+func _get_effective_driver_skill(driver_data: Dictionary, skill_name: String) -> float:
+	var base_val = float(driver_data.get(skill_name, driver_data.get("Overall", 75)))
+	var has_temp_bonus = int(driver_data.get("bonus_temporario_laps", 0)) > 0
+	
+	if has_temp_bonus:
+		return base_val + 2.0
+	return base_val

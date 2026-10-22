@@ -5,6 +5,7 @@ var current_gp: int = 1
 var current_view: String = "dashboard"
 var race_finished: bool = false
 var active_engine: RaceEngine = null
+var constructors_points_history: Array = [] # Estrutura: [{"gp": 1, "points": {"McLaren": 25, "Ferrari": 18, ...}}]
 
 # Variáveis Globais de Configuração
 var ui_scale: float = 1.0
@@ -23,311 +24,13 @@ var team_budget_caps: Dictionary = {}
 const MAX_SAVE_SLOTS: int = 3
 var current_slot: int = 1
 
-var tracks: Array = [
-	{
-		"Nome": "Albert Park",
-		"Pais": "Austrália",
-		"Voltas": 58,
-		"ComprimentoKM": 5.278,
-		"VelocidadeMediaKMH": 235.0,
-		"ChanceChuva": 0.20,
-		"ZonasDRS": 4,
-		"UltimoVencedorPiloto": "Lando Norris",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.5
-	},
-	{
-		"Nome": "Shanghai",
-		"Pais": "China",
-		"Voltas": 56,
-		"ComprimentoKM": 5.451,
-		"VelocidadeMediaKMH": 210.0,
-		"ChanceChuva": 0.15,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Oscar Piastri",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 23.0
-	},
-	{
-		"Nome": "Suzuka",
-		"Pais": "Japão",
-		"Voltas": 53,
-		"ComprimentoKM": 5.807,
-		"VelocidadeMediaKMH": 232.0,
-		"ChanceChuva": 0.30,
-		"ZonasDRS": 1,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Sakhir",
-		"Pais": "Bahrein",
-		"Voltas": 57,
-		"ComprimentoKM": 5.412,
-		"VelocidadeMediaKMH": 212.0,
-		"ChanceChuva": 0.05,
-		"ZonasDRS": 3,
-		"UltimoVencedorPiloto": "Oscar Piastri",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 23.0
-	},
-	{
-		"Nome": "Jeddah",
-		"Pais": "Arábia Saudita",
-		"Voltas": 50,
-		"ComprimentoKM": 6.174,
-		"VelocidadeMediaKMH": 252.0,
-		"ChanceChuva": 0.05,
-		"ZonasDRS": 3,
-		"UltimoVencedorPiloto": "Oscar Piastri",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 21.0
-	},
-	{
-		"Nome": "Miami",
-		"Pais": "EUA",
-		"Voltas": 57,
-		"ComprimentoKM": 5.412,
-		"VelocidadeMediaKMH": 218.0,
-		"ChanceChuva": 0.25,
-		"ZonasDRS": 3,
-		"UltimoVencedorPiloto": "Oscar Piastri",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Imola",
-		"Pais": "Itália",
-		"Voltas": 63,
-		"ComprimentoKM": 4.909,
-		"VelocidadeMediaKMH": 228.0,
-		"ChanceChuva": 0.35,
-		"ZonasDRS": 1,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Monaco",
-		"Pais": "Mônaco",
-		"Voltas": 78,
-		"ComprimentoKM": 3.337,
-		"VelocidadeMediaKMH": 162.0,
-		"ChanceChuva": 0.30,
-		"ZonasDRS": 1,
-		"UltimoVencedorPiloto": "Lando Norris",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 19.0
-	},
-	{
-		"Nome": "Catalunya",
-		"Pais": "Espanha",
-		"Voltas": 66,
-		"ComprimentoKM": 4.657,
-		"VelocidadeMediaKMH": 218.0,
-		"ChanceChuva": 0.20,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Oscar Piastri",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Gilles Villeneuve",
-		"Pais": "Canadá",
-		"Voltas": 70,
-		"ComprimentoKM": 4.361,
-		"VelocidadeMediaKMH": 215.0,
-		"ChanceChuva": 0.40,
-		"ZonasDRS": 3,
-		"UltimoVencedorPiloto": "George Russell",
-		"UltimoVencedorEquipe": "Mercedes",
-		"pit_loss_time": 19.0
-	},
-	{
-		"Nome": "Red Bull Ring",
-		"Pais": "Áustria",
-		"Voltas": 71,
-		"ComprimentoKM": 4.318,
-		"VelocidadeMediaKMH": 238.0,
-		"ChanceChuva": 0.30,
-		"ZonasDRS": 3,
-		"UltimoVencedorPiloto": "Lando Norris",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 20.0
-	},
-	{
-		"Nome": "Silverstone",
-		"Pais": "Reino Unido",
-		"Voltas": 52,
-		"ComprimentoKM": 5.891,
-		"VelocidadeMediaKMH": 242.0,
-		"ChanceChuva": 0.45,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Lando Norris",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 20.0
-	},
-	{
-		"Nome": "Hungaroring",
-		"Pais": "Hungria",
-		"Voltas": 70,
-		"ComprimentoKM": 4.381,
-		"VelocidadeMediaKMH": 198.0,
-		"ChanceChuva": 0.20,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Lando Norris",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Spa-Francorchamps",
-		"Pais": "Bélgica",
-		"Voltas": 44,
-		"ComprimentoKM": 7.004,
-		"VelocidadeMediaKMH": 242.0,
-		"ChanceChuva": 0.50,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Oscar Piastri",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 20.0
-	},
-	{
-		"Nome": "Zandvoort",
-		"Pais": "Holanda",
-		"Voltas": 72,
-		"ComprimentoKM": 4.259,
-		"VelocidadeMediaKMH": 215.0,
-		"ChanceChuva": 0.35,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Oscar Piastri",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Monza",
-		"Pais": "Itália",
-		"Voltas": 53,
-		"ComprimentoKM": 5.793,
-		"VelocidadeMediaKMH": 258.0,
-		"ChanceChuva": 0.15,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 25.0
-	},
-	{
-		"Nome": "Baku",
-		"Pais": "Azerbaijão",
-		"Voltas": 51,
-		"ComprimentoKM": 6.003,
-		"VelocidadeMediaKMH": 215.0,
-		"ChanceChuva": 0.10,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 19.0
-	},
-	{
-		"Nome": "Marina Bay",
-		"Pais": "Cingapura",
-		"Voltas": 62,
-		"ComprimentoKM": 4.940,
-		"VelocidadeMediaKMH": 182.0,
-		"ChanceChuva": 0.35,
-		"ZonasDRS": 3,
-		"UltimoVencedorPiloto": "George Russell",
-		"UltimoVencedorEquipe": "Mercedes",
-		"pit_loss_time": 27.0
-	},
-	{
-		"Nome": "COTA",
-		"Pais": "EUA",
-		"Voltas": 56,
-		"ComprimentoKM": 5.513,
-		"VelocidadeMediaKMH": 210.0,
-		"ChanceChuva": 0.20,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 21.0
-	},
-	{
-		"Nome": "Hermanos Rodríguez",
-		"Pais": "México",
-		"Voltas": 71,
-		"ComprimentoKM": 4.304,
-		"VelocidadeMediaKMH": 208.0,
-		"ChanceChuva": 0.25,
-		"ZonasDRS": 3,
-		"UltimoVencedorPiloto": "Lando Norris",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 23.0
-	},
-	{
-		"Nome": "Interlagos",
-		"Pais": "Brasil",
-		"Voltas": 71,
-		"ComprimentoKM": 4.309,
-		"VelocidadeMediaKMH": 216.0,
-		"ChanceChuva": 0.45,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Lando Norris",
-		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Las Vegas",
-		"Pais": "EUA",
-		"Voltas": 50,
-		"ComprimentoKM": 6.201,
-		"VelocidadeMediaKMH": 240.0,
-		"ChanceChuva": 0.05,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 26.0
-	},
-	{
-		"Nome": "Lusail",
-		"Pais": "Catar",
-		"Voltas": 57,
-		"ComprimentoKM": 5.419,
-		"VelocidadeMediaKMH": 236.0,
-		"ChanceChuva": 0.05,
-		"ZonasDRS": 1,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 22.0
-	},
-	{
-		"Nome": "Yas Marina",
-		"Pais": "Abu Dhabi",
-		"Voltas": 58,
-		"ComprimentoKM": 5.281,
-		"VelocidadeMediaKMH": 222.0,
-		"ChanceChuva": 0.05,
-		"ZonasDRS": 2,
-		"UltimoVencedorPiloto": "Max Verstappen",
-		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 21.0
-	}
-]
+@warning_ignore("shadowed_global_identifier")
+const TracksData = preload("res://data/tracks_data.gd")
+@warning_ignore("shadowed_global_identifier")
+const TeamsData = preload("res://data/teams_data.gd")
 
-var teams: Array = [
-	{"Nome": "Red Bull Racing", "Orcamento": 145, "Motor": 92, "Aero": 94, "Chassi": 91, "Confiabilidade": 90, "Respeito": 90, "Pontos": 0, "LastSeasonRank": 1, "Ativa": true},
-	{"Nome": "Ferrari", "Orcamento": 150, "Motor": 94, "Aero": 90, "Chassi": 89, "Confiabilidade": 88, "Respeito": 85, "Pontos": 0, "LastSeasonRank": 2, "Ativa": true},
-	{"Nome": "McLaren", "Orcamento": 145, "Motor": 92, "Aero": 91, "Chassi": 90, "Confiabilidade": 92, "Respeito": 88, "Pontos": 0, "LastSeasonRank": 3, "Ativa": true},
-	{"Nome": "Mercedes", "Orcamento": 135, "Motor": 91, "Aero": 87, "Chassi": 88, "Confiabilidade": 93, "Respeito": 82, "Pontos": 0, "LastSeasonRank": 4, "Ativa": true},
-	{"Nome": "Aston Martin", "Orcamento": 120, "Motor": 88, "Aero": 85, "Chassi": 85, "Confiabilidade": 86, "Respeito": 75, "Pontos": 0, "LastSeasonRank": 5, "Ativa": true},
-	{"Nome": "Alpine", "Orcamento": 100, "Motor": 84, "Aero": 82, "Chassi": 83, "Confiabilidade": 80, "Respeito": 68, "Pontos": 0, "LastSeasonRank": 6, "Ativa": true},
-	{"Nome": "Haas", "Orcamento": 95, "Motor": 86, "Aero": 80, "Chassi": 80, "Confiabilidade": 85, "Respeito": 62, "Pontos": 0, "LastSeasonRank": 7, "Ativa": true},
-	{"Nome": "Racing Bulls", "Orcamento": 95, "Motor": 83, "Aero": 81, "Chassi": 81, "Confiabilidade": 83, "Respeito": 65, "Pontos": 0, "LastSeasonRank": 8, "Ativa": true},
-	{"Nome": "Williams", "Orcamento": 90, "Motor": 85, "Aero": 78, "Chassi": 79, "Confiabilidade": 82, "Respeito": 60, "Pontos": 0, "LastSeasonRank": 9, "Ativa": true},
-	{"Nome": "Audi", "Orcamento": 110, "Motor": 81, "Aero": 79, "Chassi": 80, "Confiabilidade": 78, "Respeito": 64, "Pontos": 0, "LastSeasonRank": 10, "Ativa": true},
-	{"Nome": "Cadillac", "Orcamento": 105, "Motor": 80, "Aero": 78, "Chassi": 78, "Confiabilidade": 81, "Respeito": 58, "Pontos": 0, "LastSeasonRank": 11, "Ativa": true}
-]
-
+var tracks: Array = []
+var teams: Array = []
 var drivers: Array = []
 var news_feed: Array = []
 var race_history: Array = [] 
@@ -362,6 +65,11 @@ const F1_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
 func _ready() -> void:
 	load_drivers_from_json()
 	init_season_budget_cap()
+	if tracks.is_empty():
+		tracks = TracksData.get_initial_tracks()
+	if teams.is_empty():
+		teams = TeamsData.get_initial_teams()
+	ensure_full_grid()
 
 func init_season_budget_cap() -> void:
 	team_season_expenses.clear()
@@ -403,24 +111,20 @@ func process_ai_team_upgrades() -> void:
 		var max_cap = get_team_budget_cap(team_name)
 		var remaining = max_cap - current_expense
 		
-		# Se já estourou o teto ou não tem verba para nem 1 upgrade, pula
 		if remaining < UPGRADE_COST:
 			continue
 			
-		# --- LÓGICA DE AGRESSIVIDADE DINÂMICA ---
-		var gp_progress = float(current_gp) / float(max(1, tracks.size())) # 0.0 a 1.0
-		var budget_ratio = remaining / max_cap                       # quanto % de verba ainda tem
+		var gp_progress = float(current_gp) / float(max(1, tracks.size()))
+		var budget_ratio = remaining / max_cap
 		
 		var buy_chance = 0.60 if budget_ratio > (1.0 - gp_progress) else 0.35
 		
 		if randf() > buy_chance:
 			continue
 			
-		# Top 3 ganha +1..2%, P4-P11 ganha +3..4%
 		var last_rank = int(t.get("LastSeasonRank", 5))
 		var gain = randi_range(1, 2) if last_rank <= 3 else randi_range(3, 4)
 		
-		# Procura um componente abaixo do limite máximo (99)
 		var available_focuses = []
 		if t["Motor"] < 99: available_focuses.append(0)
 		if t["Aero"] < 99: available_focuses.append(1)
@@ -452,13 +156,6 @@ func process_ai_team_upgrades() -> void:
 					str(snapped((current_expense + UPGRADE_COST) / 1000000.0, 0.1)),
 					str(snapped(max_cap / 1000000.0, 0.1))
 				])
-		else:
-			if remaining >= UPGRADE_COST:
-				team_season_expenses[team_name] = current_expense + UPGRADE_COST
-				add_news("🔬 P&D AVANÇADO (%s): Investimento no projeto do ano seguinte ($%sM restantes)" % [
-					team_name,
-					str(snapped((remaining - UPGRADE_COST) / 1000000.0, 0.1))
-				])
 
 func _recalculate_team_handicaps_and_reset_caps() -> void:
 	var sorted_teams = teams.duplicate()
@@ -483,6 +180,17 @@ func _recalculate_team_handicaps_and_reset_caps() -> void:
 	for t in teams:
 		team_season_expenses[t["Nome"]] = 0.0
 
+# --- REGRA DE OSCILAÇÃO ANUAL DE DESEMPENHO (-5% a +2%) ---
+func _apply_annual_team_performance_shift() -> void:
+	for t in teams:
+		for param in ["Motor", "Aero", "Chassi", "Confiabilidade"]:
+			var current_val = int(t.get(param, 75))
+			var shift = randi_range(-5, 2)
+			var new_val = clamp(current_val + shift, 50, 99)
+			t[param] = new_val
+			
+	add_news_event("🏎️ DESENVOLVIMENTO DE INVERNO: As equipes reajustaram seus carros para o novo ano (-5% a +2%).")
+
 func apply_race_points(standings: Array) -> void:
 	for i in range(min(10, standings.size())):
 		var driver_data = standings[i]
@@ -494,12 +202,12 @@ func apply_race_points(standings: Array) -> void:
 		var team_name = str(driver_data.get("Equipe", ""))
 		
 		for d in drivers:
-			if str(d.get("Nome", "")) == driver_name:
+			if str(d.get("Nome", "")).strip_edges().to_lower() == driver_name.strip_edges().to_lower():
 				d["Pontos"] = int(d.get("Pontos", 0)) + pts
 				break
 				
 		for t in teams:
-			if str(t.get("Nome", "")) == team_name:
+			if str(t.get("Nome", "")).strip_edges().to_lower() == team_name.strip_edges().to_lower():
 				t["Pontos"] = int(t.get("Pontos", 0)) + pts
 				break
 
@@ -512,9 +220,40 @@ func load_drivers_from_json() -> void:
 			file.close()
 			var json = JSON.new()
 			if json.parse(content) == OK:
-				drivers = json.get_data()
+				drivers.clear()
+				var loaded_data = json.get_data()
+				if loaded_data is Array:
+					drivers = loaded_data
+				sanitize_unique_drivers()
 				return
 	print_debug("Aviso: drivers_data.json não encontrado ou inválido!")
+
+func sanitize_unique_drivers() -> void:
+	if drivers == null or drivers.size() == 0:
+		return
+		
+	var unique_list: Array = []
+	var seen_names: Dictionary = {}
+	
+	for d in drivers:
+		var d_name = str(d.get("Nome", d.get("nome", ""))).strip_edges()
+		if d_name.is_empty():
+			continue
+			
+		var key = d_name.to_lower()
+		if not seen_names.has(key):
+			seen_names[key] = true
+			unique_list.append(d)
+			
+	drivers = unique_list
+
+func ensure_full_grid() -> void:
+	for t in teams:
+		var t_name = str(t.get("Nome", ""))
+		var t_drivers = get_team_drivers(t_name)
+		while t_drivers.size() < 2:
+			_auto_fill_team_seat(t_name)
+			t_drivers = get_team_drivers(t_name)
 
 func get_team_power_index(team_name: String) -> Dictionary:
 	var team = _get_team_by_name(team_name)
@@ -567,10 +306,9 @@ func _check_is_dnf(res: Dictionary) -> bool:
 
 func process_post_race_morale_and_respect(standings: Array) -> void:
 	for d in standings:
-		var driver_name = str(d.get("Nome", ""))
+		var driver_name = str(d.get("Nome", d.get("nome", "")))
 		var pos = int(d.get("pos", 22))
-		var grid_pos = int(d.get("grid_pos", pos))
-		var is_dnf = d.get("dnf", false) or d.get("abandonou", false)
+		var is_dnf = bool(d.get("dnf", false)) or bool(d.get("abandonou", false))
 		
 		var real_driver = _get_driver_by_name(driver_name)
 		if real_driver.is_empty():
@@ -578,33 +316,72 @@ func process_post_race_morale_and_respect(standings: Array) -> void:
 			
 		var current_morale = float(real_driver.get("Moral", 75.0))
 		var morale_change = 0.0
-		
-		if pos == 1: morale_change += 12.0
-		elif pos <= 3: morale_change += 8.0
-		elif pos <= 10: morale_change += 4.0
-		elif pos >= 18: morale_change -= 2.0
-			
-		var pos_gained = grid_pos - pos
-		if pos_gained >= 5: morale_change += 6.0
-		elif pos_gained >= 2: morale_change += 3.0
-		elif pos_gained <= -6: morale_change -= 3.0
-
-		if is_dnf: morale_change -= 4.0
-		if current_morale < 35.0 and not is_dnf: morale_change += 5.0
-
 		var team_name = str(real_driver.get("Equipe", ""))
-		var teammate_pos = 99
-		for other in standings:
-			if str(other.get("Equipe", "")) == team_name and str(other.get("Nome", "")) != driver_name:
-				teammate_pos = int(other.get("pos", 99))
-				break
+		
+		if is_dnf:
+			morale_change -= 3.0
+			real_driver["corridas_sem_dnf_ajuda"] = 0
+			real_driver["corridas_sem_abandonar"] = 0
+			_apply_dnf_financial_penalty(team_name)
+		else:
+			var streak_ajuda = int(real_driver.get("corridas_sem_dnf_ajuda", 0)) + 1
+			real_driver["corridas_sem_dnf_ajuda"] = streak_ajuda
+			
+			if current_morale <= 30.0 or bool(real_driver.get("ajuda_ativa", false)):
+				real_driver["ajuda_ativa"] = true
 				
-		if teammate_pos < 99:
-			if pos < teammate_pos: morale_change += 3.0
-			else: morale_change -= 3.0
+				if streak_ajuda >= 2:
+					morale_change += 8.0
+					real_driver["bonus_temporario_laps"] = 2
+					real_driver["ajuda_ativa"] = false
+					real_driver["corridas_sem_dnf_ajuda"] = 0
+					add_news_event("💪 SUPERAÇÃO: %s superou a fase ruim com 2 corridas limpas e ganhou um impulso de confiança!" % driver_name)
 
-		morale_change = clamp(morale_change, -10.0, 12.0)
-		real_driver["Moral"] = clamp(current_morale + morale_change, 15.0, 100.0)
+		var temp_bonus = int(real_driver.get("bonus_temporario_laps", 0))
+		if temp_bonus > 0:
+			real_driver["bonus_temporario_laps"] = temp_bonus - 1
+		
+		var final_morale = clampf(current_morale + morale_change, 0.0, 100.0)
+		real_driver["Moral"] = final_morale
+		
+		if final_morale <= 0.0 and team_name != "Free Agent" and team_name != "Aposentado":
+			fire_driver(team_name, driver_name)
+			continue
+			
+		if not is_dnf:
+			var target_max_pos = _get_team_target_position(team_name)
+			if pos <= target_max_pos - 2:
+				morale_change += 3.0
+			elif pos <= target_max_pos:
+				morale_change += 1.0
+			elif pos > target_max_pos + 3:
+				morale_change -= 2.0
+				
+		var teammate_pos = _get_teammate_finish_position(standings, team_name, driver_name)
+		if teammate_pos < 99:
+			if pos < teammate_pos:
+				morale_change += 1.0
+			elif pos > teammate_pos:
+				morale_change -= 1.0
+				
+		var new_morale = clampf(current_morale + morale_change, 0.0, 100.0)
+		real_driver["Moral"] = new_morale
+
+func _get_team_target_position(team_name: String) -> int:
+	var team = _get_team_by_name(team_name)
+	var overall = float(team.get("Motor", 80) + team.get("Aero", 80) + team.get("Chassi", 80)) / 3.0
+	
+	if overall >= 88.0: return 6
+	elif overall >= 80.0: return 12
+	return 18
+
+func _get_teammate_finish_position(standings: Array, team_name: String, driver_name: String) -> int:
+	for d in standings:
+		var t = str(d.get("Equipe", d.get("equipe", "")))
+		var n = str(d.get("Nome", d.get("nome", "")))
+		if t.strip_edges().to_lower() == team_name.strip_edges().to_lower() and n.strip_edges().to_lower() != driver_name.strip_edges().to_lower():
+			return int(d.get("pos", 99))
+	return 99
 
 func _update_driver_stats_after_race(driver: Dictionary, grid_start_pos: int, race_finish_pos: int, is_dnf: bool) -> void:
 	if is_dnf:
@@ -622,17 +399,8 @@ func _update_driver_stats_after_race(driver: Dictionary, grid_start_pos: int, ra
 		else:
 			driver["SequenciaPontos"] = 0
 
-func _apply_teammate_rivalry(winner_driver: Dictionary, loser_driver: Dictionary) -> void:
-	winner_driver["Moral"] = clamp(int(winner_driver.get("Moral", 70)) + 3, 0, 100)
-	winner_driver["atras_companheiro_seguidamente"] = 0
-	
-	var streak = int(loser_driver.get("atras_companheiro_seguidamente", 0)) + 1
-	loser_driver["atras_companheiro_seguidamente"] = streak
-	
-	if streak >= 2:
-		loser_driver["Moral"] = clamp(int(loser_driver.get("Moral", 70)) - (4 * (streak - 1)), 0, 100)
-
 func simulate_current_gp_fast() -> void:
+	ensure_full_grid()
 	if current_gp > tracks.size():
 		return
 		
@@ -684,6 +452,7 @@ func simulate_current_gp_fast() -> void:
 
 	if results.size() > 0:
 		apply_race_points(results)
+		record_gp_constructors_snapshot()
 		process_post_race_morale_and_respect(results)
 		process_ai_team_upgrades()
 		
@@ -703,10 +472,23 @@ func simulate_current_gp_fast() -> void:
 			"third": third_name
 		})
 	
+	if current_gp == 12:
+		_process_mid_season_renewals()
+		
 	current_gp += 1
 	
 	if engine is Node:
 		engine.free()
+
+func record_gp_constructors_snapshot() -> void:
+	var snapshot: Dictionary = {}
+	for t in teams:
+		snapshot[str(t.get("Nome", ""))] = int(t.get("Pontos", 0))
+		
+	constructors_points_history.append({
+		"gp": current_gp,
+		"points": snapshot
+	})
 
 func _is_engine_done(engine) -> bool:
 	if engine == null: return true
@@ -747,54 +529,114 @@ func calculate_contract_offer_years(driver_name: String, team_name: String) -> i
 	elif morale >= 50: return 1
 	else: return 0
 
-func should_fire_driver_critical_morale(driver_name: String) -> bool:
-	var driver = _get_driver_by_name(driver_name)
-	var morale = driver.get("Moral", 75)
-	var years_left = driver.get("AnosContrato", 1)
-	return morale < 25 and years_left > 1
-
 func fire_driver(team_name: String, driver_name: String) -> void:
 	var driver = _get_driver_by_name(driver_name)
 	if not driver.is_empty():
 		driver["Equipe"] = "Free Agent"
 		driver["AnosContrato"] = 0
-		log_transfer_event(str(current_year), driver_name + " foi demitido pela " + team_name + " por insatisfação.", "Demissão")
+		driver["Moral"] = 50.0
 		
+		var fired_by: Array = driver.get("demitido_por_equipes", [])
+		if not fired_by.has(team_name):
+			fired_by.append(team_name)
+		driver["demitido_por_equipes"] = fired_by
+		
+		log_transfer_event("🚨 DEMISSÃO: " + driver_name + " foi demitido da " + team_name + " por baixo desempenho!", "Demissão")
+
 	_auto_fill_team_seat(team_name)
+
+func driver_resigns(driver_name: String) -> void:
+	var driver = _get_driver_by_name(driver_name)
+	if not driver.is_empty():
+		var team_name = str(driver.get("Equipe", ""))
+		if team_name != "Free Agent" and team_name != "Aposentado":
+			driver["Equipe"] = "Free Agent"
+			driver["AnosContrato"] = 0
+			driver["Moral"] = 40.0
+			
+			log_transfer_event("🚨 RESCISÃO: " + driver_name + " pediu demissão da " + team_name + " por insatisfação com a equipe!", "Rescisão")
+			
+			_auto_fill_team_seat(team_name)
 
 func _auto_fill_team_seat(team_name: String) -> void:
 	var current_drivers = get_team_drivers(team_name)
-	if current_drivers.size() >= 2: return
-		
+	if current_drivers.size() >= 2:
+		return
+
 	var free_agents: Array = []
 	for d in drivers:
-		if d.get("Equipe", "") == "Free Agent":
-			free_agents.append(d)
-			
-	free_agents.sort_custom(func(a, b): return a.get("Overall", 0) > b.get("Overall", 0))
+		if str(d.get("Equipe", "")).strip_edges().to_lower() == "free agent":
+			var fired_by: Array = d.get("demitido_por_equipes", [])
+			if not fired_by.has(team_name):
+				free_agents.append(d)
+				
+	free_agents.sort_custom(func(a, b): return int(a.get("Overall", 0)) > int(b.get("Overall", 0)))
 	
 	if free_agents.size() > 0:
-		var fa_driver = free_agents[0]
-		fa_driver["Equipe"] = team_name
-		fa_driver["AnosContrato"] = max(1, calculate_contract_offer_years(fa_driver["Nome"], team_name))
-		log_transfer_event(str(current_year), team_name + " assina com " + fa_driver["Nome"] + " por " + str(fa_driver["AnosContrato"]) + " ano(s).", "Contratação")
+		var candidate = free_agents[0]
+		candidate["Equipe"] = team_name
+		candidate["AnosContrato"] = randi_range(2, 3)
+		candidate["Moral"] = 75.0
+		candidate["seasons_without_contract"] = 0
+		log_transfer_event("✍️ REPOSIÇÃO: " + team_name + " contratou " + str(candidate["Nome"]) + " por " + str(candidate["AnosContrato"]) + " ano(s)!", "Contratação")
+		
+		_auto_fill_team_seat(team_name)
+		return
+
+	var rookie_name = "Novato " + team_name.substr(0, 3).to_upper() + " " + str(randi_range(10, 99))
+	var ovr = randi_range(70, 76)
+	add_new_driver(rookie_name, randi_range(18, 21), ovr, ovr, ovr, ovr, ovr, ovr, team_name)
+	log_transfer_event("🌟 PROMOÇÃO: " + team_name + " promoveu o jovem " + rookie_name + " da academia de pilotos!", "Contratação")
 
 func get_team_drivers(team_name: String) -> Array:
 	var list: Array = []
+	var target = team_name.strip_edges().to_lower()
 	for d in drivers:
-		if d.get("Equipe", "") == team_name:
+		var eq = str(d.get("Equipe", "")).strip_edges().to_lower()
+		if eq == target:
 			list.append(d)
 	return list
 
-func log_transfer_event(season: String, detail: String, type_str: String = "Transferência") -> void:
-	transfer_history.push_front({
-		"temporada": season,
+func log_transfer_event(detail: String, type_str: String = "Transferência") -> void:
+	var entry = {
+		"ano": current_year,
+		"gp_num": current_gp,
+		"temporada": str(current_year),
 		"detalhe": detail,
 		"tipo": type_str
-	})
+	}
+	
+	if "transfer_history" in self:
+		transfer_history.push_front(entry)
+		
+	add_news("[%d - GP %d] %s" % [current_year, current_gp, detail])
+
+func _process_mid_season_renewals() -> void:
+	for d in drivers:
+		var eq = str(d.get("Equipe", ""))
+		if eq == "Free Agent" or eq == "Aposentado" or eq.is_empty():
+			continue
+			
+		var yrs = int(d.get("AnosContrato", 1))
+		var morale = float(d.get("Moral", 75.0))
+		
+		if yrs <= 1:
+			var team_info = get_team_power_index(eq)
+			var team_power = team_info.get("overall", 75.0)
+			var driver_ovr = float(d.get("Overall", 75))
+			
+			if driver_ovr >= 85 and team_power < 78.0 and morale < 60:
+				add_news("📝 " + str(d["Nome"]) + " recusou a proposta de renovação com a " + eq + " e buscará nova equipe ao fim da temporada!")
+				continue
+				
+			if morale >= 50.0:
+				var new_years = randi_range(2, 4)
+				d["AnosContrato"] = new_years
+				log_transfer_event("✍️ RENOVAÇÃO: " + str(d["Nome"]) + " renovou seu contrato com a " + eq + " por mais " + str(new_years) + " ano(s)!", "Renovação")
 
 func end_season_and_advance_year() -> void:
 	full_season_archive[current_year] = race_history.duplicate(true)
+	sanitize_unique_drivers()
 	
 	var sorted_d = drivers.duplicate()
 	sorted_d.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
@@ -814,15 +656,25 @@ func end_season_and_advance_year() -> void:
 	current_gp = 1
 	race_history.clear()
 	
+	if "transfer_history" in self:
+		transfer_history.clear()
+	
 	_recalculate_team_handicaps_and_reset_caps()
 	
+	# Aplica a oscilação anual (-5% a +2%) ou reset por regulamento
 	if (current_year - 2026) % 4 == 0:
 		_reset_team_development_cycle()
+	else:
+		_apply_annual_team_performance_shift()
 	
 	_process_driver_evolution()
-	_process_ai_transfer_market()
 	
 	for d in drivers:
+		var eq = str(d.get("Equipe", ""))
+		if eq != "Free Agent" and eq != "Aposentado":
+			var yrs = int(d.get("AnosContrato", 1))
+			d["AnosContrato"] = max(0, yrs - 1)
+
 		d["Pontos"] = 0
 		d["VitoriasAno"] = 0
 		d["PodiosAno"] = 0
@@ -830,49 +682,64 @@ func end_season_and_advance_year() -> void:
 		d["SequenciaPontos"] = 0
 		d["PosicoesGanhaAno"] = 0
 		d["PosicoesPerdidasAno"] = 0
+		if d.has("demitido_por_equipes"):
+			d["demitido_por_equipes"].clear()
 		
 	for t in teams:
 		t["Pontos"] = 0
 		
+	_process_ai_transfer_market()
+	ensure_full_grid()
+	
 	var last_champ_name = champions_history.back()["piloto"] if champions_history.size() > 0 else "Campeão"
 	add_news_event("🏆 TEMPORADA %d INICIADA! As equipes chegam para o novo ano após o título de %s!" % [current_year, last_champ_name])
 
 func _process_driver_evolution() -> void:
 	for d in drivers:
-		d["Idade"] = int(d.get("Idade", 20)) + 1
-		if int(d.get("AnosContrato", 0)) > 0:
-			d["AnosContrato"] = int(d["AnosContrato"]) - 1
-			
-		var age = int(d["Idade"])
-		var delta = 0
-		if age <= 23: delta = randi_range(1, 3)
-		elif age <= 28: delta = randi_range(0, 1)
-		elif age <= 34: delta = randi_range(-1, 0)
-		else: delta = randi_range(-3, -1)
-			
-		d["Grau"] = clamp(int(d.get("Grau", 75)) + delta, 60, 99)
-		d["Corrida"] = clamp(int(d.get("Corrida", 75)) + delta, 60, 99)
-		d["Pneus"] = clamp(int(d.get("Pneus", 75)) + delta, 60, 99)
-		d["Overall"] = int((d["Grau"] + d["Corrida"] + d["Pneus"]) / 3.0)
+		var current_team = str(d.get("Equipe", ""))
 		
-		if age >= 37 and randf() < 0.40:
+		if current_team == "Aposentado" or bool(d.get("Aposentado", false)):
+			continue
+			
+		var age = int(d.get("Idade", 20)) + 1
+		d["Idade"] = age
+		var team_name = str(d.get("Equipe", "Free Agent"))
+		var ovr = int(d.get("Overall", 75))
+		
+		var retirement_chance: float = 0.02
+		if age > 30:
+			retirement_chance += (age - 30) * 0.05
+			
+		if team_name == "Free Agent" and age >= 34:
+			retirement_chance += 0.20
+			
+		if (randf() < retirement_chance and age >= 30) or age >= 45:
 			d["Equipe"] = "Aposentado"
+			d["Aposentado"] = true
 			d["AnosContrato"] = 0
-			add_news("🛑 " + str(d.get("Nome", "Piloto")) + " anunciou sua aposentadoria oficial!")
+			log_transfer_event("🏁 APOSENTADORIA: %s anunciou sua aposentadoria aos %d anos!" % [d["Nome"], age], "Aposentadoria")
+			
+			if team_name != "Free Agent" and team_name != "Aposentado" and not team_name.is_empty():
+				_auto_fill_team_seat(team_name)
+			continue
+			
+		if age <= 24:
+			d["Overall"] = min(99, ovr + randi_range(1, 3))
+		elif age >= 36:
+			var drop = randi_range(2, 4)
+			d["Overall"] = max(50, ovr - drop)
 
 func _process_ai_transfer_market() -> void:
-	# 1. Ativa todas as novas equipes cadastradas para a nova temporada
 	for t in teams:
 		t["Ativa"] = true
 
-	# 2. Varre todas as equipes para garantir OBRIGATORIAMENTE 2 pilotos por time
 	for t in teams:
 		var team_name = str(t.get("Nome", ""))
 		var active_team_drivers = []
 		
 		for d in drivers:
-			if str(d.get("Equipe", "")) == team_name:
-				if int(d.get("AnosContrato", 0)) == 0:
+			if str(d.get("Equipe", "")).strip_edges().to_lower() == team_name.strip_edges().to_lower():
+				if int(d.get("AnosContrato", 0)) <= 0:
 					add_news("💼 Contrato de " + str(d.get("Nome", "")) + " com a " + team_name + " expirou.")
 					d["Equipe"] = "Free Agent"
 				else:
@@ -882,25 +749,28 @@ func _process_ai_transfer_market() -> void:
 			var best_candidate = null
 			var highest_overall = -1
 			for d in drivers:
-				if str(d.get("Equipe", "")) == "Free Agent" and int(d.get("Overall", 0)) > highest_overall:
+				if str(d.get("Equipe", "")).strip_edges().to_lower() == "free agent" and int(d.get("Overall", 0)) > highest_overall:
 					highest_overall = int(d.get("Overall", 0))
 					best_candidate = d
 					
 			if best_candidate != null:
 				best_candidate["Equipe"] = team_name
-				best_candidate["AnosContrato"] = randi_range(1, 3)
+				best_candidate["AnosContrato"] = randi_range(2, 3)
+				best_candidate["Moral"] = 75.0
 				active_team_drivers.append(best_candidate)
-				add_news("✍️ " + team_name + " contratou " + str(best_candidate.get("Nome", "")) + " por " + str(best_candidate["AnosContrato"]) + " ano(s)!")
+				log_transfer_event("✍️ " + team_name + " contratou " + str(best_candidate.get("Nome", "")) + " por " + str(best_candidate["AnosContrato"]) + " ano(s)!", "Contratação")
 			else:
-				# Se não houver Free Agents no banco de dados, cria um piloto novato automaticamente
 				var new_promoted_name = "Novato " + team_name.substr(0, 3).to_upper() + " " + str(randi_range(10, 99))
-				add_new_driver(new_promoted_name, randi_range(18, 22), randi_range(68, 75), randi_range(68, 75), randi_range(68, 75), team_name)
-				add_news("🌟 PROMOÇÃO: %s promoveu o jovem %s da base para preencher a vaga!" % [team_name, new_promoted_name])
+				var ovr_tmp = randi_range(68, 75)
+				add_new_driver(new_promoted_name, randi_range(18, 22), ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, team_name)
+				log_transfer_event("🌟 PROMOÇÃO: %s promoveu o jovem %s da base para preencher a vaga!" % [team_name, new_promoted_name], "Contratação")
 				
 				active_team_drivers.clear()
 				for d in drivers:
-					if str(d.get("Equipe", "")) == team_name:
+					if str(d.get("Equipe", "")).strip_edges().to_lower() == team_name.strip_edges().to_lower():
 						active_team_drivers.append(d)
+
+	ensure_full_grid()
 
 func _get_driver_by_name(p_name: String) -> Dictionary:
 	var clean_input = p_name.strip_edges().to_lower()
@@ -940,7 +810,6 @@ func get_driver_moral_label(driver: Dictionary) -> String:
 	elif moral_val >= 30: return "Baixa (" + str(moral_val) + "%)"
 	else: return "Crítica (" + str(moral_val) + "%)"
 
-# --- GERENCIAMENTO DE ARQUIVOS DE SAVE LOCAIS (3 SLOTS) ---
 func get_save_path(slot_index: int) -> String:
 	return "user://savegame_slot_%d.json" % clamp(slot_index, 1, MAX_SAVE_SLOTS)
 
@@ -1084,6 +953,8 @@ func load_game_slot(slot_index: int) -> bool:
 			transfer_history = data.get("transfer_history", transfer_history)
 			dashboard_layout = data.get("dashboard_layout", dashboard_layout)
 			team_season_expenses = data.get("team_season_expenses", team_season_expenses)
+			sanitize_unique_drivers()
+			ensure_full_grid()
 			return true
 	return false
 
@@ -1119,6 +990,7 @@ func reset_database() -> void:
 
 	if has_method("load_drivers_from_json"):
 		call("load_drivers_from_json")
+	ensure_full_grid()
 
 func record_gp_winner(track_index: int, winner_driver_name: String, winner_team_name: String) -> void:
 	if track_index >= 0 and track_index < tracks.size():
@@ -1141,9 +1013,9 @@ func add_new_team(team_name: String, respeto: int = 50, aero: int = 75, motor: i
 		"Chassi": chassi,
 		"Confiabilidade": 80,
 		"Respeito": respeto,
-		"Pontos": 0,                   # OBRIGATÓRIO: Começa zerado
+		"Pontos": 0,
 		"LastSeasonRank": new_rank,
-		"Ativa": false                # REGRA: Fica inativa aguardando a próxima temporada
+		"Ativa": false
 	}
 	teams.append(new_team)
 	
@@ -1153,7 +1025,7 @@ func add_new_team(team_name: String, respeto: int = 50, aero: int = 75, motor: i
 	
 	add_news("📋 REGISTRO DE EQUIPE: %s foi cadastrada e fará sua estreia na próxima temporada!" % team_name)
 
-func add_new_driver(driver_name: String, age: int = 20, overall: int = 75, pace: int = 75, tire: int = 75, team_name: String = "Free Agent") -> void:
+func add_new_driver(driver_name: String, age: int = 20, overall: int = 75, pace: int = 75, tire: int = 75, rain_skill: int = 75, overtake_skill: int = 75, defense_skill: int = 75, team_name: String = "Free Agent") -> void:
 	var new_driver = {
 		"Nome": driver_name,
 		"Idade": age,
@@ -1162,10 +1034,12 @@ func add_new_driver(driver_name: String, age: int = 20, overall: int = 75, pace:
 		"Corrida": pace,
 		"Pace": pace,
 		"Pneus": tire,
+		"HabilidadeChuva": clamp(rain_skill, 0, 99),
+		"Ultrapassagem": clamp(overtake_skill, 0, 99),
+		"Defesa": clamp(defense_skill, 0, 99),
 		"Equipe": team_name,
-		"Moral": 75,
+		"Moral": 75.0,
 		"AnosContrato": 1 if team_name != "Free Agent" else 0,
-		# ESTATÍSTICAS ZERADAS OBRIGATORIAMENTE
 		"Pontos": 0,
 		"VitoriasAno": 0,
 		"PodiosAno": 0,
@@ -1175,66 +1049,86 @@ func add_new_driver(driver_name: String, age: int = 20, overall: int = 75, pace:
 		"PosicoesPerdidasAno": 0
 	}
 	drivers.append(new_driver)
-	add_news("🏎️ NOVO PILOTO INSCRITO: %s está disponível no banco de dados!" % driver_name)
+
+func _ensure_driver_attributes(driver: Dictionary) -> void:
+	var ovr = int(driver.get("Overall", 75))
+	if not driver.has("HabilidadeChuva"):
+		driver["HabilidadeChuva"] = driver.get("Pneus", ovr)
+	if not driver.has("Ultrapassagem"):
+		driver["Ultrapassagem"] = driver.get("Corrida", ovr)
+	if not driver.has("Defesa"):
+		driver["Defesa"] = driver.get("Grau", ovr)
 
 func run_automated_test_season_and_export_telemetry(file_name: String = "telemetry_report.json") -> void:
 	var test_report: Dictionary = {
 		"test_date": Time.get_datetime_string_from_system(),
-		"season_year": current_year,
-		"gp_results": [],
-		"team_final_expenses": {},
-		"drivers_final_standings": [],
-		"anomalies_detected_by_game": []
+		"total_seasons_simulated": 10,
+		"start_year": current_year,
+		"seasons": []
 	}
 	
-	# Simula todos os GPs da temporada atual
-	for i in range(tracks.size()):
-		var gp_num = current_gp
-		var track_info = tracks[i]
-		simulate_current_gp_fast()
-		
-		# Registra dados do GP simulado
-		if race_history.size() > 0:
-			var last_race = race_history.back()
-			test_report["gp_results"].append({
-				"gp_num": gp_num,
-				"track": track_info.get("Nome", "Pista"),
-				"winner": last_race.get("winner", ""),
-				"second": last_race.get("second", ""),
-				"third": last_race.get("third", "")
-			})
+	print("🚀 Iniciando simulação em lote de 10 temporadas...")
 	
-	# Captura classificação final dos pilotos
-	var sorted_drivers = drivers.duplicate()
-	sorted_drivers.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
-	
-	for d in sorted_drivers:
-		test_report["drivers_final_standings"].append({
-			"nome": d.get("Nome", ""),
-			"equipe": d.get("Equipe", ""),
-			"overall": d.get("Overall", 0),
-			"pontos": d.get("Pontos", 0),
-			"vitorias": d.get("VitoriasAno", 0),
-			"podios": d.get("PodiosAno", 0),
-			"dnfs": d.get("DNFsAno", 0),
-			"moral": d.get("Moral", 75)
-		})
-		
-	# Captura finanças e teto orçamentário
-	for team_name in team_season_expenses.keys():
-		var spent = team_season_expenses[team_name]
-		var cap = get_team_budget_cap(team_name) if has_method("get_team_budget_cap") else 135000000
-		test_report["team_final_expenses"][team_name] = {
-			"spent_usd": spent,
-			"cap_usd": cap,
-			"over_budget": spent > cap
+	for s in range(10):
+		var season_year = current_year
+		var season_data: Dictionary = {
+			"year": season_year,
+			"champions": {},
+			"drivers_standings": [],
+			"team_expenses": {},
+			"transfers": []
 		}
 		
-	# Salva o arquivo no diretório user://
+		var remaining_gps = tracks.size() - current_gp + 1
+		for g in range(remaining_gps):
+			simulate_current_gp_fast()
+			
+		var sorted_drivers = drivers.duplicate()
+		sorted_drivers.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+		
+		for d in sorted_drivers:
+			season_data["drivers_standings"].append({
+				"nome": str(d.get("Nome", "")),
+				"equipe": str(d.get("Equipe", "")),
+				"idade": int(d.get("Idade", 20)),
+				"overall": int(d.get("Overall", 0)),
+				"pontos": int(d.get("Pontos", 0)),
+				"vitorias": int(d.get("VitoriasAno", 0)),
+				"podios": int(d.get("PodiosAno", 0)),
+				"dnfs": int(d.get("DNFsAno", 0)),
+				"moral": float(d.get("Moral", 75.0))
+			})
+			
+		if sorted_drivers.size() > 0:
+			season_data["champions"]["driver"] = sorted_drivers[0].get("Nome", "")
+			season_data["champions"]["team"] = sorted_drivers[0].get("Equipe", "")
+			
+		for team_name in team_season_expenses.keys():
+			var spent = int(team_season_expenses[team_name])
+			var cap = int(get_team_budget_cap(team_name)) if has_method("get_team_budget_cap") else 215000000
+			season_data["team_expenses"][team_name] = {
+				"spent_usd": spent,
+				"cap_usd": cap
+			}
+			
+		if has_node("/root/Database") and "transfer_history" in Database:
+			season_data["transfers"] = Database.transfer_history.duplicate()
+			
+		test_report["seasons"].append(season_data)
+		print("✅ Temporada %d (%d/10) concluída!" % [season_year, s + 1])
+		
+		if has_method("end_season_and_advance_year"):
+			end_season_and_advance_year()
+
 	var safe_data = _make_json_safe(test_report)
 	var json_str = JSON.stringify(safe_data, "\t")
 	var file = FileAccess.open("user://" + file_name, FileAccess.WRITE)
 	if file:
 		file.store_string(json_str)
 		file.close()
-		print("📊 RELATÓRIO DE TELEMETRIA EXPORTADO COM SUCESSO EM: user://", file_name)
+		print("📊 AUDITORIA DE 10 TEMPORADAS EXPORTADA COM SUCESSO EM: user://", file_name)
+
+func _apply_dnf_financial_penalty(team_name: String) -> void:
+	if team_season_expenses.has(team_name):
+		var repair_cost: int = randi_range(1000000, 3000000)
+		team_season_expenses[team_name] += repair_cost

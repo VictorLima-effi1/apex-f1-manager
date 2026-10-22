@@ -38,7 +38,14 @@ func _draw() -> void:
 func build_ui() -> void:
 	for c in get_children():
 		c.queue_free()
+	
+	# Purga qualquer duplicação residual no banco de dados
+	if Database.has_method("sanitize_unique_drivers"):
+		Database.sanitize_unique_drivers()
 		
+	for c in get_children():
+		c.queue_free()
+			
 	var canvas = Control.new()
 	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(canvas)
@@ -57,10 +64,17 @@ func build_ui() -> void:
 	
 	# Pilotos com equipe
 	var active_drivers = []
+	var seen_names: Dictionary = {}
+	
 	for d in Database.drivers:
-		var eq = d.get("Equipe", "")
-		if eq != "Free Agent" and eq != "Aposentado" and eq != "":
-			active_drivers.append(d)
+		var d_name = str(d.get("Nome", d.get("nome", ""))).strip_edges().to_lower()
+		var eq = str(d.get("Equipe", ""))
+		
+		# Filtra apenas titulares em equipes ativas (ignorando Free Agents e Aposentados)
+		if eq != "Free Agent" and eq != "Aposentado" and not eq.is_empty():
+			if not d_name.is_empty() and not seen_names.has(d_name):
+				seen_names[d_name] = true
+				active_drivers.append(d)
 			
 	# Cálculo do GP e Índice de Pista
 	var max_tracks = max(1, Database.tracks.size())
@@ -68,7 +82,7 @@ func build_ui() -> void:
 	var track_idx = gp_num - 1
 	var track_curr = Database.tracks[track_idx] if Database.tracks.size() > 0 else {}
 	
-	# Cards Superiores
+	# Cards Superiores (Agora exibe rigorosamente "22 Pilotos")
 	var stats_hbox = HBoxContainer.new()
 	stats_hbox.position = Vector2(10, 38)
 	stats_hbox.add_theme_constant_override("separation", 10)
@@ -429,6 +443,10 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 	if parent == null: return
 	for child in parent.get_children(): child.queue_free()
 
+	# Executa sanitização no Database se o total estiver duplicado
+	if Database.has_method("sanitize_unique_drivers"):
+		Database.sanitize_unique_drivers()
+
 	var scroll = ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	
@@ -445,8 +463,16 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 	_add_grid_header(grid, "POD", 30)
 	_add_grid_header(grid, "DNF", 30)
 	
-	var sorted_drivers = active_drivers.duplicate()
-	sorted_drivers.sort_custom(func(a, b):
+	# Filtra para garantir que apenas 1 instância de cada nome entre na ordenação
+	var unique_drivers: Array = []
+	var seen: Dictionary = {}
+	for d in active_drivers:
+		var name_key = str(d.get("Nome", "")).strip_edges().to_lower()
+		if not seen.has(name_key) and not name_key.is_empty():
+			seen[name_key] = true
+			unique_drivers.append(d)
+
+	unique_drivers.sort_custom(func(a, b):
 		var p_a = int(a.get("Pontos", 0))
 		var p_b = int(b.get("Pontos", 0))
 		if p_a != p_b: return p_a > p_b
@@ -460,10 +486,18 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 	)
 	
 	var pos_idx = 1
-	for d in sorted_drivers:
+	for d in unique_drivers:
+		var team_display = str(d.get("Equipe", ""))
+		var team_color = Color("#94a3b8")
+		if team_display == "Free Agent":
+			team_display = "Sem Equipe"
+			team_color = Color("#f59e0b")
+		elif team_display == "Aposentado":
+			team_color = Color("#64748b")
+			
 		_add_cell(grid, str(pos_idx) + "º")
 		_add_cell(grid, str(d.get("Nome", "Piloto")))
-		_add_cell(grid, str(d.get("Equipe", "")), Color("#94a3b8"))
+		_add_cell(grid, team_display, team_color)
 		_add_cell(grid, str(int(d.get("Pontos", 0))))
 		_add_cell(grid, str(int(d.get("VitoriasAno", 0))))
 		_add_cell(grid, str(int(d.get("PodiosAno", 0))))
@@ -480,6 +514,10 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 func _build_teams_content(parent: Control, active_drivers: Array) -> void:
 	if parent == null: return
 	for child in parent.get_children(): child.queue_free()
+
+	# Garante que o banco de dados do Database limpe pilotos duplicados
+	if Database.has_method("sanitize_unique_drivers"):
+		Database.sanitize_unique_drivers()
 
 	var scroll = ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -501,7 +539,16 @@ func _build_teams_content(parent: Control, active_drivers: Array) -> void:
 		var t_name = str(t.get("Nome", ""))
 		team_stats[t_name] = {"Nome": t_name, "Pontos": 0, "Vitorias": 0, "Podios": 0, "DNFs": 0}
 		
+	# TRAVA ANTI-DUPLICAÇÃO: Mantém apenas 1 instância por nome de piloto
+	var unique_drivers: Array = []
+	var seen_names: Dictionary = {}
 	for d in active_drivers:
+		var d_name = str(d.get("Nome", d.get("nome", ""))).strip_edges().to_lower()
+		if not d_name.is_empty() and not seen_names.has(d_name):
+			seen_names[d_name] = true
+			unique_drivers.append(d)
+
+	for d in unique_drivers:
 		var eq = str(d.get("Equipe", ""))
 		if team_stats.has(eq):
 			team_stats[eq]["Pontos"] += int(d.get("Pontos", 0))
@@ -567,21 +614,35 @@ func _build_market_content(parent: Control) -> void:
 	_add_micro_header(grid_c, "CONTRATO", 55)
 	_add_micro_header(grid_c, "MORAL", 45)
 
-	for d in Database.drivers:
+	# --- CORREÇÃO: Utiliza a lista ordenada com prioridades ---
+	var sorted_drivers = _get_sorted_drivers_for_market_panel()
+
+	for d in sorted_drivers:
 		var name_str = str(d.get("Nome", ""))
 		var team_str = str(d.get("Equipe", "Free Agent"))
 		var c_years = int(d.get("AnosContrato", 0))
 		
 		var years_str = "-"
-		if team_str != "Free Agent" and team_str != "Aposentado":
+		if team_str == "Free Agent":
+			years_str = "Livre"
+		elif team_str != "Aposentado":
 			years_str = str(c_years) + (" ano" if c_years == 1 else " anos")
 
 		var morale_val = int(d.get("Moral", 75))
 
-		_add_micro_cell(grid_c, name_str, Color("#ffffff"))
-		_add_micro_cell(grid_c, team_str, Color("#38bdf8"))
-		_add_micro_cell(grid_c, years_str, Color("#f59e0b") if c_years <= 1 and team_str != "Free Agent" else Color("#94a3b8"))
+		# Célula Piloto
+		var p_color = Color("#64748b") if team_str == "Aposentado" else Color("#ffffff")
+		_add_micro_cell(grid_c, name_str, p_color)
+		
+		# Célula Equipe
+		var t_color = Color("#64748b") if team_str == "Aposentado" else (Color("#38bdf8") if team_str == "Free Agent" else Color("#e2e8f0"))
+		_add_micro_cell(grid_c, team_str, t_color)
+		
+		# Célula Contrato
+		var c_color = Color("#64748b") if team_str == "Aposentado" else (Color("#f59e0b") if c_years <= 1 and team_str != "Free Agent" else Color("#94a3b8"))
+		_add_micro_cell(grid_c, years_str, c_color)
 
+		# Célula Moral
 		var m_color = Color("#22c55e")
 		if morale_val < 40:
 			m_color = Color("#ef4444")
@@ -649,21 +710,74 @@ func _build_market_content(parent: Control) -> void:
 	vbox_h.add_theme_constant_override("separation", 6)
 	scroll_h.add_child(vbox_h)
 
+	# Lista de palavras-chave para identificar qualquer tipo de movimentação no mercado
+	var market_keywords = [
+		"contratou", "assinou", "assina", "promovido", "promoveu",
+		"APOSENTADORIA", "aposentou", "DEMISSÃO", "demitido", "demite",
+		"RESCISÃO", "rescindiu", "pediu demissão", "saiu da"
+	]
+
 	var history_list = Database.get("transfer_history")
+	var has_items = false
+
+	# 1. Tenta carregar do array oficial de transferências
 	if history_list != null and history_list is Array and history_list.size() > 0:
+		has_items = true
 		for item in history_list:
 			var h_lbl = Label.new()
 			h_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			h_lbl.add_theme_font_size_override("font_size", 11)
-			h_lbl.text = "[" + str(item.get("temporada", "2026")) + "] " + str(item.get("detalhe", ""))
 			
-			if str(item.get("tipo", "")) == "Aposentadoria":
+			var detail = str(item.get("detalhe", ""))
+			var type_str = str(item.get("tipo", ""))
+			h_lbl.text = "• [%s - GP %d] %s" % [
+				str(item.get("temporada", Database.current_year)),
+				int(item.get("gp_num", 1)),
+				detail
+			]
+			
+			# Destaque de cores: Vermelho para saídas/demissões/aposentadorias, Verde para contratações
+			if type_str in ["Aposentadoria", "Demissão", "Rescisão"] or "DEMISSÃO" in detail or "APOSENTADORIA" in detail or "demitido" in detail or "pediu demissão" in detail:
 				h_lbl.add_theme_color_override("font_color", Color("#ef4444"))
 			else:
 				h_lbl.add_theme_color_override("font_color", Color("#22c55e"))
 				
 			vbox_h.add_child(h_lbl)
-	else:
+
+	# 2. Fallback abrangente usando o news_feed
+	if not has_items and Database.get("news_feed") != null:
+		for news in Database.news_feed:
+			var news_str = str(news)
+			var matches_keyword = false
+			for kw in market_keywords:
+				if kw.to_lower() in news_str.to_lower():
+					matches_keyword = true
+					break
+					
+			if matches_keyword:
+				has_items = true
+				var h_lbl = Label.new()
+				h_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				h_lbl.add_theme_font_size_override("font_size", 11)
+				h_lbl.text = "• " + news_str
+				
+				# Cor vermelha se for demissão/aposentadoria/rescisão
+				if "APOSENTADORIA" in news_str or "demitido" in news_str or "DEMISSÃO" in news_str or "pediu demissão" in news_str or "rescindiu" in news_str:
+					h_lbl.add_theme_color_override("font_color", Color("#ef4444"))
+				else:
+					h_lbl.add_theme_color_override("font_color", Color("#22c55e"))
+					
+				vbox_h.add_child(h_lbl)
+
+	if not has_items:
+		var empty_lbl = Label.new()
+		empty_lbl.text = "Nenhuma transferência registrada nesta temporada."
+		empty_lbl.add_theme_font_size_override("font_size", 11)
+		empty_lbl.add_theme_color_override("font_color", Color("#64748b"))
+		vbox_h.add_child(empty_lbl)
+
+	# 3. Mensagem padrão caso não exista nenhum evento
+	if not has_items:
 		var empty_lbl = Label.new()
 		empty_lbl.text = "Nenhuma transferência registrada nesta temporada."
 		empty_lbl.add_theme_font_size_override("font_size", 11)
@@ -1219,3 +1333,88 @@ func _add_micro_cell(grid: GridContainer, text: String, color: Color) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED and is_visible_in_tree():
 		build_ui()
+
+func _get_sorted_drivers_for_market_panel() -> Array:
+	var list = Database.drivers.duplicate()
+	
+	list.sort_custom(func(a, b):
+		var p_a = _get_status_priority(str(a.get("Equipe", "")))
+		var p_b = _get_status_priority(str(b.get("Equipe", "")))
+		
+		# 1. Agrupa por Status (Titular < Free Agent < Aposentado)
+		if p_a != p_b:
+			return p_a < p_b
+			
+		# 2. Se pertencerem ao mesmo grupo, ordena pelo maior Overall
+		var ovr_a = int(a.get("Overall", a.get("Grau", 0)))
+		var ovr_b = int(b.get("Overall", b.get("Grau", 0)))
+		if ovr_a != ovr_b:
+			return ovr_a > ovr_b
+			
+		return str(a.get("Nome", "")) < str(b.get("Nome", ""))
+	)
+	
+	return list
+
+func _get_status_priority(team_name: String) -> int:
+	if team_name == "Aposentado":
+		return 2 # Aposentados ficam obrigatoriamente no final
+	elif team_name == "Free Agent" or team_name.is_empty():
+		return 1 # Agentes livres ficam no meio
+	return 0     # Titulares contratados no topo
+
+
+func _populate_market_contract_box(grid_container: GridContainer) -> void:
+	# Limpa itens anteriores se necessário
+	for child in grid_container.get_children():
+		child.queue_free()
+		
+	var sorted_drivers = _get_sorted_drivers_for_market_panel()
+	
+	for d in sorted_drivers:
+		var team_name = str(d.get("Equipe", "Free Agent"))
+		var contract_years = int(d.get("AnosContrato", 0))
+		var morale = float(d.get("Moral", 75.0))
+		
+		# Label Piloto
+		var lbl_name = Label.new()
+		lbl_name.text = str(d.get("Nome", "Piloto"))
+		grid_container.add_child(lbl_name)
+		
+		# Label Equipe
+		var lbl_team = Label.new()
+		lbl_team.text = team_name
+		if team_name == "Aposentado":
+			lbl_team.add_theme_color_override("font_color", Color("#64748b")) # Cinza
+		elif team_name == "Free Agent":
+			lbl_team.add_theme_color_override("font_color", Color("#38bdf8")) # Azul Claro
+		else:
+			lbl_team.add_theme_color_override("font_color", Color("#e2e8f0"))
+		grid_container.add_child(lbl_team)
+		
+		# Label Contrato
+		var lbl_contract = Label.new()
+		if team_name == "Aposentado":
+			lbl_contract.text = "-"
+			lbl_contract.add_theme_color_override("font_color", Color("#64748b"))
+		elif team_name == "Free Agent":
+			lbl_contract.text = "Livre"
+			lbl_contract.add_theme_color_override("font_color", Color("#38bdf8"))
+		else:
+			lbl_contract.text = str(contract_years) + (" ano" if contract_years == 1 else " anos")
+			if contract_years == 1:
+				lbl_contract.add_theme_color_override("font_color", Color("#eab308")) # Amarelo alertando último ano
+			else:
+				lbl_contract.add_theme_color_override("font_color", Color("#22c55e")) # Verde
+		grid_container.add_child(lbl_contract)
+		
+		# Label Moral %
+		var lbl_morale = Label.new()
+		lbl_morale.text = str(snapped(morale, 1)) + "%"
+		if morale >= 75.0:
+			lbl_morale.add_theme_color_override("font_color", Color("#22c55e"))
+		elif morale >= 40.0:
+			lbl_morale.add_theme_color_override("font_color", Color("#eab308"))
+		else:
+			lbl_morale.add_theme_color_override("font_color", Color("#ef4444")) # Vermelho moral baixa
+		grid_container.add_child(lbl_morale)

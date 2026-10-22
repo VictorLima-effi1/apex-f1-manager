@@ -29,6 +29,13 @@ func _ready() -> void:
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	build_ui()
 
+func _get_status_priority(team_name: String) -> int:
+	if team_name == "Aposentado":
+		return 2 # Aposentados sempre no final
+	elif team_name == "Free Agent" or team_name.is_empty():
+		return 1 # Agentes livres no meio
+	return 0     # Titulares no topo
+
 func build_ui() -> void:
 	for c in get_children():
 		c.queue_free()
@@ -65,10 +72,21 @@ func build_ui() -> void:
 	_add_header(grid, "CONTRATO", 80) # Nova coluna de Contrato
 	_add_header(grid, "SITUAÇÃO", 170)
 	
-	# Ordenar pilotos por Overall decrescente
+	# Ordenar pilotos por Prioridade de Status e depois por Overall
 	var sorted_drivers = Database.drivers.duplicate()
 	sorted_drivers.sort_custom(func(a, b):
-		return a.get("Overall", 70) > b.get("Overall", 70)
+		var p_a = _get_status_priority(str(a.get("Equipe", "")))
+		var p_b = _get_status_priority(str(b.get("Equipe", "")))
+		
+		if p_a != p_b:
+			return p_a < p_b
+			
+		var ovr_a = int(a.get("Overall", 70))
+		var ovr_b = int(b.get("Overall", 70))
+		if ovr_a != ovr_b:
+			return ovr_a > ovr_b
+			
+		return str(a.get("Nome", "")) < str(b.get("Nome", ""))
 	)
 	
 	# 2. Preenchimento das Linhas
