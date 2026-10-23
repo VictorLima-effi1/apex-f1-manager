@@ -62,27 +62,16 @@ func build_ui() -> void:
 	title_lbl.add_theme_color_override("font_color", Color("#ef4444"))
 	canvas.add_child(title_lbl)
 	
-	# Pilotos com equipe
-	var active_drivers = []
-	var seen_names: Dictionary = {}
+	# Carrega os pilotos únicos que disputaram ou disputam a temporada
+	var active_drivers = Database.get_season_drivers() if Database.has_method("get_season_drivers") else Database.drivers
 	
-	for d in Database.drivers:
-		var d_name = str(d.get("Nome", d.get("nome", ""))).strip_edges().to_lower()
-		var eq = str(d.get("Equipe", ""))
-		
-		# Filtra apenas titulares em equipes ativas (ignorando Free Agents e Aposentados)
-		if eq != "Free Agent" and eq != "Aposentado" and not eq.is_empty():
-			if not d_name.is_empty() and not seen_names.has(d_name):
-				seen_names[d_name] = true
-				active_drivers.append(d)
-			
 	# Cálculo do GP e Índice de Pista
 	var max_tracks = max(1, Database.tracks.size())
 	var gp_num = clampi(int(Database.current_gp), 1, max_tracks)
 	var track_idx = gp_num - 1
 	var track_curr = Database.tracks[track_idx] if Database.tracks.size() > 0 else {}
 	
-	# Cards Superiores (Agora exibe rigorosamente "22 Pilotos")
+	# Cards Superiores (Exibe dinamicamente o número total exato: 22, 23, etc.)
 	var stats_hbox = HBoxContainer.new()
 	stats_hbox.position = Vector2(10, 38)
 	stats_hbox.add_theme_constant_override("separation", 10)
@@ -97,18 +86,20 @@ func build_ui() -> void:
 	var margin_y = 90.0
 	var gap_x = 12.0
 	var gap_y = 10.0
-	
+
 	var col_w = (avail_width - (gap_x * 3.0)) / 4.0
-	
+
 	var col1_x = margin_x
 	var col2_x = col1_x + col_w + gap_x
 	var col3_x = col2_x + col_w + gap_x
 	var col4_x = col3_x + col_w + gap_x
 
-	# COLUNA 1
-	var col1_h1 = avail_height * 0.60
-	var col1_h2 = avail_height * 0.38
-	
+	# --- COLUNA 1 ---
+	# 1. Campeonato de Pilotos | 2. Notícias do Paddock | 3. Evolução de Pilotos (Gráfico)
+	var col1_h1 = avail_height * 0.45
+	var col1_h2 = avail_height * 0.25
+	var col1_h3 = avail_height * 0.28
+
 	var drivers_win = _create_resizable_window("drivers_panel", "🏆 CAMPEONATO DE PILOTOS", canvas)
 	_build_drivers_content(drivers_win.get_content_node(), active_drivers)
 	_apply_fixed_transform(drivers_win, Vector2(col1_x, margin_y), Vector2(col_w, col1_h1))
@@ -117,10 +108,16 @@ func build_ui() -> void:
 	_build_news_content(news_win.get_content_node(), str(track_curr.get("Nome", "")), gp_num)
 	_apply_fixed_transform(news_win, Vector2(col1_x, margin_y + col1_h1 + gap_y), Vector2(col_w, col1_h2))
 
-	# COLUNA 2
-	var col2_h1 = avail_height * 0.52
-	var col2_h2 = avail_height * 0.46
-	
+	var drivers_evo_win = _create_resizable_window("drivers_evolution_panel", "📈 EVOLUÇÃO DE PILOTOS NA TEMPORADA", canvas)
+	_build_drivers_evolution_content(drivers_evo_win.get_content_node())
+	_apply_fixed_transform(drivers_evo_win, Vector2(col1_x, margin_y + col1_h1 + col1_h2 + (gap_y * 2.0)), Vector2(col_w, col1_h3))
+
+	# --- COLUNA 2 ---
+	# 1. Construtores | 2. Hierarquia Técnica | 3. Estatísticas da Temporada
+	var col2_h1 = avail_height * 0.38
+	var col2_h2 = avail_height * 0.30
+	var col2_h3 = avail_height * 0.30
+
 	var teams_win = _create_resizable_window("teams_panel", "🏎️ CONSTRUTORES", canvas)
 	_build_teams_content(teams_win.get_content_node(), active_drivers)
 	_apply_fixed_transform(teams_win, Vector2(col2_x, margin_y), Vector2(col_w, col2_h1))
@@ -129,34 +126,35 @@ func build_ui() -> void:
 	_build_tech_power_content(tech_win.get_content_node())
 	_apply_fixed_transform(tech_win, Vector2(col2_x, margin_y + col2_h1 + gap_y), Vector2(col_w, col2_h2))
 
-	# COLUNA 3
-	var col3_h1 = avail_height * 0.72
-	var col3_h2 = avail_height * 0.26
-	
+	var stats_season_win = _create_resizable_window("stats_season_panel", "📊 ESTATÍSTICAS DA TEMPORADA", canvas)
+	_build_season_stats_content(stats_season_win.get_content_node())
+	_apply_fixed_transform(stats_season_win, Vector2(col2_x, margin_y + col2_h1 + col2_h2 + (gap_y * 2.0)), Vector2(col_w, col2_h3))
+
+	# --- COLUNA 3 ---
+	# 1. Mercado & Contratos (Ocupa a coluna inteira para caber toda a lista)
+	var col3_h1 = avail_height * 0.98
+
 	var market_win = _create_resizable_window("market_panel", "🔄 MERCADO & CONTRATOS", canvas)
 	_build_market_content(market_win.get_content_node())
 	_apply_fixed_transform(market_win, Vector2(col3_x, margin_y), Vector2(col_w, col3_h1))
 
-	var track_win = _create_resizable_window("track_info_panel", "🔍 INFO DO PRÓXIMO GP", canvas)
-	_build_track_info_content(track_win.get_content_node(), track_curr)
-	_apply_fixed_transform(track_win, Vector2(col3_x, margin_y + col3_h1 + gap_y), Vector2(col_w, col3_h2))
+	# --- COLUNA 4 ---
+	# 1. Etapas Próximas | 2. Info do Próximo GP | 3. Simulação Acelerada
+	var col4_h1 = avail_height * 0.28
+	var col4_h2 = avail_height * 0.35
+	var col4_h3 = avail_height * 0.33
 
-	# COLUNA 4
-	var col4_h1 = avail_height * 0.30
-	var col4_h2 = avail_height * 0.30
-	var col4_h3 = avail_height * 0.37
-	
 	var cal_win = _create_resizable_window("cal_panel", "📅 ETAPAS PRÓXIMAS", canvas)
 	_build_calendar_content(cal_win.get_content_node(), track_idx)
 	_apply_fixed_transform(cal_win, Vector2(col4_x, margin_y), Vector2(col_w, col4_h1))
 
+	var track_win = _create_resizable_window("track_info_panel", "🔍 INFO DO PRÓXIMO GP", canvas)
+	_build_track_info_content(track_win.get_content_node(), track_curr)
+	_apply_fixed_transform(track_win, Vector2(col4_x, margin_y + col4_h1 + gap_y), Vector2(col_w, col4_h2))
+
 	var fast_sim_win = _create_resizable_window("fast_sim_panel", "⚡ SIMULAÇÃO ACELERADA", canvas)
 	_build_fast_sim_content(fast_sim_win.get_content_node())
-	_apply_fixed_transform(fast_sim_win, Vector2(col4_x, margin_y + col4_h1 + gap_y), Vector2(col_w, col4_h2))
-
-	var stats_season_win = _create_resizable_window("stats_season_panel", "📊 ESTATÍSTICAS DA TEMPORADA", canvas)
-	_build_season_stats_content(stats_season_win.get_content_node())
-	_apply_fixed_transform(stats_season_win, Vector2(col4_x, margin_y + col4_h1 + col4_h2 + (gap_y * 2.0)), Vector2(col_w, col4_h3))
+	_apply_fixed_transform(fast_sim_win, Vector2(col4_x, margin_y + col4_h1 + col4_h2 + (gap_y * 2.0)), Vector2(col_w, col4_h3))
 
 func _create_resizable_window(key: String, title_text: String, parent: Control) -> ResizablePanel:
 	var panel = ResizablePanel.new()
@@ -443,7 +441,6 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 	if parent == null: return
 	for child in parent.get_children(): child.queue_free()
 
-	# Executa sanitização no Database se o total estiver duplicado
 	if Database.has_method("sanitize_unique_drivers"):
 		Database.sanitize_unique_drivers()
 
@@ -463,11 +460,13 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 	_add_grid_header(grid, "POD", 30)
 	_add_grid_header(grid, "DNF", 30)
 	
-	# Filtra para garantir que apenas 1 instância de cada nome entre na ordenação
+	# Garante a filtragem rigorosa de apenas 1 entrada por piloto na tabela
+	var raw_list = Database.get_season_drivers() if Database.has_method("get_season_drivers") else active_drivers
 	var unique_drivers: Array = []
 	var seen: Dictionary = {}
-	for d in active_drivers:
-		var name_key = str(d.get("Nome", "")).strip_edges().to_lower()
+	
+	for d in raw_list:
+		var name_key = str(d.get("Nome", d.get("nome", ""))).strip_edges().to_lower()
 		if not seen.has(name_key) and not name_key.is_empty():
 			seen[name_key] = true
 			unique_drivers.append(d)
@@ -1418,3 +1417,186 @@ func _populate_market_contract_box(grid_container: GridContainer) -> void:
 		else:
 			lbl_morale.add_theme_color_override("font_color", Color("#ef4444")) # Vermelho moral baixa
 		grid_container.add_child(lbl_morale)
+
+# --- CLASSE DO GRÁFICO DE EVOLUÇÃO DE PILOTOS ---
+class DriversEvolutionChart extends Control:
+	var hover_driver_info: String = ""
+	var hover_pos: Vector2 = Vector2.ZERO
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_PASS
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseMotion:
+			_check_hover(event.position)
+
+	func _check_hover(mouse_p: Vector2) -> void:
+		var rect_size = get_rect().size
+		var margin_left = 42.0
+		var margin_right = 30.0
+		var margin_top = 22.0
+		var margin_bottom = 28.0
+
+		var plot_w = rect_size.x - margin_left - margin_right
+		var plot_h = rect_size.y - margin_top - margin_bottom
+
+		var total_tracks = Database.tracks.size() if Database.get("tracks") != null else 24
+		var current_gp = clampi(int(Database.current_gp), 1, total_tracks)
+		var max_visible_gps = max(10, current_gp - 1)
+		var max_position_scale = 22.0
+
+		var closest_info = ""
+		var min_dist = 20.0
+
+		for d in Database.drivers:
+			var eq = str(d.get("Equipe", ""))
+			if eq == "Free Agent" or eq == "Aposentado" or eq.is_empty():
+				continue
+
+			var history = d.get("HistoricoPosicoes", [])
+			if history is Array and history.size() > 0:
+				for i in range(history.size()):
+					var champ_pos = clampi(int(history[i]), 1, 22)
+					var norm_x = float(i) / float(max(1, max_visible_gps - 1))
+					var norm_y = float(champ_pos - 1) / float(max_position_scale - 1.0)
+
+					var px = margin_left + (norm_x * plot_w)
+					var py = margin_top + (norm_y * plot_h)
+					var point_pos = Vector2(px, py)
+
+					var dist = mouse_p.distance_to(point_pos)
+					if dist < min_dist:
+						min_dist = dist
+						closest_info = str(d.get("Nome", "Piloto")) + " (" + eq + ")\nGP " + str(i + 1) + ": " + str(champ_pos) + "º no Campeonato"
+
+		if hover_driver_info != closest_info:
+			hover_driver_info = closest_info
+			hover_pos = mouse_p
+			queue_redraw()
+
+	func _draw() -> void:
+		var rect_size = get_rect().size
+		if rect_size.x <= 20 or rect_size.y <= 20:
+			return
+
+		draw_rect(Rect2(Vector2.ZERO, rect_size), Color("#101113"))
+
+		var margin_left = 42.0
+		var margin_right = 30.0
+		var margin_top = 22.0
+		var margin_bottom = 28.0
+
+		var plot_w = rect_size.x - margin_left - margin_right
+		var plot_h = rect_size.y - margin_top - margin_bottom
+
+		# Eixo Y: Tabela de Posições (1º ao 22º)
+		var grid_positions = [1, 5, 10, 15, 20, 22]
+		var max_position_scale = 22.0
+
+		for pos in grid_positions:
+			var norm_y = float(pos - 1) / float(max_position_scale - 1.0)
+			var y = margin_top + (norm_y * plot_h)
+			draw_line(Vector2(margin_left, y), Vector2(rect_size.x - margin_right, y), Color(1, 1, 1, 0.08), 1.0)
+			draw_string(ThemeDB.fallback_font, Vector2(6, y + 4), str(pos) + "º", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#ffffff"))
+
+		# Eixo X: Marcadores dos GPs
+		var total_tracks = Database.tracks.size() if Database.get("tracks") != null else 24
+		var completed_gps = max(1, Database.current_gp - 1)
+		var max_visible_gps = max(10, completed_gps)
+
+		for i in range(max_visible_gps):
+			var norm_x = float(i) / float(max(1, max_visible_gps - 1))
+			var x = margin_left + (norm_x * plot_w)
+			draw_line(Vector2(x, margin_top), Vector2(x, margin_top + plot_h), Color(1, 1, 1, 0.05), 1.0)
+			draw_string(ThemeDB.fallback_font, Vector2(x - 10, rect_size.y - 6), "GP" + str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#cbd5e1"))
+
+		# Cores das Equipes
+		var colors = [
+			Color("#3671c6"), Color("#e8002d"), Color("#ff8000"), Color("#6cd3bf"),
+			Color("#229971"), Color("#0093cc"), Color("#64c4ff"), Color("#6692ff"),
+			Color("#b6babd"), Color("#f50500"), Color("#f59e0b"), Color("#a855f7")
+		]
+
+		var d_idx = 0
+		for d in Database.drivers:
+			var eq = str(d.get("Equipe", ""))
+			if eq == "Free Agent" or eq == "Aposentado" or eq.is_empty():
+				continue
+
+			var d_name = str(d.get("Nome", ""))
+			var is_hovered = hover_driver_info.begins_with(d_name)
+			var line_color = colors[d_idx % colors.size()]
+			var line_alpha = 1.0 if is_hovered or hover_driver_info.is_empty() else 0.15
+			var line_width = 3.5 if is_hovered else 1.8
+			
+			d_idx += 1
+			var history = d.get("HistoricoPosicoes", [])
+
+			if history is Array and history.size() > 0:
+				var points = PackedVector2Array()
+				for i in range(history.size()):
+					var champ_pos = clampi(int(history[i]), 1, 22)
+					var norm_x = float(i) / float(max(1, max_visible_gps - 1))
+					var norm_y = float(champ_pos - 1) / float(max_position_scale - 1.0)
+
+					var px = margin_left + (norm_x * plot_w)
+					var py = margin_top + (norm_y * plot_h)
+					points.append(Vector2(px, py))
+
+				var draw_color = Color(line_color.r, line_color.g, line_color.b, line_alpha)
+				if points.size() > 1:
+					for i in range(points.size() - 1):
+						draw_line(points[i], points[i + 1], draw_color, line_width, true)
+						draw_circle(points[i], line_width + 0.8, draw_color)
+					draw_circle(points[points.size() - 1], line_width + 1.2, draw_color)
+				elif points.size() == 1:
+					draw_circle(points[0], line_width + 1.2, draw_color)
+
+		# Renderização da Tooltip de Destaque
+		if not hover_driver_info.is_empty():
+			var lines = hover_driver_info.split("\n")
+			var max_line_len = 0
+			for l in lines:
+				if l.length() > max_line_len:
+					max_line_len = l.length()
+
+			var box_w = max_line_len * 7.2 + 20.0
+			var box_h = lines.size() * 16.0 + 12.0
+			var box_pos = hover_pos + Vector2(14, -box_h - 6)
+
+			if box_pos.x + box_w > rect_size.x - 5:
+				box_pos.x = hover_pos.x - box_w - 10.0
+			if box_pos.x < margin_left + 5:
+				box_pos.x = margin_left + 5.0
+
+			if box_pos.y < 5:
+				box_pos.y = hover_pos.y + 15.0
+
+			draw_rect(Rect2(box_pos, Vector2(box_w, box_h)), Color("#0f172a"), true, -1, true)
+			draw_rect(Rect2(box_pos, Vector2(box_w, box_h)), Color("#38bdf8"), false, 1.2)
+
+			var y_off = box_pos.y + 16.0
+			for l in lines:
+				draw_string(ThemeDB.fallback_font, Vector2(box_pos.x + 10, y_off), l, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#ffffff"))
+				y_off += 15.0
+
+func _build_drivers_evolution_content(parent: Control) -> void:
+	if parent == null: return
+	for child in parent.get_children():
+		child.queue_free()
+
+	var scroll = ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+
+	var total_tracks = Database.tracks.size() if Database.get("tracks") != null else 24
+	var current_gp = clampi(int(Database.current_gp), 1, total_tracks)
+	var min_width = max(550, current_gp * 50)
+
+	var chart = DriversEvolutionChart.new()
+	chart.custom_minimum_size = Vector2(min_width, 180)
+	chart.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	scroll.add_child(chart)
+	parent.add_child(scroll)

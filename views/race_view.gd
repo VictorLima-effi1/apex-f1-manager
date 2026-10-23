@@ -594,9 +594,25 @@ func _finish_race_and_advance() -> void:
 		standings[i]["grid_pos"] = grid_pos
 		
 		var st_text = str(standings[i].get("Status", standings[i].get("status", ""))).to_lower()
+		var is_dnf = false
 		if st_text != "na pista" and st_text != "ok" and not st_text.is_empty():
 			standings[i]["dnf"] = true
 			standings[i]["abandonou"] = true
+			is_dnf = true
+
+		# NOVO: Atualiza estatísticas do piloto e salva para o gráfico funcionar!
+		var d_name = standings[i].get("Nome", standings[i].get("nome", ""))
+		var db_driver = Database._get_driver_by_name(d_name)
+		if not db_driver.is_empty():
+			if is_dnf:
+				db_driver["DNFsAno"] = int(db_driver.get("DNFsAno", 0)) + 1
+			else:
+				if i == 0:
+					db_driver["VitoriasAno"] = int(db_driver.get("VitoriasAno", 0)) + 1
+				if i < 3:
+					db_driver["PodiosAno"] = int(db_driver.get("PodiosAno", 0)) + 1
+				
+				Database._update_driver_stats_after_race(db_driver, grid_pos, i + 1, false)
 
 	var podium = []
 	for i in range(min(3, standings.size())):
@@ -611,6 +627,15 @@ func _finish_race_and_advance() -> void:
 
 	# --- APLICAÇÃO OFICIAL DE PONTOS NO CAMPEONATO ---
 	Database.apply_race_points(standings)
+
+	# NOVO: Esta é a função responsável por gerar os pontos no gráfico!
+	Database.record_standings_history_after_gp()
+	
+	# NOVO: Registra o vencedor da corrida (que estava faltando na UI da pista)
+	if standings.size() > 0:
+		var winner_name = standings[0].get("Nome", "-")
+		var winner_team = standings[0].get("Equipe", "-")
+		Database.record_gp_winner(Database.current_gp - 1, winner_name, winner_team)
 
 	# Atualizações de Moral, Respeito e Teto de Gastos das equipes
 	Database.process_post_race_morale_and_respect(standings)

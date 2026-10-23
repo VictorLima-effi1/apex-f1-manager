@@ -6,11 +6,26 @@ var current_view: String = "dashboard"
 var race_finished: bool = false
 var active_engine: RaceEngine = null
 var constructors_points_history: Array = [] # Estrutura: [{"gp": 1, "points": {"McLaren": 25, "Ferrari": 18, ...}}]
+# Armazena os interesses/sondagens ativas das equipes sobre pilotos
+var driver_market_interests: Array = []
 
+func get_driver_interests() -> Array:
+	return driver_market_interests
+	
 # Variáveis Globais de Configuração
 var ui_scale: float = 1.0
 var aspect_index: int = 0
 var window_mode_index: int = 1
+
+# --- VARIÁVEIS DO MODO MANAGER ---
+var is_custom_team: bool = false
+var selected_manager_team: Dictionary = {}
+var custom_team_data: Dictionary = {
+	"nome": "",
+	"cor": Color.WHITE,
+	"chefe": "",
+	"pais": ""
+}
 
 # --- TETO ORÇAMENTÁRIO (COST CAP) ---
 const COST_CAP_LIMIT: float = 135_000_000.0 # $135 Milhões base por temporada
@@ -102,60 +117,107 @@ func purchase_team_upgrade(team_name: String) -> bool:
 	return true
 
 func process_ai_team_upgrades() -> void:
+	# Dicionário temporário para agrupar as melhorias deste GP por tipo de componente
+	# Ex: {"Unidade de Potência": ["Audi (+0.90)", "Williams (+0.82)"], "Chassi": ["Ferrari (+0.64)"]}
+	var gp_upgrades_by_type: Dictionary = {
+		"Unidade de Potência": [],
+		"Aerodinâmica": [],
+		"Chassi": [],
+		"Confiabilidade": []
+	}
+	
+	var total_upgrades_in_gp = 0
+
 	for t in teams:
-		if not bool(t.get("Ativa", true)):
+		if not bool(t.get("Ativa", true)): 
 			continue
-			
+		
 		var team_name = str(t.get("Nome", ""))
 		var current_expense = team_season_expenses.get(team_name, 0.0)
 		var max_cap = get_team_budget_cap(team_name)
 		var remaining = max_cap - current_expense
 		
+		# Bloqueia se a equipe já estourou o teto de gastos
 		if remaining < UPGRADE_COST:
 			continue
 			
+		# Chance dinâmica de compra por GP
 		var gp_progress = float(current_gp) / float(max(1, tracks.size()))
 		var budget_ratio = remaining / max_cap
-		
-		var buy_chance = 0.60 if budget_ratio > (1.0 - gp_progress) else 0.35
+		var buy_chance = 0.50 if budget_ratio > (1.0 - gp_progress) else 0.30
 		
 		if randf() > buy_chance:
 			continue
 			
-		var last_rank = int(t.get("LastSeasonRank", 5))
-		var gain = randi_range(1, 2) if last_rank <= 3 else randi_range(3, 4)
+		# Cálculo de rendimento decrescente (P&D)
+		var motor_val = float(t.get("Motor", 80))
+		var aero_val = float(t.get("Aero", 80))
+		var chassi_val = float(t.get("Chassi", 80))
+		var current_avg = (motor_val + aero_val + chassi_val) / 3.0
 		
+		var gain: float = 0.0
+		if current_avg < 85.0:
+			gain = randf_range(0.8, 1.2)
+		elif current_avg < 92.0:
+			gain = randf_range(0.4, 0.7)
+		else:
+			gain = randf_range(0.15, 0.35)
+			
 		var available_focuses = []
-		if t["Motor"] < 99: available_focuses.append(0)
-		if t["Aero"] < 99: available_focuses.append(1)
-		if t["Chassi"] < 99: available_focuses.append(2)
-		if t["Confiabilidade"] < 99: available_focuses.append(3)
+		if t["Motor"] < 99.0: available_focuses.append(0)
+		if t["Aero"] < 99.0: available_focuses.append(1)
+		if t["Chassi"] < 99.0: available_focuses.append(2)
+		if t["Confiabilidade"] < 99.0: available_focuses.append(3)
 		
 		if available_focuses.size() > 0:
 			var focus = available_focuses[randi() % available_focuses.size()]
-			var upgrade_type_str = ""
+			var component_name = ""
 			
 			if focus == 0:
-				t["Motor"] = min(99, t["Motor"] + gain)
-				upgrade_type_str = "Unidade de Potência (+%d%%)" % gain
+				t["Motor"] = min(99.0, t["Motor"] + gain)
+				component_name = "Unidade de Potência"
 			elif focus == 1:
-				t["Aero"] = min(99, t["Aero"] + gain)
-				upgrade_type_str = "Aerodinâmica (+%d%%)" % gain
+				t["Aero"] = min(99.0, t["Aero"] + gain)
+				component_name = "Aerodinâmica"
 			elif focus == 2:
-				t["Chassi"] = min(99, t["Chassi"] + gain)
-				upgrade_type_str = "Chassi (+%d%%)" % gain
+				t["Chassi"] = min(99.0, t["Chassi"] + gain)
+				component_name = "Chassi"
 			elif focus == 3:
-				t["Confiabilidade"] = min(99, t["Confiabilidade"] + gain)
-				upgrade_type_str = "Confiabilidade (+%d%%)" % gain
+				t["Confiabilidade"] = min(99.0, t["Confiabilidade"] + gain)
+				component_name = "Confiabilidade"
 
-			if not upgrade_type_str.is_empty():
+			if not component_name.is_empty():
 				team_season_expenses[team_name] = current_expense + UPGRADE_COST
-				add_news("🛠️ UPGRADE (%s): %s | Gastos: $%sM / $%sM" % [
-					team_name, 
-					upgrade_type_str, 
-					str(snapped((current_expense + UPGRADE_COST) / 1000000.0, 0.1)),
-					str(snapped(max_cap / 1000000.0, 0.1))
-				])
+				total_upgrades_in_gp += 1
+				
+				# Formata o trecho individual (ex: "Audi (+0.90)")
+				var entry_str = "%s (+%.2f)" % [team_name, gain]
+				gp_upgrades_by_type[component_name].append(entry_str)
+		else:
+			if remaining >= UPGRADE_COST:
+				team_season_expenses[team_name] = current_expense + UPGRADE_COST
+
+	# MONTA E EXIBE A MENSAGEM AGRUPADA APENAS SE HOUVER UPGRADES NO GP
+	if total_upgrades_in_gp > 0:
+		var summary_parts: Array = []
+		
+		for comp in ["Unidade de Potência", "Aerodinâmica", "Chassi", "Confiabilidade"]:
+			var team_list: Array = gp_upgrades_by_type[comp]
+			if team_list.size() > 0:
+				var teams_formatted = ""
+				if team_list.size() == 1:
+					teams_formatted = team_list[0]
+				elif team_list.size() == 2:
+					teams_formatted = team_list[0] + " e " + team_list[1]
+				else:
+					var all_except_last = team_list.slice(0, team_list.size() - 1)
+					teams_formatted = ", ".join(all_except_last) + " e " + team_list.back()
+				
+				var action_verb = "Atualizam a" if comp == "Unidade de Potência" else "Atualizam"
+				summary_parts.append("%s %s %s" % [teams_formatted, action_verb, comp])
+
+		var final_msg = "🛠️ UPGRADES: " + ". ".join(summary_parts) + "."
+		add_news(final_msg)
 
 func _recalculate_team_handicaps_and_reset_caps() -> void:
 	var sorted_teams = teams.duplicate()
@@ -227,6 +289,11 @@ func load_drivers_from_json() -> void:
 				sanitize_unique_drivers()
 				return
 	print_debug("Aviso: drivers_data.json não encontrado ou inválido!")
+	# Ao carregar ou sanitizar os pilotos no início da carreira
+	for d in drivers:
+		if not d.has("races_with_team"):
+			# Pilotos titulares do grid inicial já têm histórico longo com suas equipes
+			d["races_with_team"] = 24
 
 func sanitize_unique_drivers() -> void:
 	if drivers == null or drivers.size() == 0:
@@ -449,12 +516,18 @@ func simulate_current_gp_fast() -> void:
 					db_driver["PodiosAno"] = int(db_driver.get("PodiosAno", 0)) + 1
 				
 				_update_driver_stats_after_race(db_driver, int(results[i]["grid_pos"]), i + 1, false)
+	
+	for d in drivers:
+		var eq = str(d.get("Equipe", ""))
+		if eq != "Free Agent" and eq != "Aposentado":
+			d["races_with_team"] = int(d.get("races_with_team", 0)) + 1
 
 	if results.size() > 0:
 		apply_race_points(results)
-		record_gp_constructors_snapshot()
+		record_standings_history_after_gp() # <--- ESSA LINHA FAZ TUDO SOZINHA COM SEGURANÇA
 		process_post_race_morale_and_respect(results)
 		process_ai_team_upgrades()
+		process_mid_season_renewals()
 		
 		var winner_name = results[0].get("Nome", results[0].get("nome", "-"))
 		var winner_team = results[0].get("Equipe", results[0].get("equipe", "-"))
@@ -471,14 +544,8 @@ func simulate_current_gp_fast() -> void:
 			"second": second_name,
 			"third": third_name
 		})
-	
-	if current_gp == 12:
-		_process_mid_season_renewals()
 		
 	current_gp += 1
-	
-	if engine is Node:
-		engine.free()
 
 func record_gp_constructors_snapshot() -> void:
 	var snapshot: Dictionary = {}
@@ -518,16 +585,29 @@ func is_driver_interested_in_team(driver_name: String, target_team_name: String)
 	if morale > 80 and target_power < 75.0: return false
 	return true
 
+const MAX_CONTRACT_YEARS: int = 10
+
+# Determina a duração do contrato (1 a 10 anos no máximo)
 func calculate_contract_offer_years(driver_name: String, team_name: String) -> int:
 	var driver = _get_driver_by_name(driver_name)
-	var morale = driver.get("Moral", 75)
+	var morale = float(driver.get("Moral", 75.0))
 	var team = _get_team_by_name(team_name)
-	var respect = team.get("Respeito", 50)
+	var respect = float(team.get("Respeito", 50))
 	
-	if morale >= 85 and respect >= 70: return randi_range(4, 6)
-	elif morale >= 70: return randi_range(2, 3)
-	elif morale >= 50: return 1
-	else: return 0
+	var offer_years: int = 0
+	
+	if morale >= 85.0 and respect >= 65.0:
+		offer_years = randi_range(6, 10) # Oferta máxima permitida (até 10 anos)
+	elif morale >= 75.0:
+		offer_years = randi_range(4, 6)
+	elif morale >= 55.0:
+		offer_years = randi_range(2, 4)
+	elif morale >= 25.0:
+		offer_years = 1
+	else:
+		offer_years = 0
+		
+	return clampi(offer_years, 0, MAX_CONTRACT_YEARS)
 
 func fire_driver(team_name: String, driver_name: String) -> void:
 	var driver = _get_driver_by_name(driver_name)
@@ -575,18 +655,28 @@ func _auto_fill_team_seat(team_name: String) -> void:
 	if free_agents.size() > 0:
 		var candidate = free_agents[0]
 		candidate["Equipe"] = team_name
+		candidate["races_with_team"] = 0
 		candidate["AnosContrato"] = randi_range(2, 3)
 		candidate["Moral"] = 75.0
 		candidate["seasons_without_contract"] = 0
+		
+		# Se o piloto nunca correu na temporada atual, garante estatísticas zeradas
+		if not candidate.has("CorridasAno"): candidate["CorridasAno"] = 0
+		
 		log_transfer_event("✍️ REPOSIÇÃO: " + team_name + " contratou " + str(candidate["Nome"]) + " por " + str(candidate["AnosContrato"]) + " ano(s)!", "Contratação")
 		
 		_auto_fill_team_seat(team_name)
+		candidate["races_with_team"] = 0
 		return
 
 	var rookie_name = "Novato " + team_name.substr(0, 3).to_upper() + " " + str(randi_range(10, 99))
-	var ovr = randi_range(70, 76)
+	var ovr = randi_range(68, 75)
 	add_new_driver(rookie_name, randi_range(18, 21), ovr, ovr, ovr, ovr, ovr, ovr, team_name)
-	log_transfer_event("🌟 PROMOÇÃO: " + team_name + " promoveu o jovem " + rookie_name + " da academia de pilotos!", "Contratação")
+	
+	# Reseta o tempo de casa do novo piloto promovido
+	var new_rookie = _get_driver_by_name(rookie_name)
+	if not new_rookie.is_empty():
+		new_rookie["races_with_team"] = 0
 
 func get_team_drivers(team_name: String) -> Array:
 	var list: Array = []
@@ -596,6 +686,33 @@ func get_team_drivers(team_name: String) -> Array:
 		if eq == target:
 			list.append(d)
 	return list
+
+# Retorna todos os pilotos únicos que estão em uma equipe ou que já participaram da temporada
+func get_season_drivers() -> Array:
+	var season_drivers: Array = []
+	var seen_names: Dictionary = {}
+	
+	for d in drivers:
+		var d_name = str(d.get("Nome", d.get("nome", ""))).strip_edges().to_lower()
+		if d_name.is_empty() or seen_names.has(d_name):
+			continue
+			
+		var eq = str(d.get("Equipe", "Free Agent")).strip_edges()
+		var pts = int(d.get("Pontos", 0))
+		var vits = int(d.get("VitoriasAno", 0))
+		var pods = int(d.get("PodiosAno", 0))
+		var dnfs = int(d.get("DNFsAno", 0))
+		var gps = int(d.get("CorridasAno", d.get("gps_disputados", 0)))
+		var has_hist = d.has("HistoricoPosicoes") and (d["HistoricoPosicoes"] is Array) and d["HistoricoPosicoes"].size() > 0
+		
+		var is_active_team = (eq != "Free Agent" and eq != "Aposentado" and not eq.is_empty())
+		var has_participated = (pts > 0 or vits > 0 or pods > 0 or dnfs > 0 or gps > 0 or has_hist)
+		
+		if is_active_team or has_participated:
+			seen_names[d_name] = true
+			season_drivers.append(d)
+			
+	return season_drivers
 
 func log_transfer_event(detail: String, type_str: String = "Transferência") -> void:
 	var entry = {
@@ -611,7 +728,8 @@ func log_transfer_event(detail: String, type_str: String = "Transferência") -> 
 		
 	add_news("[%d - GP %d] %s" % [current_year, current_gp, detail])
 
-func _process_mid_season_renewals() -> void:
+# Processa tentativas proativas de renovação em qualquer GP para pilotos próximos do fim de contrato (<= 2 anos)
+func process_mid_season_renewals() -> void:
 	for d in drivers:
 		var eq = str(d.get("Equipe", ""))
 		if eq == "Free Agent" or eq == "Aposentado" or eq.is_empty():
@@ -619,20 +737,28 @@ func _process_mid_season_renewals() -> void:
 			
 		var yrs = int(d.get("AnosContrato", 1))
 		var morale = float(d.get("Moral", 75.0))
+		var races_run = int(d.get("races_with_team", 24))
 		
-		if yrs <= 1:
-			var team_info = get_team_power_index(eq)
-			var team_power = team_info.get("overall", 75.0)
-			var driver_ovr = float(d.get("Overall", 75))
+		# REGRA CORRIGIDA:
+		# 1. Trava de 12 GPs para recém-contratados
+		# 2. Só tenta renovação antecipada se o contrato estiver em seu ÚLTIMO ANO (yrs <= 1)
+		if races_run < 12 or yrs > 1:
+			continue
 			
-			if driver_ovr >= 85 and team_power < 78.0 and morale < 60:
-				add_news("📝 " + str(d["Nome"]) + " recusou a proposta de renovação com a " + eq + " e buscará nova equipe ao fim da temporada!")
-				continue
+		# Chance de renovação baseada na moral do piloto
+		var renewal_chance = 0.40 if morale >= 75.0 else (0.20 if morale >= 60.0 else 0.05)
+		
+		if randf() < renewal_chance:
+			var driver_name = str(d.get("Nome", ""))
+			var new_years = calculate_contract_offer_years(driver_name, eq)
+			
+			if new_years > 0:
+				var final_contract = min(MAX_CONTRACT_YEARS, yrs + new_years)
+				var added_years = final_contract - yrs
 				
-			if morale >= 50.0:
-				var new_years = randi_range(2, 4)
-				d["AnosContrato"] = new_years
-				log_transfer_event("✍️ RENOVAÇÃO: " + str(d["Nome"]) + " renovou seu contrato com a " + eq + " por mais " + str(new_years) + " ano(s)!", "Renovação")
+				if added_years > 0:
+					d["AnosContrato"] = final_contract
+					log_transfer_event("✍️ RENOVAÇÃO: " + driver_name + " renovou com a " + eq + " por mais " + str(added_years) + " ano(s)! (Total: " + str(final_contract) + " anos)", "Renovação")
 
 func end_season_and_advance_year() -> void:
 	full_season_archive[current_year] = race_history.duplicate(true)
@@ -655,6 +781,7 @@ func end_season_and_advance_year() -> void:
 	current_year += 1
 	current_gp = 1
 	race_history.clear()
+	constructors_points_history.clear()
 	
 	if "transfer_history" in self:
 		transfer_history.clear()
@@ -682,6 +809,7 @@ func end_season_and_advance_year() -> void:
 		d["SequenciaPontos"] = 0
 		d["PosicoesGanhaAno"] = 0
 		d["PosicoesPerdidasAno"] = 0
+		d["HistoricoPosicoes"] = []
 		if d.has("demitido_por_equipes"):
 			d["demitido_por_equipes"].clear()
 		
@@ -732,45 +860,124 @@ func _process_driver_evolution() -> void:
 func _process_ai_transfer_market() -> void:
 	for t in teams:
 		t["Ativa"] = true
+	
+	driver_market_interests.clear()
 
-	for t in teams:
-		var team_name = str(t.get("Nome", ""))
-		var active_team_drivers = []
+	# 1. FASE DE RESCISÃO DE CONTRATOS EXPIRADOS (AnosContrato <= 0)
+	for d in drivers:
+		var team_name = str(d.get("Equipe", ""))
+		if team_name != "Free Agent" and team_name != "Aposentado" and not team_name.is_empty():
+			if int(d.get("AnosContrato", 0)) <= 0:
+				d["Equipe"] = "Free Agent"
+				var fired_by: Array = d.get("demitido_por_equipes", [])
+				if not fired_by.has(team_name):
+					fired_by.append(team_name)
+				d["demitido_por_equipes"] = fired_by
+				log_transfer_event("🚨 FIM DE CONTRATO: " + str(d.get("Nome", "")) + " não renovou com a " + team_name + "!", "Demissão")
+
+	# 2. FASE DE ROUBO DE PILOTOS (Poaching / Compra de Contratos por Interesses de Mercado)
+	# Equipes do topo (P1 a P11) tentam tirar destaques de equipes menores
+	var sorted_teams = teams.duplicate()
+	sorted_teams.sort_custom(func(a, b): return int(a.get("LastSeasonRank", 99)) < int(b.get("LastSeasonRank", 99)))
+
+	for buyer in sorted_teams:
+		var buyer_name = str(buyer.get("Nome", ""))
+		var buyer_drivers = get_team_drivers(buyer_name)
 		
-		for d in drivers:
-			if str(d.get("Equipe", "")).strip_edges().to_lower() == team_name.strip_edges().to_lower():
-				if int(d.get("AnosContrato", 0)) <= 0:
-					add_news("💼 Contrato de " + str(d.get("Nome", "")) + " com a " + team_name + " expirou.")
-					d["Equipe"] = "Free Agent"
-				else:
-					active_team_drivers.append(d)
-					
+		# Se a equipe de topo tem vaga ou quer trocar um piloto fraco
+		if buyer_drivers.size() < 2:
+			_try_poach_driver_from_rival(buyer_name)
+
+	# 3. DANÇA DAS CADEIRAS (Preenche vagas restantes com Free Agents ou Promovidos)
+	for t in sorted_teams:
+		var team_name = str(t.get("Nome", ""))
+		var active_team_drivers = get_team_drivers(team_name)
+		
 		while active_team_drivers.size() < 2:
+			# Tenta primeiro 'roubar' um piloto elegível de equipe menor
+			if _try_poach_driver_from_rival(team_name):
+				active_team_drivers = get_team_drivers(team_name)
+				continue
+				
+			# Se não conseguir roubar, contrata o melhor Free Agent
 			var best_candidate = null
 			var highest_overall = -1
+			
 			for d in drivers:
-				if str(d.get("Equipe", "")).strip_edges().to_lower() == "free agent" and int(d.get("Overall", 0)) > highest_overall:
-					highest_overall = int(d.get("Overall", 0))
-					best_candidate = d
-					
+				if str(d.get("Equipe", "")).strip_edges().to_lower() == "free agent":
+					var fired_by: Array = d.get("demitido_por_equipes", [])
+					if not fired_by.has(team_name):
+						var ovr = int(d.get("Overall", 0))
+						if ovr > highest_overall:
+							highest_overall = ovr
+							best_candidate = d
+							
 			if best_candidate != null:
 				best_candidate["Equipe"] = team_name
 				best_candidate["AnosContrato"] = randi_range(2, 3)
 				best_candidate["Moral"] = 75.0
+				log_transfer_event("✍️ REPOSIÇÃO: " + team_name + " contratou o agente livre " + str(best_candidate.get("Nome", "")) + " por " + str(best_candidate["AnosContrato"]) + " ano(s)!", "Contratação")
 				active_team_drivers.append(best_candidate)
-				log_transfer_event("✍️ " + team_name + " contratou " + str(best_candidate.get("Nome", "")) + " por " + str(best_candidate["AnosContrato"]) + " ano(s)!", "Contratação")
 			else:
 				var new_promoted_name = "Novato " + team_name.substr(0, 3).to_upper() + " " + str(randi_range(10, 99))
 				var ovr_tmp = randi_range(68, 75)
 				add_new_driver(new_promoted_name, randi_range(18, 22), ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, team_name)
-				log_transfer_event("🌟 PROMOÇÃO: %s promoveu o jovem %s da base para preencher a vaga!" % [team_name, new_promoted_name], "Contratação")
-				
-				active_team_drivers.clear()
-				for d in drivers:
-					if str(d.get("Equipe", "")).strip_edges().to_lower() == team_name.strip_edges().to_lower():
-						active_team_drivers.append(d)
+				log_transfer_event("🌟 PROMOÇÃO: " + team_name + " promoveu o jovem " + new_promoted_name + " da base!", "Contratação")
+				active_team_drivers = get_team_drivers(team_name)
 
 	ensure_full_grid()
+
+# Função que realiza a compra de contrato ("roubo") de um piloto sob contrato em outra equipe
+func _try_poach_driver_from_rival(buyer_team_name: String) -> bool:
+	var buyer_team = _get_team_by_name(buyer_team_name)
+	var buyer_power = get_team_power_index(buyer_team_name)["overall"]
+	
+	var best_target = null
+	var highest_target_score = -1.0
+	
+	for d in drivers:
+		var current_team_name = str(d.get("Equipe", ""))
+		if current_team_name == "Free Agent" or current_team_name == "Aposentado" or current_team_name == buyer_team_name or current_team_name.is_empty():
+			continue
+			
+		var seller_power = get_team_power_index(current_team_name)["overall"]
+		var ovr = int(d.get("Overall", 70))
+		var morale = float(d.get("Moral", 75.0))
+		
+		# Critério de Agressividade: A equipe compradora é ligeiramente superior (>1.0 Pt) OU o piloto está insatisfeito (Moral < 60)
+		var is_attracked = (buyer_power >= seller_power + 1.0) or (morale < 60.0)
+		
+		if is_attracked and can_team_sign_driver(buyer_team_name, ovr):
+			# Registra o interesse na aba de Interesses
+			driver_market_interests.append({
+				"piloto": str(d.get("Nome", "")),
+				"equipe_atual": current_team_name,
+				"equipe_interessada": buyer_team_name,
+				"overall": ovr,
+				"status": "Proposta de Compra"
+			})
+			
+			if ovr > highest_target_score:
+				highest_target_score = float(ovr)
+				best_target = d
+				
+	# 70% de chance de concretizar o roubo caso encontre um candidato viável
+	if best_target != null and randf() < 0.70:
+		var poached_name = str(best_target.get("Nome", ""))
+		var seller_team = str(best_target.get("Equipe", ""))
+		
+		best_target["Equipe"] = buyer_team_name
+		best_target["AnosContrato"] = randi_range(2, 4)
+		best_target["Moral"] = 85.0
+		best_target["races_with_team"] = 0 # RESETA A TRAVA DAS 12 CORRIDAS
+		
+		log_transfer_event("💰 ROUBO DE CONTRATO: " + buyer_team_name + " pagou a multa e tirou " + poached_name + " da " + seller_team + "!", "Transferência")
+		
+		# Efeito em cadeia: A equipe rival lesada repõe a vaga
+		_auto_fill_team_seat(seller_team)
+		return true
+		
+	return false
 
 func _get_driver_by_name(p_name: String) -> Dictionary:
 	var clean_input = p_name.strip_edges().to_lower()
@@ -1132,3 +1339,44 @@ func _apply_dnf_financial_penalty(team_name: String) -> void:
 	if team_season_expenses.has(team_name):
 		var repair_cost: int = randi_range(1000000, 3000000)
 		team_season_expenses[team_name] += repair_cost
+
+func reset_incorrect_history() -> void:
+	for d in drivers:
+		d["HistoricoPosicoes"] = []
+
+# --- REGISTRO OFICIAL E ISOLADO DO HISTÓRICO NO CAMPEONATO ---
+func record_standings_history_after_gp() -> void:
+	var standings_to_record: Array = []
+	
+	# 1. Filtra apenas os pilotos com equipe ativa no campeonato
+	for d in drivers:
+		var eq = str(d.get("Equipe", ""))
+		if eq != "Free Agent" and eq != "Aposentado" and not eq.is_empty():
+			standings_to_record.append(d)
+
+	# 2. Ordena estritamente pelos critérios oficiais da F1 (Pontos > Vitórias > Pódios)
+	standings_to_record.sort_custom(func(a, b):
+		var p_a = int(a.get("Pontos", 0))
+		var p_b = int(b.get("Pontos", 0))
+		if p_a != p_b: return p_a > p_b
+		var v_a = int(a.get("VitoriasAno", 0))
+		var v_b = int(b.get("VitoriasAno", 0))
+		if v_a != v_b: return v_a > v_b
+		var pod_a = int(a.get("PodiosAno", 0))
+		var pod_b = int(b.get("PodiosAno", 0))
+		if pod_a != pod_b: return pod_a > pod_b
+		return str(a.get("Nome", "")) < str(b.get("Nome", ""))
+	)
+
+	# 3. Anexa a posição em uma lista 100% EXCLUSIVA para cada piloto
+	var pos_rank = 1
+	for d in standings_to_record:
+		if not d.has("HistoricoPosicoes") or not (d["HistoricoPosicoes"] is Array):
+			d["HistoricoPosicoes"] = []
+		else:
+			# .duplicate() garante que o Array deste piloto seja único e isolado em memória
+			var current_arr: Array = d["HistoricoPosicoes"]
+			d["HistoricoPosicoes"] = current_arr.duplicate()
+
+		d["HistoricoPosicoes"].append(pos_rank)
+		pos_rank += 1
