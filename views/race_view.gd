@@ -5,6 +5,8 @@ var race_timer: Timer
 
 @onready var top_title: Label
 @onready var weather_lbl: Label
+@onready var water_bar: ProgressBar
+@onready var grip_bar: ProgressBar
 @onready var btn_start: Button
 @onready var btn_speed_1x: Button
 @onready var btn_speed_2x: Button
@@ -47,10 +49,53 @@ func build_ui() -> void:
 	top_title.add_theme_color_override("font_color", Color("#ef4444"))
 	main_vbox.add_child(top_title)
 	
+	# --- CONTAINER SUPERIOR: CLIMA E BARRAS DE STATUS DA PISTA ---
+	var top_info_hbox = HBoxContainer.new()
+	top_info_hbox.add_theme_constant_override("separation", 20)
+	main_vbox.add_child(top_info_hbox)
+	
 	weather_lbl = Label.new()
 	weather_lbl.add_theme_font_size_override("font_size", 13)
 	weather_lbl.add_theme_color_override("font_color", Color("#22c55e"))
-	main_vbox.add_child(weather_lbl)
+	top_info_hbox.add_child(weather_lbl)
+	
+	var bars_hbox = HBoxContainer.new()
+	bars_hbox.add_theme_constant_override("separation", 15)
+	top_info_hbox.add_child(bars_hbox)
+	
+	# 1. Barra de Umidade / Chuva
+	var wet_container = HBoxContainer.new()
+	wet_container.add_theme_constant_override("separation", 5)
+	var lbl_wet = Label.new()
+	lbl_wet.text = "🌧️ Umidade:"
+	lbl_wet.add_theme_font_size_override("font_size", 12)
+	lbl_wet.add_theme_color_override("font_color", Color("#38bdf8"))
+	wet_container.add_child(lbl_wet)
+	
+	water_bar = ProgressBar.new()
+	water_bar.custom_minimum_size = Vector2(100, 16)
+	water_bar.min_value = 0.0
+	water_bar.max_value = 100.0
+	water_bar.show_percentage = true
+	wet_container.add_child(water_bar)
+	bars_hbox.add_child(wet_container)
+	
+	# 2. Barra de Aderência (Grip)
+	var grip_container = HBoxContainer.new()
+	grip_container.add_theme_constant_override("separation", 5)
+	var lbl_grip = Label.new()
+	lbl_grip.text = "🏎️ Aderência:"
+	lbl_grip.add_theme_font_size_override("font_size", 12)
+	lbl_grip.add_theme_color_override("font_color", Color("#22c55e"))
+	grip_container.add_child(lbl_grip)
+	
+	grip_bar = ProgressBar.new()
+	grip_bar.custom_minimum_size = Vector2(100, 16)
+	grip_bar.min_value = 0.0
+	grip_bar.max_value = 100.0
+	grip_bar.show_percentage = true
+	grip_container.add_child(grip_bar)
+	bars_hbox.add_child(grip_container)
 	
 	var ctrl_hbox = HBoxContainer.new()
 	ctrl_hbox.add_theme_constant_override("separation", 8)
@@ -326,9 +371,15 @@ func _update_ui() -> void:
 			flag_text = "🔴 BANDEIRA VERMELHA"
 			flag_color = Color("#ef4444")
 
-	var weather_str = "Clima: " + engine.weather_state + " (" + str(snapped(engine.water_level, 0.1)) + "% água) | Radar: " + engine.weather_forecast
-	weather_lbl.text = weather_str + " | Status da Pista: " + flag_text
+	var weather_str = "Clima: " + engine.weather_state + " | Radar: " + engine.weather_forecast + " | Status: " + flag_text
+	weather_lbl.text = weather_str
 	weather_lbl.add_theme_color_override("font_color", flag_color if engine.safety_car_status != "NONE" else Color("#38bdf8"))
+
+	# Atualiza os valores das barras dinamicamente a cada tick
+	if water_bar:
+		water_bar.value = engine.water_level
+	if grip_bar:
+		grip_bar.value = engine.track_grip
 
 	_update_safety_banner()
 	
@@ -600,7 +651,6 @@ func _finish_race_and_advance() -> void:
 			standings[i]["abandonou"] = true
 			is_dnf = true
 
-		# NOVO: Atualiza estatísticas do piloto e salva para o gráfico funcionar!
 		var d_name = standings[i].get("Nome", standings[i].get("nome", ""))
 		var db_driver = Database._get_driver_by_name(d_name)
 		if not db_driver.is_empty():
@@ -625,19 +675,14 @@ func _finish_race_and_advance() -> void:
 		"podium": podium
 	})
 
-	# --- APLICAÇÃO OFICIAL DE PONTOS NO CAMPEONATO ---
 	Database.apply_race_points(standings)
-
-	# NOVO: Esta é a função responsável por gerar os pontos no gráfico!
 	Database.record_standings_history_after_gp()
 	
-	# NOVO: Registra o vencedor da corrida (que estava faltando na UI da pista)
 	if standings.size() > 0:
 		var winner_name = standings[0].get("Nome", "-")
 		var winner_team = standings[0].get("Equipe", "-")
 		Database.record_gp_winner(Database.current_gp - 1, winner_name, winner_team)
 
-	# Atualizações de Moral, Respeito e Teto de Gastos das equipes
 	Database.process_post_race_morale_and_respect(standings)
 	Database.process_ai_team_upgrades()
 	

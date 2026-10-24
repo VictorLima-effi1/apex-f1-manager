@@ -13,14 +13,14 @@ var is_race_running: bool = false
 var is_race_finished: bool = false
 
 # --- EVOLUÇÃO DA PISTA (EMBORRACHAMENTO) ---
-var track_grip_bonus: float = 0.0 
+var track_grip: float = 0.0 
 var quali_total_elapsed_time: float = 0.0 
 
 # --- SISTEMA DE CLIMA DINÂMICO E GRADUAL ---
 var is_wet_race: bool = false
 var weather_state: String = "☀️ Ensolarado"
-var water_level: float = 0.0 
-var rain_intensity: float = 0.0 
+var water_level: float = 0.0     # <--- Representa a umidade/água na pista (0 a 100%)
+var rain_intensity: float = 0.0  
 var weather_forecast: String = "☀️ Tempo Estável"
 var forecast_laps_left: int = 0
 var pending_weather_change: String = "NONE"
@@ -83,7 +83,7 @@ func setup_race(selected_track: Dictionary) -> void:
 	quali_phase = "Q1"
 	quali_time_elapsed = 0.0
 	quali_total_elapsed_time = 0.0
-	track_grip_bonus = 0.0
+	track_grip = 0.0
 	quali_checker_flag = false
 	safety_car_status = "NONE"
 	safety_car_laps_left = 0
@@ -163,10 +163,13 @@ func _reset_session_sectors_for_race() -> void:
 		d["best_personal_sectors"] = {"s1": 999.0, "s2": 999.0, "s3": 999.0}
 		d["sector_colors"] = {"s1": "⚪", "s2": "⚪", "s3": "⚪"}
 
+# --- ORDEM CORRETA DE PNEUS CONFORME A UMIDADE ---
 func _get_ideal_compound_for_water(w_level: float) -> String:
-	if w_level > 55.0: return "Wet"
-	elif w_level > 15.0: return "Inter"
-	return "Soft"
+	if w_level >= 50.0:
+		return "Wet"     # >= 50%: Wet é o melhor pneu
+	elif w_level >= 16.0:
+		return "Inter"   # 16 - 49%: Intermediário é o melhor pneu
+	return "Soft"        # 0 - 15%: Slicks são os melhores pneus
 
 func _calculate_tire_lap_delta(compound: String, stint_lap: int) -> float:
 	var lap = float(clamp(stint_lap, 1, 60))
@@ -312,6 +315,8 @@ func _advance_quali_session() -> void:
 		quali_phase = "FINISHED"
 		race_drivers = full_grid.duplicate()
 		_reset_session_sectors_for_race()
+		# --- ZERA A ADERÊNCIA PARA O INÍCIO DA CORRIDA ---
+		track_grip = 0.0
 		race_logs.append("🏁 QUALIFICAÇÃO CONCLUÍDA! Grid de largada pronto.")
 
 func _compare_lap_times(time_a: float, time_b: float, name_a: String, name_b: String) -> bool:
@@ -359,7 +364,6 @@ func process_lap() -> Dictionary:
 	var accident_this_lap = false
 	var accident_sector = 0
 	var base_track_lap = _get_base_track_lap_time()
-	var grip_reduction = (track_grip_bonus * 0.0008) * base_track_lap
 
 	for d in race_drivers:
 		if d["Status"] != "Na Pista":
@@ -436,7 +440,11 @@ func process_lap() -> Dictionary:
 				pit_error_msg = " ⚠️ ERRO NO PIT STOP (+%ss)" % str(snapped(extra_time, 0.1))
 				
 			var total_pit_time_loss = track_pit_lane_loss + base_stop_duration
-			var pit_lap_base = base_track_lap - grip_reduction + _calculate_tire_lap_delta(target_compound, 1)
+			
+			# Penalidades de aderência e chuva aplicadas no pit lap base
+			var grip_time_penalty_pit = (1.0 - (track_grip / 100.0)) * 2.5 
+			var rain_time_penalty_pit = (water_level / 100.0) * 5.0 
+			var pit_lap_base = base_track_lap + grip_time_penalty_pit + rain_time_penalty_pit + _calculate_tire_lap_delta(target_compound, 1)
 			var lap_time = pit_lap_base + total_pit_time_loss + randf_range(-0.2, 0.2)
 			
 			d["TempoTotal"] += lap_time
@@ -468,18 +476,25 @@ func process_lap() -> Dictionary:
 			var driver_time_bonus = (driver_skill - 50.0) * 0.013
 			
 			var tire_delta = _calculate_tire_lap_delta(compound, stint_lap)
-			var compound_weather_penalty = 0.0
 			
-			if water_level > 55.0 and compound != "Wet":
+			# --- PARTE D: IMPACTO NO TEMPO DE VOLTA (ADERÊNCIA E CHUVA) ---
+			# Diferença de 2 - 3 segundos entre aderência 0 (barra vazia) e 100 (barra cheia)
+			var grip_time_penalty = (1.0 - (track_grip / 100.0)) * 2.5 
+			
+			# Diferença de 4 - 6 segundos entre 0% de chuva e 100% de chuva
+			var rain_time_penalty = (water_level / 100.0) * 5.0 
+			
+			var compound_weather_penalty = 0.0
+			if water_level >= 50.0 and compound != "Wet":
 				compound_weather_penalty += 12.0
-			elif water_level > 15.0 and water_level <= 55.0 and compound != "Inter":
+			elif water_level >= 16.0 and water_level < 50.0 and compound != "Inter":
 				compound_weather_penalty += 6.0
-			elif water_level <= 15.0 and compound in ["Wet", "Inter"]:
+			elif water_level < 16.0 and compound in ["Wet", "Inter"]:
 				compound_weather_penalty += 8.0
 				
 			var morale_time_modifier = (50.0 - float(d.get("Moral", 75))) * 0.003
 			
-			var lap_time = base_track_lap - grip_reduction - car_time_bonus - driver_time_bonus + tire_delta + compound_weather_penalty + morale_time_modifier + randf_range(-0.10, 0.10)
+			var lap_time = base_track_lap - car_time_bonus - driver_time_bonus + tire_delta + grip_time_penalty + rain_time_penalty + compound_weather_penalty + morale_time_modifier + randf_range(-0.10, 0.10)
 			
 			if current_lap == 1:
 				lap_time = base_track_lap + randf_range(-0.20, 0.20)
@@ -631,11 +646,7 @@ func process_quali_tick(delta_sec: float = 1.0) -> Dictionary:
 			_process_weather_and_water_accumulation(race_logs, simulated_laps_passed)
 			quali_weather_timer = 0.0
 		
-		var old_grip = track_grip_bonus
-		track_grip_bonus = floor(quali_total_elapsed_time / 120.0) * 1.0
-		
-		if track_grip_bonus > old_grip and int(track_grip_bonus) % 5 == 0 and track_grip_bonus > 0:
-			race_logs.append("🏎️ EVOLUÇÃO DE PISTA: Aderência aumentou em " + str(int(track_grip_bonus)) + "% (" + quali_phase + ").")
+		# Mantém a aderência sincronizada no treino classificatório
 		
 		if quali_time_elapsed >= duration_limit:
 			quali_checker_flag = true
@@ -662,8 +673,8 @@ func process_quali_tick(delta_sec: float = 1.0) -> Dictionary:
 						var compound_delta = _calculate_tire_lap_delta(compound, 1)
 						var base_lap = _get_base_track_lap_time()
 						
-						var grip_reduction = (track_grip_bonus * 0.0008) * base_lap
-						var calculated_hot_time = base_lap - grip_reduction + compound_delta - ((car_power - 50.0) * 0.060) - ((driver_skill - 50.0) * 0.013) + randf_range(-0.25, 0.25)
+						var grip_reduction_quali = (1.0 - (track_grip / 100.0)) * 1.5
+						var calculated_hot_time = base_lap + grip_reduction_quali + compound_delta - ((car_power - 50.0) * 0.060) - ((driver_skill - 50.0) * 0.013) + randf_range(-0.25, 0.25)
 						
 						d["pending_lap_time"] = calculated_hot_time
 						d["quali_state"] = "Em pista"
@@ -734,47 +745,58 @@ func _process_weather_and_water_accumulation(lap_events: Array, elapsed_time_fac
 					rain_intensity = randf_range(1.0, 1.5)
 					weather_state = "🌧️ Chuva Leve"
 					weather_forecast = "🌧️ Chuva em Andamento"
-					lap_events.append("🌧️ COMEÇOU A CHOVER! A pista começou a molhar gradualmente.")
+					lap_events.append("🌧️ COMEÇOU A CHOVER! A umidade começou a subir e a pista perde aderência.")
 				"RAIN_HEAVY":
 					rain_intensity = randf_range(2.0, 3.0)
 					weather_state = "⛈️ Chuva Forte"
 					weather_forecast = "⛈️ Temporal Instável"
-					lap_events.append("⛈️ A CHUVA APERTOU! A intensidade aumentou para forte.")
+					lap_events.append("⛈️ A CHUVA APERTOU! Intensidade máxima na pista.")
 				"RAIN_STOP":
 					rain_intensity = 0.0
-					weather_state = "☁️ Nublado (Sem Chuva)"
+					weather_state = "☁️ Nublado"
 					weather_forecast = "☀️ Pista Secando"
-					lap_events.append("☁️ A CHUVA PAROU! A pista começou o processo de secagem.")
+					lap_events.append("☁️ A CHUVA PAROU! A pista começou a secar.")
 			pending_weather_change = "NONE"
 	else:
 		var chance = track.get("ChanceChuva", 0.20)
 		if rain_intensity == 0.0 and randf() < (chance * 0.005 * elapsed_time_factor):
 			forecast_laps_left = randi_range(3, 6)
 			pending_weather_change = "RAIN_START"
-			weather_forecast = "🌧️ Chuva Prevista em breve"
+			weather_forecast = "🌧️ Chuva Prevista"
 			lap_events.append("📡 RADAR METEOROLÓGICO: Nuvens de chuva se aproximando do circuito!")
 		elif rain_intensity > 0.0 and randf() < (0.01 * elapsed_time_factor):
 			forecast_laps_left = randi_range(3, 5)
 			if rain_intensity < 2.0 and randf() < 0.4:
 				pending_weather_change = "RAIN_HEAVY"
-				weather_forecast = "⛈️ Tempestade Prevista em breve"
+				weather_forecast = "⛈️ Tempestade Prevista"
 				lap_events.append("📡 RADAR METEOROLÓGICO: Tempestade se aproximando!")
 			else:
 				pending_weather_change = "RAIN_STOP"
-				weather_forecast = "☀️ Estiagem Prevista em breve"
-				lap_events.append("📡 RADAR METEOROLÓGICO: A chuva deve parar em instantes.")
+				weather_forecast = "☀️ Estiagem Prevista"
+				lap_events.append("📡 RADAR METEOROLÓGICO: A chuva deve parar em breve.")
 
+	# Atualização gradual da barra de Umidade/Chuva (water_level)
 	if rain_intensity > 0.0:
-		var accumulation = rain_intensity * randf_range(0.2, 0.6) * elapsed_time_factor
+		var accumulation = rain_intensity * randf_range(2.0, 5.0) * elapsed_time_factor
 		water_level = min(100.0, water_level + accumulation)
 	else:
 		if water_level > 0.0:
-			var drying = randf_range(0.2, 0.5) * elapsed_time_factor
+			var drying = randf_range(1.5, 4.0) * elapsed_time_factor
 			water_level = max(0.0, water_level - drying)
-			if water_level == 0.0:
+			if water_level == 0.0 and weather_state != "☀️ Ensolarado":
 				weather_state = "☀️ Ensolarado"
 				weather_forecast = "☀️ Tempo Limpo"
-				lap_events.append("☀️ A PISTA SECOU COMPLETAMENTE! (0% de água)")
+				lap_events.append("☀️ A PISTA SECOU COMPLETAMENTE!")
+
+	# Atualização gradual da barra de Aderência (track_grip) conforme as regras exigidas:
+	if rain_intensity > 0.0 or water_level > 15.0:
+		# Começou a chover: diminui gradualmente até zerar
+		var loss = randf_range(4.0, 9.0) * elapsed_time_factor
+		track_grip = max(0.0, track_grip - loss)
+	else:
+		# Sol ou nublado (sem chuva): aumenta gradualmente até 100%
+		var gain = randf_range(1.5, 3.5) * elapsed_time_factor
+		track_grip = min(100.0, track_grip + gain)
 
 func resolve_red_flag_restart(_ignored_user_choice: String = "") -> void:
 	pending_red_flag_modal = false
