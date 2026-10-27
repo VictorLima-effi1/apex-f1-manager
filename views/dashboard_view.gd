@@ -4,6 +4,9 @@ var time_passed: float = 0.0
 var sim_modal: Control = null
 
 func _ready() -> void:
+	if Database.has_signal("language_changed"):
+		Database.language_changed.connect(build_ui)
+
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	resized.connect(_on_resized)
@@ -56,7 +59,7 @@ func build_ui() -> void:
 	
 	# Header do Dashboard
 	var title_lbl = Label.new()
-	title_lbl.text = "DASHBOARD DA TEMPORADA " + str(Database.current_year)
+	title_lbl.text = Database.tr_text("DASHBOARD_TITLE") % Database.current_year
 	title_lbl.position = Vector2(10, 5)
 	title_lbl.add_theme_font_size_override("font_size", 22)
 	title_lbl.add_theme_color_override("font_color", Color("#ef4444"))
@@ -76,9 +79,9 @@ func build_ui() -> void:
 	stats_hbox.position = Vector2(10, 38)
 	stats_hbox.add_theme_constant_override("separation", 10)
 	
-	stats_hbox.add_child(_create_stat_card("ETAPA ATUAL", "GP " + str(gp_num) + " - " + str(track_curr.get("Nome", ""))))
-	stats_hbox.add_child(_create_stat_card("EQUIPES", str(Database.teams.size()) + " Equipes"))
-	stats_hbox.add_child(_create_stat_card("PILOTOS", str(active_drivers.size()) + " Pilotos"))
+	stats_hbox.add_child(_create_stat_card(Database.tr_text("CARD_CURRENT_GP"), "GP " + str(gp_num) + " - " + str(track_curr.get("Nome", ""))))
+	stats_hbox.add_child(_create_stat_card(Database.tr_text("CARD_TEAMS"), Database.tr_text("LABEL_TEAMS_COUNT") % Database.teams.size()))
+	stats_hbox.add_child(_create_stat_card(Database.tr_text("CARD_DRIVERS"), Database.tr_text("LABEL_DRIVERS_COUNT") % active_drivers.size()))
 	canvas.add_child(stats_hbox)
 	
 	# Cálculo das 4 Colunas Proporcionais
@@ -100,15 +103,15 @@ func build_ui() -> void:
 	var col1_h2 = avail_height * 0.25
 	var col1_h3 = avail_height * 0.28
 
-	var drivers_win = _create_resizable_window("drivers_panel", "🏆 CAMPEONATO DE PILOTOS", canvas)
+	var drivers_win = _create_resizable_window("drivers_panel", Database.tr_text("PANEL_DRIVERS_CHAMP"), canvas)
 	_build_drivers_content(drivers_win.get_content_node(), active_drivers)
 	_apply_fixed_transform(drivers_win, Vector2(col1_x, margin_y), Vector2(col_w, col1_h1))
 
-	var news_win = _create_resizable_window("news_panel", "📰 NOTÍCIAS DO PADDOCK E IMPRENSA", canvas)
+	var news_win = _create_resizable_window("news_panel", Database.tr_text("PANEL_PADDOCK_NEWS"), canvas)
 	_build_news_content(news_win.get_content_node(), str(track_curr.get("Nome", "")), gp_num)
 	_apply_fixed_transform(news_win, Vector2(col1_x, margin_y + col1_h1 + gap_y), Vector2(col_w, col1_h2))
 
-	var drivers_evo_win = _create_resizable_window("drivers_evolution_panel", "📈 EVOLUÇÃO DE PILOTOS NA TEMPORADA", canvas)
+	var drivers_evo_win = _create_resizable_window("drivers_evolution_panel", Database.tr_text("PANEL_DRIVERS_EVO"), canvas)
 	_build_drivers_evolution_content(drivers_evo_win.get_content_node())
 	_apply_fixed_transform(drivers_evo_win, Vector2(col1_x, margin_y + col1_h1 + col1_h2 + (gap_y * 2.0)), Vector2(col_w, col1_h3))
 
@@ -118,15 +121,15 @@ func build_ui() -> void:
 	var col2_h2 = avail_height * 0.30
 	var col2_h3 = avail_height * 0.30
 
-	var teams_win = _create_resizable_window("teams_panel", "🏎️ CONSTRUTORES", canvas)
+	var teams_win = _create_resizable_window("teams_panel", Database.tr_text("TITLE_CONSTRUCTORS"), canvas)
 	_build_teams_content(teams_win.get_content_node(), active_drivers)
 	_apply_fixed_transform(teams_win, Vector2(col2_x, margin_y), Vector2(col_w, col2_h1))
 
-	var tech_win = _create_resizable_window("tech_power_panel", "📈 HIERARQUIA TÉCNICA (POWER INDEX)", canvas)
+	var tech_win = _create_resizable_window("tech_power_panel", Database.tr_text("PANEL_TECH_POWER"), canvas)
 	_build_tech_power_content(tech_win.get_content_node())
 	_apply_fixed_transform(tech_win, Vector2(col2_x, margin_y + col2_h1 + gap_y), Vector2(col_w, col2_h2))
 
-	var stats_season_win = _create_resizable_window("stats_season_panel", "📊 ESTATÍSTICAS DA TEMPORADA", canvas)
+	var stats_season_win = _create_resizable_window("stats_season_panel", Database.tr_text("PANEL_SEASON_STATS"), canvas)
 	_build_season_stats_content(stats_season_win.get_content_node())
 	_apply_fixed_transform(stats_season_win, Vector2(col2_x, margin_y + col2_h1 + col2_h2 + (gap_y * 2.0)), Vector2(col_w, col2_h3))
 
@@ -134,7 +137,7 @@ func build_ui() -> void:
 	# 1. Mercado & Contratos (Ocupa a coluna inteira para caber toda a lista)
 	var col3_h1 = avail_height * 0.98
 
-	var market_win = _create_resizable_window("market_panel", "🔄 MERCADO & CONTRATOS", canvas)
+	var market_win = _create_resizable_window("market_panel", Database.tr_text("PANEL_MARKET"), canvas)
 	_build_market_content(market_win.get_content_node())
 	_apply_fixed_transform(market_win, Vector2(col3_x, margin_y), Vector2(col_w, col3_h1))
 
@@ -144,15 +147,15 @@ func build_ui() -> void:
 	var col4_h2 = avail_height * 0.35
 	var col4_h3 = avail_height * 0.33
 
-	var cal_win = _create_resizable_window("cal_panel", "📅 ETAPAS PRÓXIMAS", canvas)
+	var cal_win = _create_resizable_window("cal_panel", Database.tr_text("PANEL_UPCOMING_GPS"), canvas)
 	_build_calendar_content(cal_win.get_content_node(), track_idx)
 	_apply_fixed_transform(cal_win, Vector2(col4_x, margin_y), Vector2(col_w, col4_h1))
 
-	var track_win = _create_resizable_window("track_info_panel", "🔍 INFO DO PRÓXIMO GP", canvas)
+	var track_win = _create_resizable_window("track_info_panel", Database.tr_text("PANEL_NEXT_GP_INFO"), canvas)
 	_build_track_info_content(track_win.get_content_node(), track_curr)
 	_apply_fixed_transform(track_win, Vector2(col4_x, margin_y + col4_h1 + gap_y), Vector2(col_w, col4_h2))
 
-	var fast_sim_win = _create_resizable_window("fast_sim_panel", "⚡ SIMULAÇÃO ACELERADA", canvas)
+	var fast_sim_win = _create_resizable_window("fast_sim_panel", Database.tr_text("PANEL_FAST_SIM"), canvas)
 	_build_fast_sim_content(fast_sim_win.get_content_node())
 	_apply_fixed_transform(fast_sim_win, Vector2(col4_x, margin_y + col4_h1 + col4_h2 + (gap_y * 2.0)), Vector2(col_w, col4_h3))
 
@@ -452,13 +455,13 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 6)
 	
-	_add_grid_header(grid, "POS", 30)
-	_add_grid_header(grid, "PILOTO", 120)
-	_add_grid_header(grid, "EQUIPE", 100)
-	_add_grid_header(grid, "PTS", 35)
-	_add_grid_header(grid, "VIT", 30)
-	_add_grid_header(grid, "POD", 30)
-	_add_grid_header(grid, "DNF", 30)
+	_add_grid_header(grid, Database.tr_text("COL_POS"), 30)
+	_add_grid_header(grid, Database.tr_text("COL_DRIVER"), 120)
+	_add_grid_header(grid, Database.tr_text("COL_TEAM"), 100)
+	_add_grid_header(grid, Database.tr_text("COL_PTS"), 35)
+	_add_grid_header(grid, Database.tr_text("COL_WINS"), 30)
+	_add_grid_header(grid, Database.tr_text("COL_PODIUMS"), 30)
+	_add_grid_header(grid, Database.tr_text("COL_DNFS"), 30)
 	
 	# Garante a filtragem rigorosa de apenas 1 entrada por piloto na tabela
 	var raw_list = Database.get_season_drivers() if Database.has_method("get_season_drivers") else active_drivers
@@ -489,9 +492,10 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 		var team_display = str(d.get("Equipe", ""))
 		var team_color = Color("#94a3b8")
 		if team_display == "Free Agent":
-			team_display = "Sem Equipe"
+			team_display = Database.tr_text("STATUS_FREE_AGENT_FULL")
 			team_color = Color("#f59e0b")
 		elif team_display == "Aposentado":
+			team_display = Database.tr_text("STATUS_RETIRED")
 			team_color = Color("#64748b")
 			
 		_add_cell(grid, str(pos_idx) + "º")
@@ -608,10 +612,10 @@ func _build_market_content(parent: Control) -> void:
 	grid_c.add_theme_constant_override("v_separation", 4)
 	scroll_c.add_child(grid_c)
 
-	_add_micro_header(grid_c, "PILOTO", 85)
-	_add_micro_header(grid_c, "EQUIPE", 80)
-	_add_micro_header(grid_c, "CONTRATO", 55)
-	_add_micro_header(grid_c, "MORAL", 45)
+	_add_micro_header(grid_c, Database.tr_text("COL_DRIVER"), 85)
+	_add_micro_header(grid_c, Database.tr_text("COL_TEAM"), 80)
+	_add_micro_header(grid_c, Database.tr_text("COL_CONTRACT"), 55)
+	_add_micro_header(grid_c, Database.tr_text("COL_MORALE"), 45)
 
 	# --- CORREÇÃO: Utiliza a lista ordenada com prioridades ---
 	var sorted_drivers = _get_sorted_drivers_for_market_panel()
@@ -623,9 +627,10 @@ func _build_market_content(parent: Control) -> void:
 		
 		var years_str = "-"
 		if team_str == "Free Agent":
-			years_str = "Livre"
+			years_str = Database.tr_text("STATUS_FREE")
 		elif team_str != "Aposentado":
-			years_str = str(c_years) + (" ano" if c_years == 1 else " anos")
+			var year_unit = Database.tr_text("YEAR_SINGLE") if c_years == 1 else Database.tr_text("YEAR_PLURAL")
+			years_str = str(c_years) + " " + year_unit
 
 		var morale_val = int(d.get("Moral", 75))
 

@@ -25,8 +25,32 @@ func _ready() -> void:
 	
 	var start_view = Database.current_view if Database.current_view != "" else "dashboard"
 	switch_view(start_view)
+	
+	if Database.has_signal("language_changed"):
+		Database.language_changed.connect(setup_layout)
+	
+	Database.language_changed.connect(_on_language_changed)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	setup_layout()
+	switch_view("dashboard")
+
+func _on_language_changed() -> void:
+	# Reconstruir ou atualizar os textos da barra lateral
+	for item in nav_buttons.keys():
+		var btn = nav_buttons[item]
+		match item:
+			"dashboard": btn.text = "  " + Database.tr_text("NAV_DASHBOARD")
+			"race": btn.text = "  " + Database.tr_text("NAV_RACE")
+			"dev": btn.text = "  " + Database.tr_text("NAV_DEV")
+			"market": btn.text = "  " + Database.tr_text("NAV_MARKET")
+			"editor": btn.text = "  " + Database.tr_text("NAV_EDITOR")
+			"history": btn.text = "  " + Database.tr_text("NAV_HISTORY")
 
 func setup_layout() -> void:
+	# Limpa filhos anteriores da sidebar ao trocar o idioma
+	for c in get_children():
+		c.queue_free()
+
 	var main_hbox = HBoxContainer.new()
 	main_hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	main_hbox.add_theme_constant_override("separation", 0)
@@ -54,12 +78,12 @@ func setup_layout() -> void:
 	sidebar_vbox.add_child(logo_texture)
 	
 	var nav_items = [
-		{"label": "📊 Dashboard", "view": "dashboard"},
-		{"label": "🏎️ Corrida (Race)", "view": "race"},
-		{"label": "🏭 Desenvolvimento", "view": "dev"},
-		{"label": "💼 Mercado & Pilotos", "view": "market"},
-		{"label": "🛠️ Editor de Dados", "view": "editor"},
-		{"label": "🏆 Histórico & Hall", "view": "history"}
+		{"label": Database.tr_text("NAV_DASHBOARD"), "view": "dashboard"},
+		{"label": Database.tr_text("NAV_RACE"), "view": "race"},
+		{"label": Database.tr_text("NAV_DEV"), "view": "dev"},
+		{"label": Database.tr_text("NAV_MARKET"), "view": "market"},
+		{"label": Database.tr_text("NAV_EDITOR"), "view": "editor"},
+		{"label": Database.tr_text("NAV_HISTORY"), "view": "history"}
 	]
 	
 	for item in nav_items:
@@ -75,7 +99,7 @@ func setup_layout() -> void:
 		nav_buttons[view_target] = btn
 		btn.pressed.connect(func(): switch_view(view_target))
 		sidebar_vbox.add_child(btn)
-
+	
 	sidebar_vbox.add_child(HSeparator.new())
 
 	# Botão Salvar Jogo

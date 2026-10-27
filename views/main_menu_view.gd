@@ -6,6 +6,12 @@ var subtitle_node: Label
 var button_container: VBoxContainer
 var active_modal: Control = null
 
+# Referências para tradução dinâmica
+var btn_new: Button
+var btn_load: Button
+var btn_opts: Button
+var btn_exit: Button
+
 # Variaveis para controle dos submenus do Modo Manager
 var input_team_name: LineEdit = null
 var input_boss_name: LineEdit = null
@@ -15,9 +21,14 @@ var team_option_button: OptionButton = null
 var team_info_container: VBoxContainer = null
 
 func _ready() -> void:
+	if Database.has_signal("language_changed"):
+		if not Database.language_changed.is_connected(_update_texts):
+			Database.language_changed.connect(_update_texts)
+	
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
+	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_apply_saved_settings()
 	build_ui()
 	_animate_menu_entrance()
@@ -106,7 +117,7 @@ func build_ui() -> void:
 	header_vbox.add_child(title_node)
 	
 	subtitle_node = Label.new()
-	subtitle_node.text = "SEASON MANAGEMENT SIMULATOR"
+	subtitle_node.text = Database.tr_text("MENU_SUBTITLE") if Database.has_method("tr_text") else "SEASON MANAGEMENT SIMULATOR"
 	subtitle_node.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle_node.add_theme_font_size_override("font_size", 10)
 	subtitle_node.add_theme_color_override("font_color", Color("#64748b"))
@@ -117,10 +128,16 @@ func build_ui() -> void:
 	button_container = VBoxContainer.new()
 	button_container.add_theme_constant_override("separation", 10)
 	
-	_create_styled_button("🚀  NOVO JOGO", _on_btn_new_game_pressed)
-	_create_styled_button("📂  CARREGAR JOGO", _on_load_game)
-	_create_styled_button("⚙️  OPÇÕES", _on_options)
-	_create_styled_button("❌  SAIR DO JOGO", _on_exit)
+	# Instancia e armazena a referência aos botões
+	var txt_new = Database.tr_text("MENU_NEW_GAME") if Database.has_method("tr_text") else "🚀 NOVO JOGO"
+	var txt_load = Database.tr_text("MENU_LOAD_GAME") if Database.has_method("tr_text") else "📂 CARREGAR JOGO"
+	var txt_opts = Database.tr_text("MENU_OPTIONS") if Database.has_method("tr_text") else "⚙️ OPÇÕES"
+	var txt_exit = Database.tr_text("MENU_EXIT") if Database.has_method("tr_text") else "❌ SAIR DO JOGO"
+	
+	btn_new = _create_styled_button(txt_new, _on_btn_new_game_pressed)
+	btn_load = _create_styled_button(txt_load, _on_load_game)
+	btn_opts = _create_styled_button(txt_opts, _on_options)
+	btn_exit = _create_styled_button(txt_exit, _on_exit)
 	
 	main_vbox.add_child(button_container)
 	margin.add_child(main_vbox)
@@ -135,7 +152,7 @@ func build_ui() -> void:
 	footer.add_theme_color_override("font_color", Color("#475569"))
 	add_child(footer)
 
-func _create_styled_button(text: String, callable: Callable) -> void:
+func _create_styled_button(text: String, callable: Callable) -> Button:
 	var btn = Button.new()
 	btn.text = text
 	btn.custom_minimum_size.y = 44
@@ -161,6 +178,23 @@ func _create_styled_button(text: String, callable: Callable) -> void:
 	
 	btn.pressed.connect(callable)
 	button_container.add_child(btn)
+	return btn
+
+# FUNÇÃO QUE ATUALIZA APENAS OS TEXTOS (SEGURO)
+func _update_texts() -> void:
+	if not Database.has_method("tr_text"):
+		return
+		
+	if is_instance_valid(subtitle_node):
+		subtitle_node.text = Database.tr_text("MENU_SUBTITLE")
+	if is_instance_valid(btn_new):
+		btn_new.text = Database.tr_text("MENU_NEW_GAME")
+	if is_instance_valid(btn_load):
+		btn_load.text = Database.tr_text("MENU_LOAD_GAME")
+	if is_instance_valid(btn_opts):
+		btn_opts.text = Database.tr_text("MENU_OPTIONS")
+	if is_instance_valid(btn_exit):
+		btn_exit.text = Database.tr_text("MENU_EXIT")
 
 func _animate_menu_entrance() -> void:
 	if not is_instance_valid(title_node) or not is_instance_valid(button_container):
@@ -323,7 +357,6 @@ func _show_mode_selection_modal() -> void:
 	center.add_child(card)
 
 # --- FLUXO DO MODO MANAGER ---
-
 func _show_manager_options_menu(parent_card: PanelContainer) -> void:
 	parent_card.custom_minimum_size = Vector2(750, 480)
 	for c in parent_card.get_children():
@@ -348,7 +381,6 @@ func _show_manager_options_menu(parent_card: PanelContainer) -> void:
 	var grid_opts = HBoxContainer.new()
 	grid_opts.add_theme_constant_override("separation", 20)
 
-	# Card 1: Criar Equipe
 	var card_create = PanelContainer.new()
 	card_create.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var st_c = StyleBoxFlat.new()
@@ -388,7 +420,6 @@ func _show_manager_options_menu(parent_card: PanelContainer) -> void:
 	card_create.add_child(m_c)
 	grid_opts.add_child(card_create)
 
-	# Card 2: Equipe Existente
 	var card_exist = PanelContainer.new()
 	card_exist.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var st_e = StyleBoxFlat.new()
@@ -440,7 +471,6 @@ func _show_manager_options_menu(parent_card: PanelContainer) -> void:
 	margin.add_child(vbox)
 	parent_card.add_child(margin)
 
-# --- FORMULÁRIO: CRIAR EQUIPE ---
 func _show_create_team_form(parent_card: PanelContainer) -> void:
 	parent_card.custom_minimum_size = Vector2(850, 560)
 	for c in parent_card.get_children():
@@ -549,9 +579,7 @@ func _show_create_team_form(parent_card: PanelContainer) -> void:
 	btn_confirm.text = "CONFIRMAR CRIAÇÃO"
 	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_confirm.custom_minimum_size.y = 44
-	btn_confirm.pressed.connect(func():
-		_show_custom_modal("MODO MANAGER", "Modo em desenvolvimento")
-	)
+	btn_confirm.pressed.connect(func(): _show_custom_modal("MODO MANAGER", "Modo em desenvolvimento"))
 	btn_hbox.add_child(btn_confirm)
 
 	var btn_back = Button.new()
@@ -562,11 +590,9 @@ func _show_create_team_form(parent_card: PanelContainer) -> void:
 	btn_hbox.add_child(btn_back)
 
 	vbox.add_child(btn_hbox)
-
 	margin.add_child(vbox)
 	parent_card.add_child(margin)
 
-# --- VISUALIZADOR COM OPTIONBUTTON CUSTOMIZADO ---
 func _show_select_existing_team_form(parent_card: PanelContainer) -> void:
 	parent_card.custom_minimum_size = Vector2(850, 560)
 	for c in parent_card.get_children():
@@ -588,7 +614,6 @@ func _show_select_existing_team_form(parent_card: PanelContainer) -> void:
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
 
-	# Seletor com Estilização Customizada
 	var sel_hbox = HBoxContainer.new()
 	var l_sel = Label.new()
 	l_sel.text = "Escolha a Equipe: "
@@ -619,9 +644,7 @@ func _show_select_existing_team_form(parent_card: PanelContainer) -> void:
 	btn_confirm.text = "SELECIONAR ESTA EQUIPE"
 	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_confirm.custom_minimum_size.y = 44
-	btn_confirm.pressed.connect(func():
-		_show_custom_modal("MODO MANAGER", "Modo em desenvolvimento")
-	)
+	btn_confirm.pressed.connect(func(): _show_custom_modal("MODO MANAGER", "Modo em desenvolvimento"))
 	btn_hbox.add_child(btn_confirm)
 
 	var btn_back = Button.new()
@@ -632,15 +655,13 @@ func _show_select_existing_team_form(parent_card: PanelContainer) -> void:
 	btn_hbox.add_child(btn_back)
 
 	vbox.add_child(btn_hbox)
-
 	margin.add_child(vbox)
 	parent_card.add_child(margin)
 
-# Função para estilizar o OptionButton e seu Menu Popup (Corrigida para Godot 4)
 func _apply_custom_option_button_styles(opt_btn: OptionButton) -> void:
 	var st_norm = StyleBoxFlat.new()
 	st_norm.bg_color = Color(0.09, 0.12, 0.18, 1.0)
-	st_norm.set_border_width_all(1) # CORRIGIDO: usa a função set_border_width_all
+	st_norm.set_border_width_all(1)
 	st_norm.border_color = Color(0.2, 0.25, 0.35, 1.0)
 	st_norm.set_corner_radius_all(6)
 
@@ -659,7 +680,7 @@ func _apply_custom_option_button_styles(opt_btn: OptionButton) -> void:
 	var popup = opt_btn.get_popup()
 	var popup_style = StyleBoxFlat.new()
 	popup_style.bg_color = Color(0.08, 0.10, 0.15, 0.98)
-	popup_style.set_border_width_all(1) # CORRIGIDO: usa a função set_border_width_all
+	popup_style.set_border_width_all(1)
 	popup_style.border_color = Color("#ef4444")
 	popup_style.set_corner_radius_all(6)
 	popup_style.set_content_margin_all(8)
@@ -676,25 +697,20 @@ func _populate_existing_teams() -> void:
 		
 	team_option_button.clear()
 	var teams = Database.teams if "teams" in Database else []
-	
 	for i in range(teams.size()):
 		var t_name = teams[i].get("Nome", teams[i].get("nome", "Equipe " + str(i + 1)))
 		team_option_button.add_item(t_name, i)
-		
 	if teams.size() > 0:
 		_on_team_dropdown_selected(0)
 
 func _on_team_dropdown_selected(index: int) -> void:
 	if not is_instance_valid(team_info_container):
 		return
-
 	for c in team_info_container.get_children():
 		c.queue_free()
-
 	var teams = Database.teams if "teams" in Database else []
 	if index < 0 or index >= teams.size():
 		return
-		
 	var team = teams[index]
 	var team_name = team.get("Nome", team.get("nome", "-"))
 
@@ -702,7 +718,6 @@ func _on_team_dropdown_selected(index: int) -> void:
 	content_hbox.add_theme_constant_override("separation", 16)
 	content_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
-	# COLUNA ESQUERDA
 	var left_vbox = VBoxContainer.new()
 	left_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_vbox.add_theme_constant_override("separation", 12)
@@ -778,7 +793,6 @@ func _on_team_dropdown_selected(index: int) -> void:
 
 	content_hbox.add_child(left_vbox)
 
-	# COLUNA DIREITA
 	var right_vbox = VBoxContainer.new()
 	right_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
@@ -837,7 +851,6 @@ func _on_team_dropdown_selected(index: int) -> void:
 			l_ovr.add_theme_font_size_override("font_size", 13)
 			l_ovr.add_theme_color_override("font_color", Color("#fbbf24"))
 			d_box.add_child(l_ovr)
-
 			vb_d.add_child(d_box)
 
 	m_d.add_child(vb_d)
@@ -850,14 +863,12 @@ func _on_team_dropdown_selected(index: int) -> void:
 func _create_attribute_bar(label_text: String, value: int, suffix: String = "") -> HBoxContainer:
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 8)
-
 	var lbl = Label.new()
 	lbl.text = label_text
 	lbl.custom_minimum_size.x = 110
 	lbl.add_theme_font_size_override("font_size", 12)
 	lbl.add_theme_color_override("font_color", Color("#cbd5e1"))
 	hbox.add_child(lbl)
-
 	var pbar = ProgressBar.new()
 	pbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pbar.custom_minimum_size.y = 16
@@ -866,7 +877,6 @@ func _create_attribute_bar(label_text: String, value: int, suffix: String = "") 
 	pbar.value = value
 	pbar.show_percentage = false
 	hbox.add_child(pbar)
-
 	var lbl_val = Label.new()
 	lbl_val.text = str(value) + suffix
 	lbl_val.custom_minimum_size.x = 35
@@ -874,13 +884,11 @@ func _create_attribute_bar(label_text: String, value: int, suffix: String = "") 
 	lbl_val.add_theme_font_size_override("font_size", 12)
 	lbl_val.add_theme_color_override("font_color", Color("#ffffff"))
 	hbox.add_child(lbl_val)
-
 	return hbox
 
 func _start_observer_mode() -> void:
 	if Database.has_method("reset_database"):
 		Database.reset_database()
-	
 	Database.current_view = "dashboard"
 	get_tree().change_scene_to_file("res://main.tscn")
 
@@ -897,6 +905,10 @@ func _on_load_game() -> void:
 func _on_options() -> void:
 	var options_script = preload("res://views/options_view.gd")
 	var options_node = options_script.new()
+	
+	# o menu principal atualiza imediatamente todos os textos para o idioma salvo!
+	options_node.tree_exited.connect(_update_texts)
+	
 	add_child(options_node)
 
 func _on_exit() -> void:
@@ -905,7 +917,6 @@ func _on_exit() -> void:
 func _show_exit_confirmation_modal() -> void:
 	if is_instance_valid(active_modal):
 		active_modal.queue_free()
-		
 	active_modal = ColorRect.new()
 	active_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
 	active_modal.color = Color(0, 0, 0, 0.8)
@@ -917,7 +928,6 @@ func _show_exit_confirmation_modal() -> void:
 	
 	var card = PanelContainer.new()
 	card.custom_minimum_size = Vector2(400, 200)
-	
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.09, 0.11, 0.16, 0.98)
 	style.border_width_top = 3
@@ -958,7 +968,6 @@ func _show_exit_confirmation_modal() -> void:
 	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_confirm.custom_minimum_size.y = 38
 	btn_confirm.add_theme_font_size_override("font_size", 12)
-	
 	var style_confirm = StyleBoxFlat.new()
 	style_confirm.bg_color = Color(0.8, 0.15, 0.15, 1.0)
 	style_confirm.set_corner_radius_all(4)
@@ -970,7 +979,6 @@ func _show_exit_confirmation_modal() -> void:
 	btn_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_cancel.custom_minimum_size.y = 38
 	btn_cancel.add_theme_font_size_override("font_size", 12)
-	
 	var style_cancel = StyleBoxFlat.new()
 	style_cancel.bg_color = Color(0.18, 0.22, 0.30, 1.0)
 	style_cancel.set_corner_radius_all(4)
@@ -984,28 +992,22 @@ func _show_exit_confirmation_modal() -> void:
 	btn_hbox.add_child(btn_confirm)
 	btn_hbox.add_child(btn_cancel)
 	vbox.add_child(btn_hbox)
-	
 	margin.add_child(vbox)
 	card.add_child(margin)
 	center.add_child(card)
 
-# Modal Genérico
 func _show_custom_modal(title_text: String, message_text: String) -> void:
 	if is_instance_valid(active_modal):
 		active_modal.queue_free()
-		
 	active_modal = ColorRect.new()
 	active_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
 	active_modal.color = Color(0, 0, 0, 0.75)
 	add_child(active_modal)
-	
 	var center = CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	active_modal.add_child(center)
-	
 	var card = PanelContainer.new()
 	card.custom_minimum_size = Vector2(400, 200)
-	
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.09, 0.11, 0.16, 0.98)
 	style.border_width_top = 3
@@ -1013,23 +1015,19 @@ func _show_custom_modal(title_text: String, message_text: String) -> void:
 	style.set_corner_radius_all(6)
 	style.shadow_size = 20
 	card.add_theme_stylebox_override("panel", style)
-	
 	var margin = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 20)
 	margin.add_theme_constant_override("margin_right", 20)
 	margin.add_theme_constant_override("margin_top", 20)
 	margin.add_theme_constant_override("margin_bottom", 20)
-	
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 16)
-	
 	var lbl_title = Label.new()
 	lbl_title.text = title_text
 	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_title.add_theme_font_size_override("font_size", 18)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
-	
 	var lbl_msg = Label.new()
 	lbl_msg.text = message_text
 	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1037,24 +1035,20 @@ func _show_custom_modal(title_text: String, message_text: String) -> void:
 	lbl_msg.add_theme_font_size_override("font_size", 13)
 	lbl_msg.add_theme_color_override("font_color", Color("#cbd5e1"))
 	vbox.add_child(lbl_msg)
-	
 	var btn_close = Button.new()
 	btn_close.text = "ENTENDIDO"
 	btn_close.custom_minimum_size.y = 38
 	btn_close.add_theme_font_size_override("font_size", 12)
-	
 	var btn_style = StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.18, 0.22, 0.30, 1.0)
 	btn_style.set_corner_radius_all(4)
 	btn_close.add_theme_stylebox_override("normal", btn_style)
-	
 	btn_close.pressed.connect(func():
 		if is_instance_valid(active_modal):
 			active_modal.queue_free()
 			active_modal = null
 	)
 	vbox.add_child(btn_close)
-	
 	margin.add_child(vbox)
 	card.add_child(margin)
 	center.add_child(card)

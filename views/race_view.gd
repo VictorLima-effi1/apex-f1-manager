@@ -443,6 +443,14 @@ func _update_safety_banner() -> void:
 			b_style.border_width_left = 6
 			banner_label.text = "🔴 BANDEIRA VERMELHA — SESSÃO INTERROMPIDA — RETORNE AOS BOXES"
 			banner_label.add_theme_color_override("font_color", Color("#ef4444"))
+	
+	# Quando um evento de Safety Car / VSC / Bandeira Amarela é acionado:
+	if Database.reduce_speed_on_sc:
+		# Força a redução da velocidade da corrida para 1x
+		_set_speed_mode(1.0, 1.0)
+	else:
+		# Se a opção estiver desativada pelo jogador, mantém a velocidade que o jogador já havia selecionado!
+		pass
 
 	banner_container.add_theme_stylebox_override("panel", b_style)
 
