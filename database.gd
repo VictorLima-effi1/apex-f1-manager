@@ -11,6 +11,25 @@ var driver_market_interests: Array = []
 signal language_changed
 var current_language: String = "pt"
 
+# Listas de fornecedores disponíveis no mercado
+const ENGINE_SUPPLIERS: Array[String] = [
+	"Audi",
+	"Mercedes - AMG",
+	"Ferrari",
+	"Honda",
+	"Red Bull / Ford",
+	"Cadillac",
+	"Desenvolver Próprio"
+]
+
+const CHASSIS_SUPPLIERS: Array[String] = [
+	"Dallara",
+	"Aston Martin",
+	"Caterham",
+	"BMW",
+	"Desenvolver Próprio"
+]
+
 func get_driver_interests() -> Array:
 	return driver_market_interests
 	
@@ -1039,7 +1058,7 @@ func get_all_slots_info() -> Array:
 					slots_info.append({
 						"slot": i,
 						"exists": true,
-						"name": data.get("save_name", "Slot %d" % i),
+						"name": "Slot %d (%s)" % [i, tr_text("SAVE_SLOT_EMPTY") if has_method("tr_text") else "Vazio"],
 						"year": int(data.get("current_year", 2026)),
 						"gp": int(data.get("current_gp", 1)),
 						"team": str(data.get("user_team", "McLaren")),
@@ -1049,7 +1068,7 @@ func get_all_slots_info() -> Array:
 		slots_info.append({
 			"slot": i,
 			"exists": false,
-			"name": "Slot %d (Vazio)" % i,
+			"name": "Slot %d (%s)" % [i, tr_text("SAVE_SLOT_EMPTY") if has_method("tr_text") else "Vazio"],
 			"year": 2026,
 			"gp": 1,
 			"team": "McLaren",
@@ -1390,321 +1409,17 @@ var reduce_speed_on_sc: bool = true   # Ativado por padrão (força 1x no Safety
 
 # Função auxiliar para buscar o texto traduzido conforme o idioma selecionado
 func tr_text(key: String) -> String:
-	var lang_dict = translations.get(current_language, translations["pt"])
-	return lang_dict.get(key, key)
-
-# Dicionário de localização do jogo completo
-var translations: Dictionary = {
-	"pt": {
-		# MENU INICIAL
-		"MENU_SUBTITLE": "SIMULADOR DE GESTÃO DE TEMPORADA",
-		"MENU_NEW_GAME": "🚀 NOVO JOGO",
-		"MENU_LOAD_GAME": "📂 CARREGAR JOGO",
-		"MENU_OPTIONS": "⚙️ OPÇÕES",
-		"MENU_EXIT": "❌ SAIR DO JOGO",
-		
-		# NAV & SIDEBAR
-		"NAV_DASHBOARD": "📊 Dashboard",
-		"NAV_RACE": "🏎️ Corrida",
-		"NAV_DEV": "🏭 Desenvolvimento",
-		"NAV_MARKET": "💼 Mercado & Pilotos",
-		"NAV_EDITOR": "🛠️ Editor de Dados",
-		"NAV_HISTORY": "🏆 Histórico & Hall",
-		"NAV_OPTIONS": "⚙️ Opções",
-		"NAV_SAVE": "💾 Salvar Jogo",
-		"NAV_MAIN_MENU": "🚪 Menu Inicial",
-		
-		# CARDS E HEADER
-		"DASHBOARD_TITLE": "DASHBOARD DA TEMPORADA %d",
-		"CARD_CURRENT_GP": "ETAPA ATUAL",
-		"CARD_TEAMS": "EQUIPES",
-		"CARD_DRIVERS": "PILOTOS",
-		"LABEL_TEAMS_COUNT": "%d Equipes",
-		"LABEL_DRIVERS_COUNT": "%d Pilotos",
-		
-		# DASHBOARD HEADERS & PANELS
-		"TITLE_DRIVER_CHAMP": "🏆 CAMPEONATO DE PILOTOS",
-		"TITLE_CONSTRUCTORS": "🏎️ CONSTRUTORES",
-		"TITLE_TECH_POWER": "📈 HIERARQUIA TÉCNICA",
-		"PANEL_DRIVERS_EVO": "📈 EVOLUÇÃO DE PILOTOS NA TEMPORADA",
-		"TITLE_MARKET": "🔄 MERCADO & CONTRATOS",
-		"TITLE_NEWS": "📰 NOTÍCIAS DO PADDOCK",
-		"TITLE_NEXT_GP": "🔍 INFO DO PRÓXIMO GP",
-		"TITLE_CALENDAR": "📅 ETAPAS PRÓXIMAS",
-		"TITLE_FAST_SIM": "⚡ SIMULAÇÃO ACELERADA",
-		"TITLE_STATS_SEASON": "📊 ESTATÍSTICAS DA TEMPORADA",
-		
-		# TABELAS E COLUNAS
-		"COL_POS": "POS",
-		"COL_DRIVER": "PILOTO",
-		"COL_TEAM": "EQUIPE",
-		"COL_PTS": "PTS",
-		"COL_WINS": "VIT",
-		"COL_PODIUMS": "POD",
-		"COL_DNFS": "DNF",
-		"COL_CONTRACT": "CONTRATO",
-		"COL_MORALE": "MORAL",
-		"STATUS_FREE_AGENT": "Sem Equipe",
-		"COL_GP": "GP",
-		"STATUS_FREE": "Livre",
-		"STATUS_RETIRED": "Aposentado",
-		"COL_CIRCUIT": "CIRCUITO",
-		"COL_STATUS": "STATUS",
-		"TAB_CONTRACTS": "Contratos",
-		"TAB_INTERESTS": "Interesses",
-		"TAB_HISTORY": "Histórico",
-		"TAB_GRID_RANK": "Ranking do Grid",
-		"TAB_GRID_LEADERS": "Líderes do Grid",
-		"TAB_RIVALRIES": "⚔️ Rivalidades",
-		"TAB_DRIVERS": "Pilotos",
-		"TAB_TEAMS": "Equipes",
-		"STATUS_FUTURE": "🗓️ Futura",
-		"STATUS_COMPLETED": "✅ Concluída",
-		"STATUS_CURRENT": "▶ ATUAL",
-		"YEAR_SINGLE": "ano",
-		"YEAR_PLURAL": "anos",
-		
-		# CORRIDA E CLIMA
-		"WEATHER_DRY": "Pista Seca",
-		"WEATHER_WET": "Pista Molhada",
-		"FLAG_NORMAL": "Normal",
-		"FLAG_YELLOW": "⚠️ BANDEIRA AMARELA",
-		"FLAG_VSC": "🟡 VIRTUAL SAFETY CAR",
-		"FLAG_SC": "🚨 SAFETY CAR",
-		"FLAG_RED": "🔴 BANDEIRA VERMELHA",
-		"LAP": "Volta",
-		
-		# EVENTOS & NOTÍCIAS
-		"NEWS_UPGRADE": "🛠️ UPGRADES: %s.",
-		"NEWS_RENEWAL": "✍️ RENOVAÇÃO: %s renovou com a %s por mais %d ano(s)!",
-		"NEWS_TRANSFER": "💰 ROUBO DE CONTRATO: %s pagou a multa e tirou %s da %s!",
-		"NEWS_REPLACEMENT": "✍️ REPOSIÇÃO: %s contratou %s por %d ano(s)!",
-		"NEWS_FIRE": "🚨 DEMISSÃO: %s foi demitido da %s!",
-		"NEWS_RETIRE": "🏁 APOSENTADORIA: %s se aposentou aos %d anos!",
-		
-		#Créditos
-		"OPTIONS_TITLE": "⚙️ CONFIGURAÇÕES DO JOGO",
-		"DISPLAY_MODE": "Modo de Exibição:",
-		"RESOLUTION": "Resolução da Tela:",
-		"UI_SCALE": "Escala da Interface (UI):",
-		"REDUCE_SC_SPEED": "Reduzir Vel. no Safety Car:",
-		"LANGUAGE": "Idioma do Jogo:",
-		"CREDITS_BTN": "📜 Créditos do Jogo",
-		"SAVE_BTN": "💾 Salvar Configurações",
-		"BACK_BTN": "⬅️ Voltar",
-		"CREDITS_TITLE": "📜 CRÉDITOS",
-		"CREDITS_TEXT": "APEX F1 MANAGER\n\nDesenvolvido por: THG Studios\nMotor de Simulação: Godot Engine 4.7\nInspirado no automobilismo de alta performance.\n\nAgradecimentos especiais a toda a comunidade de entusiastas de F1! \n\nEste simulador utilizou de IA durante o seu desenvolvimento para analisar e definir parâmetros técnicos para Equipes e Pilotos",
-		"CLOSE": "Fechar",
-		"SETTINGS_ABOUT": "Sobre o Jogo:"
-	},
-	"en": {
-		# MAIN MENU
-		"MENU_SUBTITLE": "SEASON MANAGEMENT SIMULATOR",
-		"MENU_NEW_GAME": "🚀 NEW GAME",
-		"MENU_LOAD_GAME": "📂 LOAD GAME",
-		"MENU_OPTIONS": "⚙️ OPTIONS",
-		"MENU_EXIT": "❌ EXIT GAME",
-		
-		# NAV & SIDEBAR
-		"NAV_DASHBOARD": "📊 Dashboard",
-		"NAV_RACE": "🏎️ Race",
-		"NAV_DEV": "🏭 Development",
-		"NAV_MARKET": "💼 Market & Drivers",
-		"NAV_EDITOR": "🛠️ Data Editor",
-		"NAV_HISTORY": "🏆 History & Hall",
-		"NAV_OPTIONS": "⚙️ Options",
-		"NAV_SAVE": "💾 Save Game",
-		"NAV_MAIN_MENU": "🚪 Main Menu",
-		
-		# CARDS E HEADER
-		"DASHBOARD_TITLE": "%d SEASON DASHBOARD",
-		"CARD_CURRENT_GP": "CURRENT ROUND",
-		"CARD_TEAMS": "TEAMS",
-		"CARD_DRIVERS": "DRIVERS",
-		"LABEL_TEAMS_COUNT": "%d Teams",
-		"LABEL_DRIVERS_COUNT": "%d Drivers",
-		
-		# DASHBOARD HEADERS & PANELS
-		"TITLE_DRIVER_CHAMP": "🏆 DRIVERS CHAMPIONSHIP",
-		"TITLE_CONSTRUCTORS": "🏎️ CONSTRUCTORS",
-		"TITLE_TECH_POWER": "📈 TECHNICAL HIERARCHY",
-		"TITLE_MARKET": "🔄 MARKET & CONTRACTS",
-		"TITLE_NEWS": "📰 PADDOCK NEWS",
-		"TITLE_NEXT_GP": "🔍 NEXT GP INFO",
-		"TITLE_CALENDAR": "📅 UPCOMING RACES",
-		"TITLE_FAST_SIM": "⚡ ACCELERATED SIMULATION",
-		"TITLE_STATS_SEASON": "📊 SEASON STATISTICS",
-		"PANEL_DRIVERS_EVO": "📈 DRIVERS SEASON EVOLUTION",
-		
-		# TABELAS E COLUNAS
-		"COL_POS": "POS",
-		"COL_DRIVER": "DRIVER",
-		"COL_TEAM": "TEAM",
-		"COL_PTS": "PTS",
-		"COL_WINS": "WIN",
-		"COL_PODIUMS": "POD",
-		"COL_DNFS": "DNF",
-		"COL_CONTRACT": "CONTRACT",
-		"COL_MORALE": "MORALE",
-		"COL_GP": "GP",
-		"COL_CIRCUIT": "CIRCUIT",
-		"COL_STATUS": "STATUS",
-		"STATUS_FREE_AGENT": "Free Agent",
-		"STATUS_FREE": "Free",
-		"STATUS_RETIRED": "Retired",
-		"TAB_CONTRACTS": "Contracts",
-		"TAB_INTERESTS": "Interests",
-		"TAB_HISTORY": "History",
-		"TAB_GRID_RANK": "Grid Ranking",
-		"TAB_GRID_LEADERS": "Grid Leaders",
-		"TAB_RIVALRIES": "⚔️ Rivalries",
-		"TAB_DRIVERS": "Drivers",
-		"TAB_TEAMS": "Teams",
-		"STATUS_FUTURE": "🗓️ Upcoming",
-		"STATUS_COMPLETED": "✅ Completed",
-		"STATUS_CURRENT": "▶ CURRENT",
-		"YEAR_SINGLE": "year",
-		"YEAR_PLURAL": "years",
-		
-		# CORRIDA E CLIMA
-		"WEATHER_DRY": "Dry Track",
-		"WEATHER_WET": "Wet Track",
-		"FLAG_NORMAL": "Normal",
-		"FLAG_YELLOW": "⚠️ YELLOW FLAG",
-		"FLAG_VSC": "🟡 VIRTUAL SAFETY CAR",
-		"FLAG_SC": "🚨 SAFETY CAR",
-		"FLAG_RED": "🔴 RED FLAG",
-		"LAP": "Lap",
-		
-		# EVENTOS & NOTÍCIAS
-		"NEWS_UPGRADE": "🛠️ UPGRADES: %s.",
-		"NEWS_RENEWAL": "✍️ RENEWAL: %s extended with %s for +%d year(s)!",
-		"NEWS_TRANSFER": "💰 CONTRACT BUYOUT: %s paid release clause and signed %s from %s!",
-		"NEWS_REPLACEMENT": "✍️ SIGNING: %s signed %s for %d year(s)!",
-		"NEWS_FIRE": "🚨 DISMISSAL: %s was fired from %s!",
-		"NEWS_RETIRE": "🏁 RETIREMENT: %s retired at age %d!",
-		
-		#Créditos
-		"OPTIONS_TITLE": "⚙️ GAME SETTINGS",
-		"DISPLAY_MODE": "Display Mode:",
-		"RESOLUTION": "Screen Resolution:",
-		"UI_SCALE": "UI Scale:",
-		"REDUCE_SC_SPEED": "Reduce Speed on Safety Car:",
-		"LANGUAGE": "Game Language:",
-		"CREDITS_BTN": "📜 Game Credits",
-		"SAVE_BTN": "💾 Save Settings",
-		"BACK_BTN": "⬅️ Back",
-		"CREDITS_TITLE": "📜 CREDITS",
-		"CREDITS_TEXT": "APEX F1 MANAGER\n\nDeveloped by: THG Studios\nSimulation Engine: Godot Engine 4.7\nInspired by high-performance motorsport.\n\nSpecial thanks to all F1 gaming community enthusiasts!\n\nThis simulator used AI during its development to analyze and set technical parameters for Teams and Drivers",
-		"CLOSE": "Close",
-		"SETTINGS_ABOUT": "About Game:"
-	},
-	"es": {
-		# MENÚ PRINCIPAL
-		"MENU_SUBTITLE": "SIMULADOR DE GESTIÓN DE TEMPORADA",
-		"MENU_NEW_GAME": "🚀 NUEVO JUEGO",
-		"MENU_LOAD_GAME": "📂 CARGAR JUEGO",
-		"MENU_OPTIONS": "⚙️ OPCIONES",
-		"MENU_EXIT": "❌ SALIR DEL JUEGO",
-		
-		# NAV & SIDEBAR
-		"NAV_DASHBOARD": "📊 Panel Principal",
-		"NAV_RACE": "🏎️ Carrera",
-		"NAV_DEV": "🏭 Desarrollo",
-		"NAV_MARKET": "💼 Mercado y Pilotos",
-		"NAV_EDITOR": "🛠️ Editor de Datos",
-		"NAV_HISTORY": "🏆 Historial y Salón",
-		"NAV_OPTIONS": "⚙️ Opciones",
-		"NAV_SAVE": "💾 Guardar Juego",
-		"NAV_MAIN_MENU": "🚪 Menú Principal",
-		
-		# CARDS Y CABECERA
-		"DASHBOARD_TITLE": "PANEL DE LA TEMPORADA %d",
-		"CARD_CURRENT_GP": "ETAPA ACTUAL",
-		"CARD_TEAMS": "EQUIPOS",
-		"CARD_DRIVERS": "PILOTOS",
-		"LABEL_TEAMS_COUNT": "%d Equipos",
-		"LABEL_DRIVERS_COUNT": "%d Pilotos",
-		
-		# DASHBOARD HEADERS & PANELS
-		"TITLE_DRIVER_CHAMP": "🏆 CAMPEONATO DE PILOTOS",
-		"TITLE_CONSTRUCTORS": "🏎️ CONSTRUCTORES",
-		"TITLE_TECH_POWER": "📈 JERARQUÍA TÉCNICA",
-		"TITLE_MARKET": "🔄 MERCADO Y CONTRATOS",
-		"TITLE_NEWS": "📰 NOTICIAS DEL PADDOCK",
-		"TITLE_NEXT_GP": "🔍 INFO DEL PRÓXIMO GP",
-		"TITLE_CALENDAR": "📅 PRÓXIMAS ETAPAS",
-		"TITLE_FAST_SIM": "⚡ SIMULACIÓN ACELERADA",
-		"TITLE_STATS_SEASON": "📊 ESTADÍSTICAS DE LA TEMPORADA",
-		"PANEL_DRIVERS_EVO": "📈 EVOLUCIÓN DE PILOTOS EN LA TEMPORADA",
-		
-		# TABELAS E COLUNAS
-		"COL_POS": "POS",
-		"COL_DRIVER": "PILOTO",
-		"COL_TEAM": "EQUIPO",
-		"COL_PTS": "PTS",
-		"COL_WINS": "VIC",
-		"COL_PODIUMS": "POD",
-		"COL_DNFS": "DNF",
-		"COL_CONTRACT": "CONTRATO",
-		"COL_MORALE": "MORAL",
-		"COL_GP": "GP",
-		"COL_CIRCUIT": "CIRCUITO",
-		"COL_STATUS": "ESTADO",
-		"STATUS_FREE_AGENT": "Sin Equipo",
-		"STATUS_FREE": "Libre",
-		"STATUS_RETIRED": "Retirado",
-		"TAB_CONTRACTS": "Contratos",
-		"TAB_INTERESTS": "Intereses",
-		"TAB_HISTORY": "Historial",
-		"TAB_GRID_RANK": "Ranking de la Parrilla",
-		"TAB_GRID_LEADERS": "Líderes de la Parrilla",
-		"TAB_RIVALRIES": "⚔️ Rivalidades",
-		"TAB_DRIVERS": "Pilotos",
-		"TAB_TEAMS": "Equipos",
-		"STATUS_FUTURE": "🗓️ Futura",
-		"STATUS_COMPLETED": "✅ Completada",
-		"STATUS_CURRENT": "▶ ACTUAL",
-		"YEAR_SINGLE": "año",
-		"YEAR_PLURAL": "años",
-		
-		# CORRIDA E CLIMA
-		"WEATHER_DRY": "Pista Seca",
-		"WEATHER_WET": "Pista Mojada",
-		"FLAG_NORMAL": "Normal",
-		"FLAG_YELLOW": "⚠️ BANDERA AMARILLA",
-		"FLAG_VSC": "🟡 VIRTUAL SAFETY CAR",
-		"FLAG_SC": "🚨 SAFETY CAR",
-		"FLAG_RED": "🔴 BANDERA ROJA",
-		"LAP": "Vuelta",
-		
-		# EVENTOS & NOTÍCIAS
-		"NEWS_UPGRADE": "🛠️ MEJORAS: %s.",
-		"NEWS_RENEWAL": "✍️ RENOVACIÓN: ¡%s renovó con %s por +%d año(s)!",
-		"NEWS_TRANSFER": "💰 COMPRA DE CONTRATO: ¡%s pagó la cláusula y fichó a %s de %s!",
-		"NEWS_REPLACEMENT": "✍️ FICHAJE: ¡%s contrató a %s por %d año(s)!",
-		"NEWS_FIRE": "🚨 DESPIDO: ¡%s fue despedido de %s!",
-		"NEWS_RETIRE": "🏁 RETIRO: ¡%s se retiró a los %d años!",
-		
-		#CRÉDITOS
-		"OPTIONS_TITLE": "⚙️ CONFIGURACIÓN DEL JUEGO",
-		"DISPLAY_MODE": "Modo de Pantalla:",
-		"RESOLUTION": "Resolución de Pantalla:",
-		"UI_SCALE": "Escala de Interfaz (UI):",
-		"REDUCE_SC_SPEED": "Reducir Vel. en Safety Car:",
-		"LANGUAGE": "Idioma del Juego:",
-		"CREDITS_BTN": "📜 Créditos del Juego",
-		"SAVE_BTN": "💾 Guardar Configuración",
-		"BACK_BTN": "⬅️ Volver",
-		"CREDITS_TITLE": "📜 CRÉDITOS",
-		"CREDITS_TEXT": "APEX F1 MANAGER\n\nDesarrollado por: THG Studios\nMotor de Simulación: Godot Engine 4.7\nInspirado en el automovilismo de alto rendimiento.\n\n¡Agradecimientos especiales a toda la comunidad de F1!\n\nEste simulador utilizó IA durante su desarrollo para analizar y definir parámetros técnicos para Equipos y Pilotos",
-		"CLOSE": "Cerrar",
-		"SETTINGS_ABOUT": "Sobre el Juego:"
-	}
-}
+	var lang = current_language if current_language in Translations.dict else "pt"
+	if key in Translations.dict[lang]:
+		return Translations.dict[lang][key]
+	# Fallback para o português caso a chave não exista no idioma selecionado
+	if key in Translations.dict["pt"]:
+		return Translations.dict["pt"][key]
+	return key
 
 # Altera o idioma e notifica o jogo inteiro
 func set_language(new_lang: String) -> void:
-	if translations.has(new_lang) and current_language != new_lang:
+	if Translations.dict.has(new_lang) and current_language != new_lang:
 		current_language = new_lang
-		language_changed.emit()
+		if has_signal("language_changed"):
+			language_changed.emit()

@@ -43,8 +43,13 @@ func _render_contents() -> void:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 14)
 	
+	# Título traduzido
 	var lbl_title = Label.new()
-	lbl_title.text = "💾 SALVAR JOGO - ESCOLHA O SLOT" if current_mode == Mode.SAVE else "📂 CARREGAR JOGO - ESCOLHA O SLOT"
+	if current_mode == Mode.SAVE:
+		lbl_title.text = Database.tr_text("SAVE_MODAL_TITLE_SAVE") if Database.has_method("tr_text") else "💾 SALVAR JOGO - ESCOLHA O SLOT"
+	else:
+		lbl_title.text = Database.tr_text("SAVE_MODAL_TITLE_LOAD") if Database.has_method("tr_text") else "📂 CARREGAR JOGO - ESCOLHA O SLOT"
+		
 	lbl_title.add_theme_font_size_override("font_size", 16)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
@@ -54,8 +59,9 @@ func _render_contents() -> void:
 		var slot_card = _build_slot_row(slot_info)
 		vbox.add_child(slot_card)
 		
+	# Botão Voltar traduzido
 	var btn_close = Button.new()
-	btn_close.text = "VOLTAR"
+	btn_close.text = Database.tr_text("BTN_BACK") if Database.has_method("tr_text") else "VOLTAR"
 	btn_close.custom_minimum_size.y = 36
 	btn_close.add_theme_font_size_override("font_size", 12)
 	btn_close.pressed.connect(func(): queue_free())
@@ -85,18 +91,22 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 	info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
 	var name_input = LineEdit.new()
-	name_input.text = str(slot_info["name"])
-	name_input.placeholder_text = "Nome do Save..."
+	name_input.text = slot_info["name"]
+	name_input.placeholder_text = Database.tr_text("SAVE_INPUT_PLACEHOLDER") if Database.has_method("tr_text") else "Nome do Save..."
 	name_input.add_theme_font_size_override("font_size", 13)
 	info_vbox.add_child(name_input)
 	
 	var details_lbl = Label.new()
 	if slot_info["exists"]:
-		details_lbl.text = "Ano: %d | GP %d | Equipe: %s | Data: %s" % [slot_info["year"], slot_info["gp"], slot_info["team"], slot_info["date"]]
+		var txt_year = Database.tr_text("TEXT_YEAR") if Database.has_method("tr_text") else "Ano"
+		var txt_team = Database.tr_text("TEXT_TEAM") if Database.has_method("tr_text") else "Equipe"
+		var txt_date = Database.tr_text("TEXT_DATE") if Database.has_method("tr_text") else "Data"
+		details_lbl.text = "%s: %d | GP %d | %s: %s | %s: %s" % [txt_year, slot_info["year"], slot_info["gp"], txt_team, slot_info["team"], txt_date, slot_info["date"]]
 		details_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 	else:
-		details_lbl.text = "Slot Vazio"
+		details_lbl.text = Database.tr_text("SAVE_SLOT_EMPTY") if Database.has_method("tr_text") else "Slot Vazio"
 		details_lbl.add_theme_color_override("font_color", Color("#64748b"))
+		
 	details_lbl.add_theme_font_size_override("font_size", 11)
 	info_vbox.add_child(details_lbl)
 	
@@ -121,21 +131,19 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 
 	# Botão de Ação Principal (Salvar ou Carregar)
 	var btn_action = Button.new()
-	btn_action.custom_minimum_size = Vector2(100, 36)
+	btn_action.custom_minimum_size = Vector2(110, 36)
 	btn_action.add_theme_font_size_override("font_size", 12)
 	
 	if current_mode == Mode.SAVE:
-		btn_action.text = "💾 SALVAR"
+		btn_action.text = Database.tr_text("BTN_SAVE") if Database.has_method("tr_text") else "💾 SALVAR"
 		btn_action.pressed.connect(func():
 			if Database.save_game_slot(slot_info["slot"], name_input.text):
 				if on_completed_callback.is_valid():
 					on_completed_callback.call()
 				queue_free()
-			else:
-				print("Erro ao salvar no slot!")
 		)
 	else:
-		btn_action.text = "▶ CARREGAR"
+		btn_action.text = Database.tr_text("BTN_LOAD") if Database.has_method("tr_text") else "▶ CARREGAR"
 		btn_action.disabled = not slot_info["exists"]
 		btn_action.pressed.connect(func():
 			if Database.load_game_slot(slot_info["slot"]):
