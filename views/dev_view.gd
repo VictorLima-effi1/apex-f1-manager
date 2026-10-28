@@ -54,8 +54,10 @@ func build_ui() -> void:
 	# 2. Ordena equipes pelo Car Power para exibição
 	var sorted_teams = Database.teams.duplicate()
 	sorted_teams.sort_custom(func(a, b):
-		var p_a = a["Motor"] + a["Aero"] + a["Chassi"]
-		var p_b = b["Motor"] + b["Aero"] + b["Chassi"]
+		var stats_a = Database.calculate_team_dev_stats(a) if Database.has_method("calculate_team_dev_stats") else a
+		var stats_b = Database.calculate_team_dev_stats(b) if Database.has_method("calculate_team_dev_stats") else b
+		var p_a = int(stats_a.get("Motor", 80)) + int(stats_a.get("Aero", 80)) + int(stats_a.get("Chassi", 80))
+		var p_b = int(stats_b.get("Motor", 80)) + int(stats_b.get("Aero", 80)) + int(stats_b.get("Chassi", 80))
 		return p_a > p_b
 	)
 	
@@ -64,6 +66,13 @@ func build_ui() -> void:
 	for t in sorted_teams:
 		var team_name = str(t.get("Nome", ""))
 		var spent = Database.team_season_expenses.get(team_name, 0.0)
+		
+		# CÁLCULO DINÂMICO DOS PARÂMETROS TÉCNICOS (MOTOR, AERO, CHASSI, CONFIABILIDADE)
+		var stats = Database.calculate_team_dev_stats(t) if Database.has_method("calculate_team_dev_stats") else t
+		var motor_val = int(stats.get("Motor", t.get("Motor", 80)))
+		var aero_val = int(stats.get("Aero", t.get("Aero", 80)))
+		var chassi_val = int(stats.get("Chassi", t.get("Chassi", 80)))
+		var rel_val = int(stats.get("Confiabilidade", t.get("Confiabilidade", 80)))
 		
 		# Obtém o teto orçamentário personalizado da equipe ($135M a $155M)
 		var max_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else Database.COST_CAP_LIMIT
@@ -77,7 +86,7 @@ func build_ui() -> void:
 		var panel = PanelContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		
-		var car_power = int(t["Motor"] + t["Aero"] + t["Chassi"])
+		var car_power = motor_val + aero_val + chassi_val
 		var tag_info = _get_performance_tag(car_power)
 		
 		var p_style = StyleBoxFlat.new()
@@ -155,10 +164,10 @@ func build_ui() -> void:
 		stats_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats_vbox.add_theme_constant_override("separation", 6)
 		
-		_add_component_bar(stats_vbox, "🚀 Motor", t["Motor"], Color("#ef4444"))
-		_add_component_bar(stats_vbox, "💨 Aero", t["Aero"], Color("#22c55e"))
-		_add_component_bar(stats_vbox, "🏎️ Chassi", t["Chassi"], Color("#facc15"))
-		_add_component_bar(stats_vbox, "🔧 Confiab.", t["Confiabilidade"], Color("#a855f7"))
+		_add_component_bar(stats_vbox, "🚀 Motor", motor_val, Color("#ef4444"))
+		_add_component_bar(stats_vbox, "💨 Aero", aero_val, Color("#22c55e"))
+		_add_component_bar(stats_vbox, "🏎️ Chassi", chassi_val, Color("#facc15"))
+		_add_component_bar(stats_vbox, "🔧 Confiab.", rel_val, Color("#a855f7"))
 		
 		main_hbox.add_child(stats_vbox)
 		panel.add_child(main_hbox)
@@ -241,7 +250,7 @@ func _add_component_bar(parent: VBoxContainer, label_text: String, value: int, c
 	pbar.max_value = 99
 	pbar.value = value
 	pbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pbar.custom_minimum_size = Vector2(90, 15) # Barra mais encorpada
+	pbar.custom_minimum_size = Vector2(90, 15)
 	pbar.show_percentage = false
 	
 	var fill_style = StyleBoxFlat.new()

@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://mgeua8wng2vt"]
+
+[ext_resource type="Script" uid="uid://oclniu4nths1" path="res://views/pre_season_view.gd" id="1_8odxt"]
+
+[node name="PreSeasonView" type="Control" unique_id=1143458983]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_8odxt")

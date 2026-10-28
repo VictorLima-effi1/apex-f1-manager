@@ -11,24 +11,22 @@ var driver_market_interests: Array = []
 signal language_changed
 var current_language: String = "pt"
 
-# Listas de fornecedores disponíveis no mercado
-const ENGINE_SUPPLIERS: Array[String] = [
-	"Audi",
-	"Mercedes - AMG",
-	"Ferrari",
-	"Honda",
-	"Red Bull / Ford",
-	"Cadillac",
-	"Desenvolver Próprio"
-]
+# Fornecedores de Motor (Potência e Confiabilidade)
+const ENGINE_DATA: Dictionary = {
+	"Mercedes - AMG": {"potencia": 89, "confiabilidade": 90, "preco": 22, "equipes": ["Mercedes", "McLaren", "Williams"]},
+	"Ferrari": {"potencia": 90, "confiabilidade": 87, "preco": 23, "equipes": ["Ferrari", "Haas", "Cadillac"]},
+	"Honda": {"potencia": 88, "confiabilidade": 88, "preco": 20, "equipes": ["Aston Martin"]},
+	"Red Bull / Ford": {"potencia": 86, "confiabilidade": 82, "preco": 18, "equipes": ["Red Bull Racing", "Racing Bulls"]},
+	"Audi": {"potencia": 81, "confiabilidade": 78, "preco": 15, "equipes": ["Audi"]}
+}
 
-const CHASSIS_SUPPLIERS: Array[String] = [
-	"Dallara",
-	"Aston Martin",
-	"Caterham",
-	"BMW",
-	"Desenvolver Próprio"
-]
+# Fornecedores de Chassi com a nova hierarquia (Próprio > Dallara > BMW > Aston Martin > Caterham)
+const CHASSIS_DATA: Dictionary = {
+	"Dallara": {"chassi": 83, "aero": 82, "confiabilidade": 84, "preco": 20},
+	"BMW": {"chassi": 80, "aero": 79, "confiabilidade": 81, "preco": 17},
+	"Aston Martin": {"chassi": 77, "aero": 76, "confiabilidade": 78, "preco": 15},
+	"Caterham": {"chassi": 72, "aero": 70, "confiabilidade": 73, "preco": 12}
+}
 
 func get_driver_interests() -> Array:
 	return driver_market_interests
@@ -1423,3 +1421,48 @@ func set_language(new_lang: String) -> void:
 		current_language = new_lang
 		if has_signal("language_changed"):
 			language_changed.emit()
+
+static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
+	var engine_name = team.get("motor", "Próprio")
+	var chassis_name = team.get("chassi", "Próprio")
+	var team_name = str(team.get("Nome", ""))
+	
+	# Obtém os dados base do motor e do chassi
+	var e_info = ENGINE_DATA.get(engine_name, {"potencia": team.get("Motor", 80), "confiabilidade": 80})
+	var c_info = CHASSIS_DATA.get(chassis_name, {"chassi": team.get("Chassi", 80), "aero": team.get("Aero", 80), "confiabilidade": 80})
+	
+	var team_hash = abs(hash(team_name))
+	
+	var calculated_motor = int(e_info.get("potencia", 80))
+	var calculated_chassis: int = 80
+	var calculated_aero: int = 80
+	var calculated_rel: int = 80
+	
+	# Se a equipe utilizar Chassi Próprio, aplica variação individual de ±3 para cada parâmetro
+	if chassis_name == "Próprio":
+		var var_chassis = ((team_hash % 7) - 3)                 # Varia entre -3 e +3
+		var var_aero = (((team_hash / 10) % 7) - 3)            # Varia entre -3 e +3
+		var var_conf = (((team_hash / 100) % 7) - 3)           # Varia entre -3 e +3
+		
+		calculated_chassis = int(clamp(c_info.get("chassi", 88) + var_chassis, 50, 99))
+		calculated_aero = int(clamp(c_info.get("aero", 87) + var_aero, 50, 99))
+		
+		var base_chassis_rel = c_info.get("confiabilidade", 88) + var_conf
+		var base_rel = (float(e_info.get("confiabilidade", 80)) + float(base_chassis_rel)) / 2.0
+		calculated_rel = int(clamp(base_rel, 50, 99))
+	else:
+		# Lógica para fornecedores de chassi clientes
+		calculated_chassis = int(c_info.get("chassi", 80))
+		var aero_variation = ((team_hash % 17) - 8)            # Varia entre -8 e +8
+		calculated_aero = int(clamp(calculated_chassis + aero_variation, 50, 99))
+		
+		var rel_variation = (((team_hash / 10) % 11) - 5)     # Varia entre -5 e +5
+		var base_rel = (float(e_info.get("confiabilidade", 80)) + float(c_info.get("confiabilidade", 80))) / 2.0
+		calculated_rel = int(clamp(base_rel + rel_variation, 50, 99))
+	
+	return {
+		"Motor": calculated_motor,
+		"Aero": calculated_aero,
+		"Chassi": calculated_chassis,
+		"Confiabilidade": calculated_rel
+	}
