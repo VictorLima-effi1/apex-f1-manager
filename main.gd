@@ -144,6 +144,14 @@ func setup_layout() -> void:
 	content_container.add_child(margin_container)
 	main_hbox.add_child(content_container)
 
+# Função auxiliar para garantir que o nome da equipe nunca retorne vazio
+func _get_safe_team_name(team_dict: Dictionary) -> String:
+	if team_dict.has("nome") and str(team_dict["nome"]).strip_edges() != "":
+		return str(team_dict["nome"])
+	elif team_dict.has("Nome") and str(team_dict["Nome"]).strip_edges() != "":
+		return str(team_dict["Nome"])
+	return "Equipe"
+
 func update_sidebar_active_tab(active_view: String) -> void:
 	var style_active = StyleBoxFlat.new()
 	style_active.bg_color = Color("#000000")

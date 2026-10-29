@@ -10,6 +10,7 @@ var constructors_points_history: Array = [] # Estrutura: [{"gp": 1, "points": {"
 var driver_market_interests: Array = []
 signal language_changed
 var current_language: String = "pt"
+var available_sponsors: Array = []
 
 # Fornecedores de Motor (Potência e Confiabilidade)
 const ENGINE_DATA: Dictionary = {
@@ -27,6 +28,49 @@ const CHASSIS_DATA: Dictionary = {
 	"Aston Martin": {"chassi": 77, "aero": 76, "confiabilidade": 78, "preco": 15},
 	"Caterham": {"chassi": 72, "aero": 70, "confiabilidade": 73, "preco": 12}
 }
+
+# =============================================================
+# GERAÇÃO DINÂMICA DE PATROCINADORES A CADA NOVO SAVE
+# =============================================================
+func generate_dynamic_sponsors_for_new_save() -> Array:
+	randomize()
+	
+	var generated_sponsors = []
+	
+	var base_list = [
+		{"id": "sp_tech", "nome": "Apex Tech Solutions", "tipo": "Temporada", "base_val": 35.0},
+		{"id": "sp_petro", "nome": "PetroMax Energy", "tipo": "Temporada", "base_val": 28.0},
+		{"id": "sp_hyper", "nome": "HyperDrive Dynamics", "tipo": "Por Corrida", "base_val": 1.5},
+		{"id": "sp_aero", "nome": "AeroSpace Tech", "tipo": "Por Corrida", "base_val": 1.2},
+		{"id": "sp_quantum", "nome": "Quantum AI Performance", "tipo": "Por Ponto", "base_val": 0.40},
+		{"id": "sp_velo", "nome": "Veloce Telecom", "tipo": "Por Ponto", "base_val": 0.30}
+	]
+	
+	for sp in base_list:
+		var item = sp.duplicate()
+		var variation_factor = randf_range(0.85, 1.15)
+		
+		if item["tipo"] == "Temporada":
+			item["valor_temporada"] = snapped(item["base_val"] * variation_factor, 0.1)
+			item["valor_corrida"] = 0.0
+			item["valor_ponto"] = 0.0
+			item["desc"] = "Contrato de temporada. Paga $%.1fM adiantados no caixa!" % item["valor_temporada"]
+			
+		elif item["tipo"] == "Por Corrida":
+			item["valor_temporada"] = 0.0
+			item["valor_corrida"] = snapped(item["base_val"] * variation_factor, 0.1)
+			item["valor_ponto"] = 0.0
+			item["desc"] = "Patrocínio recorrente. Paga $%.1fM a cada GP disputado." % item["valor_corrida"]
+			
+		else:
+			item["valor_temporada"] = 0.0
+			item["valor_corrida"] = 0.0
+			item["valor_ponto"] = snapped(item["base_val"] * variation_factor, 0.05)
+			item["desc"] = "Bônus por performance. Paga $%.2fM por cada ponto marcado." % item["valor_ponto"]
+			
+		generated_sponsors.append(item)
+		
+	return generated_sponsors
 
 func get_driver_interests() -> Array:
 	return driver_market_interests
@@ -50,7 +94,22 @@ var custom_team_data: Dictionary = {
 const COST_CAP_LIMIT: float = 135_000_000.0 # $135 Milhões base por temporada
 const UPGRADE_COST: float = 8_500_000.0       # Custo por pacote de evolução (+1 Power Index)
 
-var user_team: String = "McLaren" # Equipe selecionada pelo jogador
+# Estrutura da equipe do usuário
+var user_team = {
+	"nome": "Apex Grand Prix",
+	"aero": 85,
+	"potencia": 88,
+	"confiabilidade": 85,
+	"peso": 778.0, # Peso em kg registrado
+	"orcamento": 100.0,
+	"pontos_pd": 1500
+}
+
+# Função auxiliar para atualizar o peso via P&D ou Chassi
+func update_team_weight(weight_delta: float) -> void:
+	# Garante que o peso nunca fique abaixo do limite mínimo regulamentar de 768.0 kg
+	user_team["peso"] = max(768.0, user_team["peso"] + weight_delta)
+
 var team_season_expenses: Dictionary = {}
 var team_budget_caps: Dictionary = {}
 
@@ -1439,30 +1498,82 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 	var calculated_rel: int = 80
 	
 	# Se a equipe utilizar Chassi Próprio, aplica variação individual de ±3 para cada parâmetro
-	if chassis_name == "Próprio":
-		var var_chassis = ((team_hash % 7) - 3)                 # Varia entre -3 e +3
-		var var_aero = (((team_hash / 10) % 7) - 3)            # Varia entre -3 e +3
-		var var_conf = (((team_hash / 100) % 7) - 3)           # Varia entre -3 e +3
+	if typeof(chassis_name) == TYPE_DICTIONARY or (typeof(chassis_name) == TYPE_STRING and chassis_name == "Próprio"):
+		var var_chassis = ((team_hash % 7) - 3)
+		var var_aero = (((team_hash / 10) % 7) - 3)
+		var var_conf = (((team_hash / 100) % 7) - 3)
 		
-		calculated_chassis = int(clamp(c_info.get("chassi", 88) + var_chassis, 50, 99))
-		calculated_aero = int(clamp(c_info.get("aero", 87) + var_aero, 50, 99))
+		# Leitura segura dos valores de chassi se for Dicionário ou String
+		var c_chassi = 88.0
+		var c_aero = 87.0
+		var c_conf = 88.0
 		
-		var base_chassis_rel = c_info.get("confiabilidade", 88) + var_conf
-		var base_rel = (float(e_info.get("confiabilidade", 80)) + float(base_chassis_rel)) / 2.0
+		if typeof(chassis_name) == TYPE_DICTIONARY:
+			var c_dict = chassis_name as Dictionary
+			c_chassi = float(c_dict.get("chassi", c_dict.get("qualidade", 88.0)))
+			c_aero = float(c_dict.get("aero", c_dict.get("desempenho", 87.0)))
+			c_conf = float(c_dict.get("confiabilidade", 88.0))
+		elif typeof(c_info) == TYPE_DICTIONARY:
+			c_chassi = float(c_info.get("chassi", 88.0))
+			c_aero = float(c_info.get("aero", 87.0))
+			c_conf = float(c_info.get("confiabilidade", 88.0))
+
+		calculated_chassis = int(clamp(c_chassi + var_chassis, 50, 99))
+		calculated_aero = int(clamp(c_aero + var_aero, 50, 99))
+		
+		var base_chassis_rel = c_conf + var_conf
+		var base_rel = (float(e_info.get("confiabilidade", 80.0)) + float(base_chassis_rel)) / 2.0
 		calculated_rel = int(clamp(base_rel, 50, 99))
-	else:
-		# Lógica para fornecedores de chassi clientes
-		calculated_chassis = int(c_info.get("chassi", 80))
-		var aero_variation = ((team_hash % 17) - 8)            # Varia entre -8 e +8
-		calculated_aero = int(clamp(calculated_chassis + aero_variation, 50, 99))
-		
-		var rel_variation = (((team_hash / 10) % 11) - 5)     # Varia entre -5 e +5
-		var base_rel = (float(e_info.get("confiabilidade", 80)) + float(c_info.get("confiabilidade", 80))) / 2.0
-		calculated_rel = int(clamp(base_rel + rel_variation, 50, 99))
+	
+	# -------------------------------------------------------------
+	# NOVO: LEITURA DO PESO INDIVIDUAL DA EQUIPE (KG)
+	# -------------------------------------------------------------
+	var calculated_weight: float = 778.0
+	
+	if team.has("peso"):
+		calculated_weight = float(team.get("peso", 778.0))
+	elif typeof(team.get("chassi")) == TYPE_DICTIONARY and team["chassi"].has("peso"):
+		calculated_weight = float(team["chassi"].get("peso", 778.0))
 	
 	return {
 		"Motor": calculated_motor,
 		"Aero": calculated_aero,
 		"Chassi": calculated_chassis,
-		"Confiabilidade": calculated_rel
+		"Confiabilidade": calculated_rel,
+		"Peso": calculated_weight # Retorno do peso adicionado!
 	}
+
+# Função para calcular a premiação de fim de temporada com base no ranking dos Construtores
+func calculate_season_prize_money(rank_position: int) -> float:
+	# 1º Lugar = $100M | 12º Lugar = $45M (Reduz $5M por posição)
+	var pos = clamp(rank_position, 1, 12)
+	return 100.0 - ((pos - 1) * 5.0)
+
+# Processa os lucros e reinicia os gastos no Fim da Temporada
+func process_end_of_season_finances(constructors_standings: Array) -> void:
+	for idx in range(constructors_standings.size()):
+		var team = constructors_standings[idx]
+		var pos = idx + 1
+		
+		# 1. Calcula a Premiação de Construtores ($100M a $45M)
+		var prize_money = calculate_season_prize_money(pos)
+		
+		# 2. Calcula o Patrocínio das IAs (com base na performance)
+		var sponsor_income = 40.0 # Base
+		if pos <= 3:
+			sponsor_income = 100.0 # Top Teams
+		elif pos <= 7:
+			sponsor_income = 70.0  # Midfield
+		
+		# Se for a equipe do jogador, adiciona a receita de patrocínios contratados
+		if team.get("Nome") == user_team.get("nome"):
+			sponsor_income = 0.0
+			for sp in user_team.get("patrocinadores", []):
+				sponsor_income += sp.get("valor_temporada", 0.0)
+		
+		# Adiciona o dinheiro novo ao Caixa Fixo da Equipe
+		var total_income = prize_money + sponsor_income
+		team["orcamento"] = team.get("orcamento", 50.0) + total_income
+		
+		# Zera os gastos da temporada passada para o novo Teto de Gastos de $135M
+		team_season_expenses[str(team.get("Nome"))] = 0.0

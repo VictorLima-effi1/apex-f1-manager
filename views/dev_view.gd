@@ -32,7 +32,7 @@ func build_ui() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_vbox.add_child(scroll)
 	
-	# GRID CONTAINER DE 2 COLUNAS (COM MAIOR ESPAÇAMENTO VERTICAL/HORIZONTAL)
+	# GRID CONTAINER DE 2 COLUNAS
 	var teams_grid = GridContainer.new()
 	teams_grid.columns = 2
 	teams_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -67,15 +67,16 @@ func build_ui() -> void:
 		var team_name = str(t.get("Nome", ""))
 		var spent = Database.team_season_expenses.get(team_name, 0.0)
 		
-		# CÁLCULO DINÂMICO DOS PARÂMETROS TÉCNICOS (MOTOR, AERO, CHASSI, CONFIABILIDADE)
+		# CÁLCULO DINÂMICO DOS PARÂMETROS TÉCNICOS (MOTOR, AERO, CHASSI, CONFIABILIDADE, PESO)
 		var stats = Database.calculate_team_dev_stats(t) if Database.has_method("calculate_team_dev_stats") else t
 		var motor_val = int(stats.get("Motor", t.get("Motor", 80)))
 		var aero_val = int(stats.get("Aero", t.get("Aero", 80)))
 		var chassi_val = int(stats.get("Chassi", t.get("Chassi", 80)))
 		var rel_val = int(stats.get("Confiabilidade", t.get("Confiabilidade", 80)))
+		var weight_val = float(stats.get("Peso", t.get("peso", 778.0)))
 		
-		# Obtém o teto orçamentário personalizado da equipe ($135M a $155M)
-		var max_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else Database.COST_CAP_LIMIT
+		# TETO DE GASTOS FIXO UNIVERSAL DO REGULAMENTO ($135.0M)
+		var max_cap = Database.COST_CAP_LIMIT if "COST_CAP_LIMIT" in Database else 135_000_000.0
 		var remaining = max(0.0, max_cap - spent)
 		
 		var spent_m = snapped(spent / 1_000_000.0, 0.1)
@@ -162,12 +163,15 @@ func build_ui() -> void:
 		# --- BLOCO 2: BARRAS COLORIDAS DOS COMPONENTES TÉCNICOS ---
 		var stats_vbox = VBoxContainer.new()
 		stats_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		stats_vbox.add_theme_constant_override("separation", 6)
+		stats_vbox.add_theme_constant_override("separation", 5)
 		
 		_add_component_bar(stats_vbox, "🚀 Motor", motor_val, Color("#ef4444"))
 		_add_component_bar(stats_vbox, "💨 Aero", aero_val, Color("#22c55e"))
 		_add_component_bar(stats_vbox, "🏎️ Chassi", chassi_val, Color("#facc15"))
 		_add_component_bar(stats_vbox, "🔧 Confiab.", rel_val, Color("#a855f7"))
+		
+		# 5. BARRA DE PESO (KG)
+		_add_weight_bar(stats_vbox, "⚖️ Peso", weight_val)
 		
 		main_hbox.add_child(stats_vbox)
 		panel.add_child(main_hbox)
@@ -190,20 +194,20 @@ func _render_grid_budget_cap_summary(parent: VBoxContainer) -> void:
 	
 	var total_spent = 0.0
 	var teams_at_cap = 0
+	var fixed_cap = Database.COST_CAP_LIMIT if "COST_CAP_LIMIT" in Database else 135_000_000.0
 	
 	for t in Database.teams:
 		var team_name = str(t.get("Nome", ""))
 		var spent = Database.team_season_expenses.get(team_name, 0.0)
-		var max_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else Database.COST_CAP_LIMIT
 		
 		total_spent += spent
-		if spent >= max_cap:
+		if spent >= fixed_cap:
 			teams_at_cap += 1
 			
 	var avg_spent_m = snapped((total_spent / max(1, Database.teams.size())) / 1_000_000.0, 0.1)
 	
 	var lbl_cap_title = Label.new()
-	lbl_cap_title.text = "📊 ESCALA DE TETO ($135M a $155M dependendo da posição do ano anterior)"
+	lbl_cap_title.text = "📊 TETO DE GASTOS ANUAL FIXO REGULAMENTAR: $135.0M"
 	lbl_cap_title.add_theme_font_size_override("font_size", 13)
 	lbl_cap_title.add_theme_color_override("font_color", Color("#94a3b8"))
 	hbox.add_child(lbl_cap_title)
@@ -250,17 +254,71 @@ func _add_component_bar(parent: VBoxContainer, label_text: String, value: int, c
 	pbar.max_value = 99
 	pbar.value = value
 	pbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pbar.custom_minimum_size = Vector2(90, 15)
+	pbar.custom_minimum_size = Vector2(90, 14)
 	pbar.show_percentage = false
 	
 	var fill_style = StyleBoxFlat.new()
 	fill_style.bg_color = color
 	fill_style.set_corner_radius_all(3)
 	pbar.add_theme_stylebox_override("fill", fill_style)
+	
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color("#1e293b")
+	bg_style.set_corner_radius_all(3)
+	pbar.add_theme_stylebox_override("background", bg_style)
+	
 	hbox.add_child(pbar)
 	
 	var val_lbl = Label.new()
 	val_lbl.text = str(value) + "%"
+	val_lbl.custom_minimum_size.x = 45
+	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	val_lbl.add_theme_font_size_override("font_size", 12)
+	val_lbl.add_theme_color_override("font_color", Color("#ffffff"))
+	hbox.add_child(val_lbl)
+	
+	parent.add_child(hbox)
+
+func _add_weight_bar(parent: VBoxContainer, label_text: String, weight: float) -> void:
+	var hbox = HBoxContainer.new()
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_theme_constant_override("separation", 8)
+	
+	var lbl = Label.new()
+	lbl.text = label_text
+	lbl.custom_minimum_size.x = 95
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", Color("#cbd5e1"))
+	hbox.add_child(lbl)
+	
+	# Cálculo visual invertido da barra de peso (100% no mínimo de 768kg, caindo se estiver pesado)
+	var fill_pct = clamp(100.0 - ((weight - 768.0) * 2.5), 15.0, 100.0)
+	var bar_color = Color("#38bdf8") if weight <= 778.0 else Color("#f97316")
+	
+	var pbar = ProgressBar.new()
+	pbar.min_value = 0
+	pbar.max_value = 100
+	pbar.value = fill_pct
+	pbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pbar.custom_minimum_size = Vector2(90, 14)
+	pbar.show_percentage = false
+	
+	var fill_style = StyleBoxFlat.new()
+	fill_style.bg_color = bar_color
+	fill_style.set_corner_radius_all(3)
+	pbar.add_theme_stylebox_override("fill", fill_style)
+	
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color("#1e293b")
+	bg_style.set_corner_radius_all(3)
+	pbar.add_theme_stylebox_override("background", bg_style)
+	
+	hbox.add_child(pbar)
+	
+	var val_lbl = Label.new()
+	val_lbl.text = "%.1fkg" % weight
+	val_lbl.custom_minimum_size.x = 45
+	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	val_lbl.add_theme_font_size_override("font_size", 12)
 	val_lbl.add_theme_color_override("font_color", Color("#ffffff"))
 	hbox.add_child(val_lbl)
