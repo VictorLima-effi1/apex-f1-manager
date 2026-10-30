@@ -11,6 +11,7 @@ var driver_market_interests: Array = []
 signal language_changed
 var current_language: String = "pt"
 var available_sponsors: Array = []
+var current_session: String = "preseason"
 
 # Fornecedores de Motor (Potência e Confiabilidade)
 const ENGINE_DATA: Dictionary = {
@@ -400,21 +401,57 @@ func ensure_full_grid() -> void:
 			_auto_fill_team_seat(t_name)
 			t_drivers = get_team_drivers(t_name)
 
-func get_team_power_index(team_name: String) -> Dictionary:
-	var team = _get_team_by_name(team_name)
-	if team.is_empty():
-		return {"aero": 80.0, "engine": 80.0, "chassis": 80.0, "overall": 80.0}
-		
-	var motor = float(team.get("Motor", 80))
-	var aero = float(team.get("Aero", 80))
-	var chassi = float(team.get("Chassi", 80))
-	var overall = (motor + aero + chassi) / 3.0
+# Calcula o Power Index garantindo a escala 0-100 para todas as equipes
+func get_team_power_index(team_input) -> Dictionary:
+	var team_dict: Dictionary = {}
 	
+	if typeof(team_input) == TYPE_STRING:
+		var t_name = str(team_input)
+		if not user_team.is_empty() and str(user_team.get("nome", user_team.get("Nome", ""))) == t_name:
+			team_dict = user_team
+		elif "teams" in self and teams != null:
+			for t in teams:
+				if str(t.get("nome", t.get("Nome", t.get("team_name", "")))) == t_name:
+					team_dict = t
+					break
+	elif typeof(team_input) == TYPE_DICTIONARY:
+		team_dict = team_input
+
+	if team_dict.is_empty():
+		return {"overall": 75.0}
+
+	# Converte valores da escala 0.0-1.0 para 0.0-100.0 se necessário
+	var _get_normalized_val = func(d: Dictionary, keys: Array, default_val: float) -> float:
+		for k in keys:
+			if d.has(k) and d[k] != null:
+				var v = d[k]
+				var num: float = 0.0
+				if typeof(v) == TYPE_DICTIONARY:
+					num = float(v.get("qualidade", v.get("potencia", v.get("level", v.get("value", default_val)))))
+				else:
+					num = float(v)
+				if num > 0.0 and num <= 1.0:
+					num = num * 100.0
+				return num
+		return default_val
+
+	var motor_val = _get_normalized_val.call(team_dict, ["potencia", "Potencia", "motor", "Motor", "engine", "Engine"], 75.0)
+	var aero_val = _get_normalized_val.call(team_dict, ["aero", "Aero", "aerodinamica", "Aerodinamica"], 75.0)
+	var chassis_val = _get_normalized_val.call(team_dict, ["chassi", "Chassi", "chassis", "Chassis"], 75.0)
+	var rel_val = _get_normalized_val.call(team_dict, ["confiabilidade", "Confiabilidade", "reliability"], 75.0)
+
+	var min_weight = 768.0
+	var current_weight = _get_normalized_val.call(team_dict, ["peso", "Peso", "weight", "Weight"], 768.0)
+	if current_weight > 5000.0:
+		current_weight = current_weight / 1000.0
+	if current_weight <= 0.0:
+		current_weight = min_weight
+
+	var weight_percentage = (min_weight / current_weight) * 100.0
+	var final_power_index = (motor_val + aero_val + chassis_val + rel_val + weight_percentage) / 5.0
+
 	return {
-		"aero": aero,
-		"engine": motor,
-		"chassis": chassi,
-		"overall": overall
+		"overall": snapped(final_power_index, 0.1)
 	}
 
 func add_news(msg: String) -> void:
@@ -1577,3 +1614,15 @@ func process_end_of_season_finances(constructors_standings: Array) -> void:
 		
 		# Zera os gastos da temporada passada para o novo Teto de Gastos de $135M
 		team_season_expenses[str(team.get("Nome"))] = 0.0
+
+# Salva as melhorias desenvolvidas na pré-temporada e avança para a temporada regular
+func end_preseason() -> void:
+	if not user_team.is_empty() and user_team.has("preseason_developments"):
+		var dev = user_team["preseason_developments"]
+		user_team["potencia"] = float(user_team.get("potencia", 75.0)) + float(dev.get("potencia", 0.0))
+		user_team["aero"] = float(user_team.get("aero", 75.0)) + float(dev.get("aero", 0.0))
+		user_team["chassi"] = float(user_team.get("chassi", 75.0)) + float(dev.get("chassi", 0.0))
+		user_team["confiabilidade"] = float(user_team.get("confiabilidade", 75.0)) + float(dev.get("confiabilidade", 0.0))
+		user_team["peso"] = max(768.0, float(user_team.get("peso", 778.0)) - float(dev.get("peso_reduction", 0.0)))
+	
+	current_session = "regular_season"

@@ -179,3 +179,59 @@ func _add_cell(grid: GridContainer, text: String, color: Color) -> void:
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", color)
 	grid.add_child(lbl)
+
+# Constrói o painel superior de gestão de contratos da equipe
+func _build_my_team_contracts_panel(parent_container: Control) -> void:
+	var panel = PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var st = StyleBoxFlat.new()
+	st.bg_color = Color("#0f172a")
+	st.border_width_top = 2
+	st.border_color = Color("#38bdf8")
+	st.set_corner_radius_all(6)
+	panel.add_theme_stylebox_override("panel", st)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	
+	var lbl_title = Label.new()
+	lbl_title.text = "📜 GESTÃO DE CONTRATOS DA EQUIPE"
+	lbl_title.add_theme_color_override("font_color", Color("#38bdf8"))
+	vbox.add_child(lbl_title)
+	
+	var my_drivers = Database.user_team.get("pilotos", [])
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 15)
+	
+	for i in range(my_drivers.size()):
+		var d = my_drivers[i]
+		var card = VBoxContainer.new()
+		
+		var l_d = Label.new()
+		l_d.text = "%s (OVR: %d)" % [str(d.get("Nome", "Piloto")), int(d.get("OVR", 75))]
+		card.add_child(l_d)
+		
+		var l_c = Label.new()
+		l_c.text = "Contrato: %d Ano(s) Restante(s)" % int(d.get("contrato_anos", 1))
+		l_c.add_theme_color_override("font_color", Color("#34d399"))
+		card.add_child(l_c)
+		
+		var btn_renew = Button.new()
+		btn_renew.text = "🔄 Renovar Contrato"
+		btn_renew.pressed.connect(func(): _renew_driver_contract(i))
+		card.add_child(btn_renew)
+		
+		hbox.add_child(card)
+		
+	vbox.add_child(hbox)
+	panel.add_child(vbox)
+	parent_container.add_child(panel)
+
+# Lógica de renovação de contrato
+func _renew_driver_contract(driver_index: int) -> void:
+	var my_drivers = Database.user_team.get("pilotos", [])
+	if driver_index < my_drivers.size():
+		var current_years = int(my_drivers[driver_index].get("contrato_anos", 1))
+		my_drivers[driver_index]["contrato_anos"] = current_years + 1
+		build_ui()

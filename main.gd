@@ -14,6 +14,28 @@ var views = {
 	"history": preload("res://views/history_view.gd")
 }
 
+# Configura o tipo de jogo selecionado na tela inicial
+func start_game_mode(selected_mode: String) -> void:
+	Database.game_mode = selected_mode
+	
+	if selected_mode == "observer":
+		# No Modo Observador, limpa a equipe criada pelo jogador para manter apenas as 11 equipes oficiais
+		Database.user_team = {}
+		
+		# Filtra a lista de equipes para remover a 12ª equipe
+		var clean_teams: Array = []
+		for t in Database.teams:
+			if not t.get("is_custom", false) and str(t.get("Nome", "")) != "Apex Grand Prix":
+				clean_teams.append(t)
+		Database.teams = clean_teams
+	else:
+		# No Modo Manager, inicializa a 12ª equipe do jogador caso não exista
+		if Database.user_team.is_empty():
+			Database._create_default_user_team()
+			
+	# Carrega o Dashboard da temporada
+	switch_view("dashboard")
+
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	

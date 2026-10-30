@@ -630,111 +630,76 @@ func _process_wheel_to_wheel_battles() -> void:
 				var log_msg = "⚔️ ULTRAPASSAGEM: " + str(attacker["Nome"]) + " ultrapassou " + str(defender["Nome"]) + " na disputa por posição!"
 				race_logs.append(log_msg)
 
-func process_quali_tick(delta_sec: float = 1.0) -> Dictionary:
-	if is_quali_done():
-		return {"finished": true}
-		
-	var duration_limit = quali_durations.get(quali_phase, 1080.0)
+# Processa o ciclo de voltas e avanço de cada piloto na qualificação
+func process_quali_tick(delta: float) -> void:
+	if is_quali_done(): return
 	
-	if not quali_checker_flag:
-		quali_time_elapsed += delta_sec
-		quali_total_elapsed_time += delta_sec
-		
-		quali_weather_timer += delta_sec
-		if quali_weather_timer >= 15.0:
-			var simulated_laps_passed = quali_weather_timer / 90.0
-			_process_weather_and_water_accumulation(race_logs, simulated_laps_passed)
-			quali_weather_timer = 0.0
-		
-		# Mantém a aderência sincronizada no treino classificatório
-		
-		if quali_time_elapsed >= duration_limit:
-			quali_checker_flag = true
-			race_logs.append("🏁 BANDEIRA QUADRICULADA NO " + quali_phase + "! Tempo zerado. Aguardando voltas finais...")
+	quali_time_elapsed += delta
+	var current_limit = quali_durations.get(quali_phase, 1080.0)
+	
+	if quali_time_elapsed >= current_limit:
+		quali_checker_flag = true
 
-	var hot_laps_in_progress = 0
-	
 	for d in active_quali_drivers:
-		if d.get("QualiStatus", "") != "Na Pista":
+		var st = str(d.get("quali_state", "Box"))
+		if st == "Box":
 			continue
 			
-		match d["quali_state"]:
-			"Box":
-				if not quali_checker_flag:
-					if d["timer_state"] > 0:
-						d["timer_state"] -= delta_sec
-					else:
-						var team_name = str(d.get("Equipe", ""))
-						var team = Database._get_team_by_name(team_name)
-						var car_power = float(team.get("Motor", 80)) * 0.35 + float(team.get("Aero", 80)) * 0.40 + float(team.get("Chassi", 80)) * 0.25
-						
-						var driver_skill = _get_effective_driver_skill(d, "Grau")
-						var compound = str(d.get("tire_compound", "Soft"))
-						var compound_delta = _calculate_tire_lap_delta(compound, 1)
-						var base_lap = _get_base_track_lap_time()
-						
-						var grip_reduction_quali = (1.0 - (track_grip / 100.0)) * 1.5
-						var calculated_hot_time = base_lap + grip_reduction_quali + compound_delta - ((car_power - 50.0) * 0.060) - ((driver_skill - 50.0) * 0.013) + randf_range(-0.25, 0.25)
-						
-						d["pending_lap_time"] = calculated_hot_time
-						d["quali_state"] = "Em pista"
-						d["timer_state"] = calculated_hot_time * 1.25
-					
-			"Em pista":
-				if not quali_checker_flag:
-					if d["timer_state"] > 0:
-						d["timer_state"] -= delta_sec
-					else:
-						d["quali_state"] = "Hot Lap"
-						d["timer_state"] = d["pending_lap_time"]
-						d["sector_colors"] = {"s1": "⚪", "s2": "⚪", "s3": "⚪"}
-				else:
-					d["quali_state"] = "Box"
-					
-			"Hot Lap":
-				hot_laps_in_progress += 1
-				if d["timer_state"] > 0:
-					d["timer_state"] -= delta_sec
-					var total_time = d["pending_lap_time"]
-					var progress = 1.0 - (d["timer_state"] / total_time)
-					var sectors = _calculate_lap_sectors(total_time)
-					
-					if progress >= 0.30 and d["sector_colors"]["s1"] == "⚪":
-						_update_single_sector_color(d, "s1", sectors["s1"])
-					if progress >= 0.70 and d["sector_colors"]["s2"] == "⚪":
-						_update_single_sector_color(d, "s2", sectors["s2"])
-				else:
-					var lap_time = d["pending_lap_time"]
-					d["LastLapTime"] = lap_time
-					_process_driver_sectors(d, lap_time)
-					
-					if lap_time < d["BestQualiTime"]:
-						d["BestQualiTime"] = lap_time
-						
-					d["quali_state"] = "Em Entrada"
-					d["timer_state"] = lap_time * 1.25
-					
-			"Em Entrada":
-				if d["timer_state"] > 0:
-					d["timer_state"] -= delta_sec
-				else:
-					d["quali_state"] = "Box"
-					d["timer_state"] = randf_range(120.0, 150.0)
-	
-	active_quali_drivers.sort_custom(func(a, b):
-		var time_a = a["BestQualiTime"]
-		var time_b = b["BestQualiTime"]
-		if time_a >= 900.0 and time_b >= 900.0: return a["Nome"] < b["Nome"]
-		if time_a < 900.0 and time_b >= 900.0: return true
-		if time_a >= 900.0 and time_b < 900.0: return false
-		if time_a == time_b: return a["Nome"] < b["Nome"]
-		return time_a < time_b
-	)
-	
-	if quali_checker_flag and hot_laps_in_progress == 0:
-		_advance_quali_session()
+		d["progress"] = float(d.get("progress", 0.0)) + (delta * 0.05)
 		
-	return {"finished": is_quali_done(), "phase": quali_phase, "checker_flag": quali_checker_flag}
+		# Concluiu uma volta na pista
+		if d["progress"] >= 1.0:
+			d["progress"] = 0.0
+			
+			if st == "Em pista":
+				# Transiciona da volta de saída para a volta rápida oficial (Hot Lap)
+				d["quali_state"] = "Hot Lap"
+			elif st == "Hot Lap":
+				# Simula o tempo de volta com base no OVR e no Power Index
+				var lap_time = _calculate_simulated_lap_time(d)
+				d["LastLapTime"] = lap_time
+				
+				var best_t = float(d.get("BestQualiTime", 999.0))
+				if best_t >= 900.0 or lap_time < best_t:
+					d["BestQualiTime"] = lap_time
+				
+				# Se o jogador marcou para recolher ou se é IA, entra no box após o Hot Lap
+				if d.get("force_in_lap", true):
+					d["quali_state"] = "Em Entrada"
+				else:
+					d["quali_state"] = "Hot Lap" # Permite continuar para outra volta rápida
+			elif st == "Em Entrada":
+				d["quali_state"] = "Box"
+				d["is_in_pit"] = true
+
+# Calcula o tempo de volta em segundos de forma coerente com o desempenho do carro
+func _calculate_simulated_lap_time(driver_dict: Dictionary) -> float:
+	var base_track_time = 80.0 # Tempo base de 1:20.000
+	var driver_ovr = float(driver_dict.get("ovr", driver_dict.get("OVR", 75.0)))
+	var team_power = float(Database.get_team_power_index(driver_dict.get("Equipe", ""))["overall"])
+	
+	var time_modifier = (100.0 - driver_ovr) * 0.05 + (100.0 - team_power) * 0.08
+	var random_variance = randf_range(-0.25, 0.25)
+	
+	return base_track_time + time_modifier + random_variance
+
+# Atualiza os tempos de volta do piloto na classificação
+func record_driver_quali_lap(driver_dict: Dictionary, lap_time: float) -> void:
+	# 1. Atualiza sempre a última volta realizada
+	driver_dict["LastLapTime"] = lap_time
+	driver_dict["last_lap"] = lap_time
+	
+	# 2. Pega o tempo atual registrado como melhor volta
+	var current_best = float(driver_dict.get("BestQualiTime", driver_dict.get("best_lap", 999.0)))
+	
+	# Se current_best for 0.0, menor que 10.0 ou 999.0, significa que não tinha tempo válido ainda
+	if current_best <= 10.0 or current_best >= 900.0:
+		current_best = 999.0
+		
+	# Se a nova volta for mais rápida que a anterior (ou for a primeira volta válida)
+	if lap_time < current_best and lap_time > 30.0:
+		driver_dict["BestQualiTime"] = lap_time
+		driver_dict["best_lap"] = lap_time
 
 func _process_weather_and_water_accumulation(lap_events: Array, elapsed_time_factor: float = 1.0) -> void:
 	if forecast_laps_left > 0:
@@ -850,3 +815,32 @@ func _get_effective_driver_skill(driver_data: Dictionary, skill_name: String) ->
 	if has_temp_bonus:
 		return base_val + 2.0
 	return base_val
+
+# Exemplo de verificação dentro da simulação da corrida por volta
+func _check_manager_planned_pit_stop(car: Dictionary, current_lap: int) -> void:
+	if not car.get("is_player", false): return
+	
+	var p_idx = int(car.get("driver_idx", -1))
+	var strategies = Database.user_team.get("race_strategies", {})
+	
+	if strategies.has(p_idx):
+		var strat = strategies[p_idx]
+		var pit_stops = strat.get("pit_stops", [])
+		
+		for stop in pit_stops:
+			# Se a volta atual for a volta planejada para a parada
+			if int(stop["lap"]) == current_lap:
+				car["status"] = "Volta de Entrada"
+				car["next_pneu"] = stop["tire"] # Agenda o pneu escolhido pelo jogador!
+
+func _setup_quali_driver_entry(driver_dict: Dictionary) -> Dictionary:
+	var entry = driver_dict.duplicate(true)
+	
+	# Garante que o tempo inicial de classificação seja 999.0 para não travar na P1 com 0:00.000
+	entry["BestQualiTime"] = 999.0
+	entry["LastLapTime"] = 999.0
+	entry["quali_state"] = "Box"
+	entry["is_in_pit"] = true
+	entry["progress"] = 0.0
+	
+	return entry
