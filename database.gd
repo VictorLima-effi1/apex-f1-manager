@@ -4,6 +4,7 @@ var current_year: int = 2026
 var current_gp: int = 1
 var current_view: String = "dashboard"
 var race_finished: bool = false
+var game_mode: String = "manager"
 var active_engine: RaceEngine = null
 var constructors_points_history: Array = [] # Estrutura: [{"gp": 1, "points": {"McLaren": 25, "Ferrari": 18, ...}}]
 # Armazena os interesses/sondagens ativas das equipes sobre pilotos

@@ -216,6 +216,30 @@ func switch_view(view_name: String) -> void:
 		if current_view_node.has_signal("request_advance_gp"):
 			current_view_node.request_advance_gp.connect(_advance_gp)
 		margin_node.add_child(current_view_node)
+		# #region agent log
+		if view_name == "race":
+			var path := "C:/Users/Limad/Desktop/Apex/apex-f1-manager/debug-2b010b.log"
+			var fa := FileAccess.open(path, FileAccess.READ_WRITE)
+			if fa == null:
+				fa = FileAccess.open(path, FileAccess.WRITE)
+			else:
+				fa.seek_end()
+			if fa != null:
+				fa.store_line(JSON.stringify({
+					"sessionId": "2b010b",
+					"timestamp": int(Time.get_unix_time_from_system() * 1000.0),
+					"location": "main.gd:switch_view",
+					"message": "Race view added to tree",
+					"data": {
+						"parent": str(margin_node.get_path()),
+						"view_class": current_view_node.get_class(),
+						"size": {"x": current_view_node.size.x, "y": current_view_node.size.y} if current_view_node is Control else {"x": -1, "y": -1}
+					},
+					"hypothesisId": "D",
+					"runId": "pre-fix"
+				}))
+				fa.close()
+		# #endregion
 
 func _advance_gp() -> void:
 	Database.process_ai_team_upgrades()
