@@ -1,7 +1,6 @@
 extends Control
 
 var engine: RaceEngine
-var race_timer: Timer
 var player_race_strategies: Dictionary = {}
 var manager_panel_container: VBoxContainer
 
@@ -24,8 +23,10 @@ var left_vbox: VBoxContainer
 var banner_container: PanelContainer
 var banner_label: Label
 
-var timer_speed: float = 1.0
-var sim_step_delta: float = 1.0
+var simulation_speed: float = 1.0
+var simulation_running: bool = false
+var race_lap_elapsed: float = 0.0
+var ui_refresh_elapsed: float = 0.0
 var _dbg_process_logged: bool = false
 
 func _agent_dbg(hypothesis_id: String, location: String, message: String, data: Dictionary) -> void:
@@ -96,12 +97,6 @@ func _ready() -> void:
 
 	build_ui()
 
-	race_timer = Timer.new()
-	race_timer.one_shot = true
-	race_timer.wait_time = timer_speed
-	race_timer.timeout.connect(_on_tick)
-	add_child(race_timer)
-
 	_update_ui()
 
 func build_ui() -> void:
@@ -138,27 +133,27 @@ func build_ui() -> void:
 
 	btn_speed_1x = Button.new()
 	btn_speed_1x.text = "1x (Tempo Real)"
-	btn_speed_1x.pressed.connect(func(): _set_speed_mode(1.0, 1.0))
+	btn_speed_1x.pressed.connect(func(): _set_speed_mode(1.0))
 	ctrl_hbox.add_child(btn_speed_1x)
 
 	btn_speed_2x = Button.new()
 	btn_speed_2x.text = "2x"
-	btn_speed_2x.pressed.connect(func(): _set_speed_mode(0.5, 1.0))
+	btn_speed_2x.pressed.connect(func(): _set_speed_mode(2.0))
 	ctrl_hbox.add_child(btn_speed_2x)
 
 	btn_speed_5x = Button.new()
 	btn_speed_5x.text = "5x"
-	btn_speed_5x.pressed.connect(func(): _set_speed_mode(0.2, 1.0))
+	btn_speed_5x.pressed.connect(func(): _set_speed_mode(5.0))
 	ctrl_hbox.add_child(btn_speed_5x)
 
 	btn_speed_10x = Button.new()
 	btn_speed_10x.text = "10x"
-	btn_speed_10x.pressed.connect(func(): _set_speed_mode(0.1, 1.0))
+	btn_speed_10x.pressed.connect(func(): _set_speed_mode(10.0))
 	ctrl_hbox.add_child(btn_speed_10x)
 
 	btn_speed_20x = Button.new()
 	btn_speed_20x.text = "20x"
-	btn_speed_20x.pressed.connect(func(): _set_speed_mode(0.05, 1.0))
+	btn_speed_20x.pressed.connect(func(): _set_speed_mode(20.0))
 	ctrl_hbox.add_child(btn_speed_20x)
 
 	btn_speed_skip = Button.new()
@@ -474,16 +469,15 @@ func _get_user_drivers() -> Array:
 				drivers.append(d)
 	return drivers
 
-func _set_speed_mode(speed: float, step_delta: float) -> void:
-	timer_speed = speed
-	sim_step_delta = step_delta
-	race_timer.wait_time = speed
+func _set_speed_mode(speed: float) -> void:
+	simulation_speed = speed
 
 func _skip_to_end_of_session() -> void:
 	if engine != null and not engine.is_quali_done():
 		engine.skip_to_end_of_quali_session()
-		race_timer.stop()
-		btn_start.text = "▶ CONTINUAR"
+		race_lap_elapsed = 0.0
+		simulation_running = false
+		_update_simulation_button()
 		_update_ui()
 	elif engine != null and not engine.is_finished():
 		while not engine.is_finished():
@@ -491,34 +485,28 @@ func _skip_to_end_of_session() -> void:
 			if res.get("red_flag", false):
 				_show_red_flag_modal()
 				break
-		race_timer.stop()
-		btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
+		simulation_running = false
+		_update_simulation_button()
 		_update_ui()
 
 func _on_btn_start_pressed() -> void:
 	if engine != null and engine.is_finished():
 		_finish_race_and_advance()
 		return
-	
-	if race_timer.is_stopped():
-		race_timer.start(timer_speed)
-		btn_start.text = "⏸️ PAUSAR"
-	else:
-		race_timer.stop()
-		btn_start.text = "▶ CONTINUAR"
 
-func _on_tick() -> void:
-	if engine == null:
+	if engine != null and engine.pending_red_flag_modal:
+		engine.resolve_red_flag_restart()
+
+	simulation_running = not simulation_running
+	_update_simulation_button()
+
+func _update_simulation_button() -> void:
+	if not is_instance_valid(btn_start) or engine == null:
 		return
-	
-	var res = engine.process_lap()
-	if res.get("red_flag", false):
-		_show_red_flag_modal()
-	
-	_update_ui()
-	
-	if not engine.is_finished() and not race_timer.is_stopped():
-		race_timer.start(timer_speed)
+	if engine.is_finished():
+		btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
+	else:
+		btn_start.text = "⏸️ PAUSAR" if simulation_running else "▶ CONTINUAR"
 
 func _show_red_flag_modal() -> void:
 	pass
@@ -825,5 +813,30 @@ func _process(delta: float) -> void:
 		# #endregion
 	if engine == null:
 		return
-	if not "race_drivers" in engine or engine.race_drivers.is_empty():
+	if not simulation_running:
 		return
+
+	var simulation_delta := delta * simulation_speed
+	if not engine.is_quali_done():
+		engine.process_quali_tick(simulation_delta)
+		if engine.is_quali_done():
+			race_lap_elapsed = 0.0
+	else:
+		race_lap_elapsed += simulation_delta
+		var lap_duration: float = maxf(1.0, engine._get_base_track_lap_time())
+		while race_lap_elapsed >= lap_duration and not engine.is_finished():
+			race_lap_elapsed -= lap_duration
+			var result := engine.process_lap()
+			if result.get("red_flag", false):
+				simulation_running = false
+				_show_red_flag_modal()
+				break
+
+	if engine.is_finished():
+		simulation_running = false
+
+	ui_refresh_elapsed += delta
+	if ui_refresh_elapsed >= 1.0 or not simulation_running:
+		ui_refresh_elapsed = 0.0
+		_update_simulation_button()
+		_update_ui()

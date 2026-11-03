@@ -639,18 +639,21 @@ func process_quali_tick(delta: float) -> void:
 	
 	if quali_time_elapsed >= current_limit:
 		quali_checker_flag = true
+		for d in active_quali_drivers:
+			if str(d.get("quali_state", "Box")) != "Box":
+				d["force_in_lap"] = true
 
 	for d in active_quali_drivers:
 		var st = str(d.get("quali_state", "Box"))
 		if st == "Box":
 			continue
 			
-		d["progress"] = float(d.get("progress", 0.0)) + (delta * 0.05)
+		d["progress"] = float(d.get("progress", 0.0)) + (delta / maxf(1.0, _get_base_track_lap_time()))
 		
 		# Concluiu uma volta na pista
-		if d["progress"] >= 1.0:
-			d["progress"] = 0.0
-			
+		while d["progress"] >= 1.0 and str(d.get("quali_state", "Box")) != "Box":
+			d["progress"] = float(d["progress"]) - 1.0
+			st = str(d.get("quali_state", "Box"))
 			if st == "Em pista":
 				# Transiciona da volta de saída para a volta rápida oficial (Hot Lap)
 				d["quali_state"] = "Hot Lap"
@@ -671,6 +674,15 @@ func process_quali_tick(delta: float) -> void:
 			elif st == "Em Entrada":
 				d["quali_state"] = "Box"
 				d["is_in_pit"] = true
+
+	if quali_checker_flag:
+		var drivers_finished_lap := true
+		for d in active_quali_drivers:
+			if str(d.get("quali_state", "Box")) != "Box":
+				drivers_finished_lap = false
+				break
+		if drivers_finished_lap:
+			_advance_quali_session()
 
 # Calcula o tempo de volta em segundos de forma coerente com o desempenho do carro
 func _calculate_simulated_lap_time(driver_dict: Dictionary) -> float:
