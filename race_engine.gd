@@ -11,10 +11,16 @@ var current_lap: int = 0
 var total_laps: int = 58
 var is_race_running: bool = false
 var is_race_finished: bool = false
+var race_elapsed_time: float = 0.0
 
 # --- EVOLUÇÃO DA PISTA (EMBORRACHAMENTO) ---
 var track_grip: float = 0.0 
 var quali_total_elapsed_time: float = 0.0 
+var track_condition_time_accumulator: float = 0.0
+const WATER_GAIN_PER_LAP: float = 3.0
+const WATER_DRYING_PER_LAP: float = 7.0
+const GRIP_LOSS_PER_WET_LAP: float = 5.0
+const GRIP_GAIN_PER_DRY_LAP: float = 2.0
 
 # --- SISTEMA DE CLIMA DINÂMICO E GRADUAL ---
 var is_wet_race: bool = false
@@ -41,6 +47,7 @@ var session_fastest_lap: Dictionary = {"driver": "", "time": 999.0}
 
 var race_logs: Array = []
 var pit_logs: Array = []
+var manager_tire_rule_warning_logged: bool = false
 
 func is_quali_done() -> bool:
 	return quali_phase == "FINISHED"
@@ -68,6 +75,25 @@ func _get_base_track_lap_time() -> float:
 		kmh = 220.0
 	return (km / kmh) * 3600.0
 
+func get_water_lap_time_multiplier() -> float:
+	return lerpf(1.0, 1.30, clampf(water_level, 0.0, 100.0) / 100.0)
+
+func get_grip_lap_time_multiplier() -> float:
+	return lerpf(1.10, 0.90, clampf(track_grip, 0.0, 100.0) / 100.0)
+
+func get_track_condition_lap_time_multiplier() -> float:
+	return get_water_lap_time_multiplier() * get_grip_lap_time_multiplier()
+
+func _is_manager_controlled_team(team_name: String) -> bool:
+	if str(Database.game_mode) != "manager":
+		return false
+	var manager_team := str(Database.user_team.get("nome", Database.user_team.get("Nome", "")))
+	if manager_team.is_empty():
+		manager_team = str(Database.selected_manager_team.get("Nome", Database.selected_manager_team.get("nome", "")))
+	if manager_team.is_empty():
+		manager_team = "Ferrari"
+	return team_name.strip_edges().to_lower() == manager_team.strip_edges().to_lower()
+
 func _calculate_lap_sectors(total_lap_time: float) -> Dictionary:
 	var s1 = total_lap_time * 0.30 + randf_range(-0.04, 0.04)
 	var s2 = total_lap_time * 0.40 + randf_range(-0.04, 0.04)
@@ -76,13 +102,16 @@ func _calculate_lap_sectors(total_lap_time: float) -> Dictionary:
 
 func setup_race(selected_track: Dictionary) -> void:
 	track = selected_track
+	Database.race_finished = false
 	total_laps = track.get("Voltas", 58)
 	current_lap = 0
 	is_race_running = false
 	is_race_finished = false
+	race_elapsed_time = 0.0
 	quali_phase = "Q1"
 	quali_time_elapsed = 0.0
 	quali_total_elapsed_time = 0.0
+	track_condition_time_accumulator = 0.0
 	track_grip = 0.0
 	quali_checker_flag = false
 	safety_car_status = "NONE"
@@ -134,15 +163,22 @@ func setup_race(selected_track: Dictionary) -> void:
 			
 			entry["quali_state"] = "Box"
 			entry["timer_state"] = randf_range(10.0, 40.0)
+			entry["quali_retry_allowed"] = true
+			entry["force_in_lap"] = true
+			entry["quali_lap_duration"] = _get_base_track_lap_time() * 1.08
 			entry["pending_lap_time"] = 0.0
+			entry["estilo"] = str(entry.get("estilo", "Normal"))
+			entry["manager_controlled"] = _is_manager_controlled_team(eq_name)
+			entry["pit_requested"] = false
 			
 			entry["last_sectors"] = {"s1": 0.0, "s2": 0.0, "s3": 0.0}
 			entry["best_personal_sectors"] = {"s1": 999.0, "s2": 999.0, "s3": 999.0}
-			entry["sector_colors"] = {"s1": "⚪", "s2": "⚪", "s3": "⚪"}
+			entry["sector_colors"] = {"s1": "⬜", "s2": "⬜", "s3": "⬜"}
 			
 			entry["tire_compound"] = _get_ideal_compound_for_water(water_level)
 			entry["used_compounds"] = [entry["tire_compound"]]
 			entry["tire_wear"] = 100.0
+			entry["tire_degradation_per_5pct"] = randf_range(0.01, 0.07)
 			entry["stint_lap"] = 0
 			entry["pit_stops"] = 0
 			entry["grid_start_pos"] = 0
@@ -161,7 +197,7 @@ func _reset_session_sectors_for_race() -> void:
 	session_fastest_lap = {"driver": "", "time": 999.0}
 	for d in race_drivers:
 		d["best_personal_sectors"] = {"s1": 999.0, "s2": 999.0, "s3": 999.0}
-		d["sector_colors"] = {"s1": "⚪", "s2": "⚪", "s3": "⚪"}
+		d["sector_colors"] = {"s1": "⬜", "s2": "⬜", "s3": "⬜"}
 
 # --- ORDEM CORRETA DE PNEUS CONFORME A UMIDADE ---
 func _get_ideal_compound_for_water(w_level: float) -> String:
@@ -189,6 +225,10 @@ func _calculate_tire_lap_delta(compound: String, stint_lap: int) -> float:
 func _process_driver_sectors(driver: Dictionary, total_lap_time: float) -> void:
 	var sectors = _calculate_lap_sectors(total_lap_time)
 	driver["last_sectors"] = sectors
+	if not driver.has("best_personal_sectors"):
+		driver["best_personal_sectors"] = {"s1": 999.0, "s2": 999.0, "s3": 999.0}
+	if not driver.has("sector_colors"):
+		driver["sector_colors"] = {"s1": "🟨", "s2": "🟨", "s3": "🟨"}
 	
 	for sec_key in ["s1", "s2", "s3"]:
 		var sec_time = sectors[sec_key]
@@ -198,12 +238,12 @@ func _process_driver_sectors(driver: Dictionary, total_lap_time: float) -> void:
 		if sec_time < best_session:
 			session_best_sectors[sec_key] = sec_time
 			driver["best_personal_sectors"][sec_key] = sec_time
-			driver["sector_colors"][sec_key] = "🟣"
+			driver["sector_colors"][sec_key] = "🟪"
 		elif sec_time < best_personal:
 			driver["best_personal_sectors"][sec_key] = sec_time
-			driver["sector_colors"][sec_key] = "🟢"
+			driver["sector_colors"][sec_key] = "🟩"
 		else:
-			driver["sector_colors"][sec_key] = "🟡"
+			driver["sector_colors"][sec_key] = "🟨"
 
 func _update_single_sector_color(driver: Dictionary, sec_key: String, sec_time: float) -> void:
 	var best_personal = float(driver["best_personal_sectors"].get(sec_key, 999.0))
@@ -212,12 +252,12 @@ func _update_single_sector_color(driver: Dictionary, sec_key: String, sec_time: 
 	if sec_time < best_session:
 		session_best_sectors[sec_key] = sec_time
 		driver["best_personal_sectors"][sec_key] = sec_time
-		driver["sector_colors"][sec_key] = "🟣"
+		driver["sector_colors"][sec_key] = "🟪"
 	elif sec_time < best_personal:
 		driver["best_personal_sectors"][sec_key] = sec_time
-		driver["sector_colors"][sec_key] = "🟢"
+		driver["sector_colors"][sec_key] = "🟩"
 	else:
-		driver["sector_colors"][sec_key] = "🟡"
+		driver["sector_colors"][sec_key] = "🟨"
 
 func skip_to_end_of_quali_session() -> void:
 	if is_quali_done():
@@ -231,6 +271,14 @@ func _advance_quali_session() -> void:
 	quali_checker_flag = false
 	
 	if quali_phase == "Q1":
+		active_quali_drivers.sort_custom(func(a, b):
+			return _compare_lap_times(
+				float(a.get("BestQualiTime", 999.0)),
+				float(b.get("BestQualiTime", 999.0)),
+				str(a.get("Nome", "")),
+				str(b.get("Nome", ""))
+			)
+		)
 		var cutoff = max(0, active_quali_drivers.size() - 6)
 		var next_drivers: Array = []
 		var q1_elim_this_phase: Array = []
@@ -246,6 +294,11 @@ func _advance_quali_session() -> void:
 				active_quali_drivers[i]["LastLapTime"] = 999.0
 				active_quali_drivers[i]["quali_state"] = "Box"
 				active_quali_drivers[i]["timer_state"] = randf_range(20.0, 60.0)
+				active_quali_drivers[i]["quali_retry_allowed"] = true
+				active_quali_drivers[i]["progress"] = 0.0
+				active_quali_drivers[i]["is_in_pit"] = true
+				active_quali_drivers[i]["force_in_lap"] = true
+				active_quali_drivers[i]["quali_lap_duration"] = _get_base_track_lap_time() * 1.08
 				next_drivers.append(active_quali_drivers[i])
 				
 		q1_elim_this_phase.sort_custom(func(a, b):
@@ -260,6 +313,14 @@ func _advance_quali_session() -> void:
 		race_logs.append("🏁 FIM DO Q1: 6 pilotos eliminados.")
 		
 	elif quali_phase == "Q2":
+		active_quali_drivers.sort_custom(func(a, b):
+			return _compare_lap_times(
+				float(a.get("BestQualiTime", 999.0)),
+				float(b.get("BestQualiTime", 999.0)),
+				str(a.get("Nome", "")),
+				str(b.get("Nome", ""))
+			)
+		)
 		var cutoff = min(10, max(0, active_quali_drivers.size() - 6))
 		var next_drivers: Array = []
 		var q2_elim_this_phase: Array = []
@@ -275,6 +336,11 @@ func _advance_quali_session() -> void:
 				active_quali_drivers[i]["LastLapTime"] = 999.0
 				active_quali_drivers[i]["quali_state"] = "Box"
 				active_quali_drivers[i]["timer_state"] = randf_range(20.0, 60.0)
+				active_quali_drivers[i]["quali_retry_allowed"] = true
+				active_quali_drivers[i]["progress"] = 0.0
+				active_quali_drivers[i]["is_in_pit"] = true
+				active_quali_drivers[i]["force_in_lap"] = true
+				active_quali_drivers[i]["quali_lap_duration"] = _get_base_track_lap_time() * 1.08
 				next_drivers.append(active_quali_drivers[i])
 				
 		q2_elim_this_phase.sort_custom(func(a, b):
@@ -314,6 +380,7 @@ func _advance_quali_session() -> void:
 			
 		quali_phase = "FINISHED"
 		race_drivers = full_grid.duplicate()
+		race_elapsed_time = 0.0
 		_reset_session_sectors_for_race()
 		# --- ZERA A ADERÊNCIA PARA O INÍCIO DA CORRIDA ---
 		track_grip = 0.0
@@ -339,6 +406,7 @@ func _initialize_driver_race_strategy(driver: Dictionary, start_pos: int) -> voi
 	driver["used_compounds"] = [first_compound]
 	driver["stint_lap"] = 0
 	driver["pit_window_offset"] = randi_range(-2, 2)
+	driver["tire_degradation_per_5pct"] = randf_range(0.01, 0.07)
 
 func process_lap() -> Dictionary:
 	if current_lap >= total_laps:
@@ -348,18 +416,28 @@ func process_lap() -> Dictionary:
 	if pending_red_flag_modal:
 		return {"finished": false, "red_flag": true}
 
+	if current_lap == total_laps - 2:
+		var missing_manager_compound := false
+		for driver in race_drivers:
+			if str(driver.get("Status", "")) == "Na Pista" \
+			and bool(driver.get("manager_controlled", false)) \
+			and driver.get("used_compounds", []).size() < 2 \
+			and not bool(driver.get("pit_requested", false)):
+				missing_manager_compound = true
+				break
+		if missing_manager_compound:
+			if not manager_tire_rule_warning_logged:
+				race_logs.append("⚠️ Regra de pneus: chame seus pilotos ao box antes da última volta para usar um segundo composto.")
+				manager_tire_rule_warning_logged = true
+			return {"finished": false, "awaiting_manager_pit": true}
+		manager_tire_rule_warning_logged = false
+
 	current_lap += 1
 	var lap_events: Array = []
 	var lap_pit_events: Array = []
+	var flag_at_lap_start := safety_car_status
 	
 	_process_weather_and_water_accumulation(lap_events)
-
-	if safety_car_laps_left > 0:
-		safety_car_laps_left -= 1
-		if safety_car_laps_left <= 0:
-			safety_car_status = "NONE"
-			incident_sector = 0
-			lap_events.append("🟢 BANDEIRA VERDE: Pista liberada / SC recolhido.")
 
 	var accident_this_lap = false
 	var accident_sector = 0
@@ -386,7 +464,18 @@ func process_lap() -> Dictionary:
 
 		var compound = str(d.get("tire_compound", "Medium"))
 		var wear_rate = 3.5 if compound in ["Soft", "Macio"] else (2.2 if compound in ["Medium", "Médio", "Inter", "Wet"] else 1.5)
-		if safety_car_status in ["SC", "VSC"]: wear_rate *= 0.35
+		if safety_car_status in ["SC", "VSC"]:
+			wear_rate *= 0.35
+		elif safety_car_status == "YELLOW":
+			wear_rate *= 0.7
+		var pace_time_modifier := 0.0
+		match str(d.get("estilo", "Normal")):
+			"Conservador":
+				pace_time_modifier = 0.35
+				wear_rate *= 0.75
+			"Agressivo", "Ataque Máximo":
+				pace_time_modifier = -0.25
+				wear_rate *= 1.25
 		d["tire_wear"] = max(0.0, float(d.get("tire_wear", 100.0)) - wear_rate)
 		
 		var ideal_compound = _get_ideal_compound_for_water(water_level)
@@ -396,21 +485,35 @@ func process_lap() -> Dictionary:
 		var pit_count = int(d.get("pit_stops", 0))
 		var offset = int(d.get("pit_window_offset", 0))
 		
-		var wear_limit = 12.0 + float(offset)
-		var soft_stint_limit = 18 + offset
+		var wear_percent := 100.0 - float(d.get("tire_wear", 100.0))
+		var wear_thresholds := int(floor(wear_percent / 10.0))
+		var wear_pit_chance := clampf(float(wear_thresholds) * 0.07, 0.0, 1.0)
+		var pit_for_wear := randf() < wear_pit_chance
 		
-		if ideal_compound in ["Wet", "Inter"] and compound != ideal_compound:
-			needs_pit = true
-			target_compound = ideal_compound
-		elif ideal_compound not in ["Wet", "Inter"] and compound in ["Wet", "Inter"]:
-			needs_pit = true
-			target_compound = _select_next_dry_compound(d, remaining_laps)
-		elif pit_count == 0 and remaining_laps <= max(2, 6 + offset):
-			needs_pit = true
-			target_compound = _select_next_dry_compound(d, remaining_laps)
-		elif d["tire_wear"] < wear_limit or (compound in ["Soft", "Macio"] and stint_lap >= soft_stint_limit) or (safety_car_status != "NONE" and d["tire_wear"] < (35.0 + offset * 2) and remaining_laps > 8):
-			needs_pit = true
-			target_compound = ideal_compound if ideal_compound in ["Wet", "Inter"] else _select_next_dry_compound(d, remaining_laps)
+		if bool(d.get("manager_controlled", false)):
+			needs_pit = remaining_laps > 0 and bool(d.get("pit_requested", false))
+			if needs_pit:
+				target_compound = str(d.get("pit_requested_tire", compound))
+				d["pit_requested"] = false
+				d["pit_requested_tire"] = ""
+		elif remaining_laps > 0:
+			if ideal_compound in ["Wet", "Inter"] and compound != ideal_compound:
+				needs_pit = true
+				target_compound = ideal_compound
+			elif ideal_compound not in ["Wet", "Inter"] and compound in ["Wet", "Inter"]:
+				needs_pit = true
+				target_compound = _select_next_dry_compound(d, remaining_laps)
+			elif pit_count == 0 and remaining_laps <= max(2, 6 + offset):
+				needs_pit = true
+				target_compound = _select_next_dry_compound(d, remaining_laps)
+			elif pit_for_wear:
+				needs_pit = true
+				target_compound = ideal_compound if ideal_compound in ["Wet", "Inter"] else _select_next_dry_compound(d, remaining_laps)
+
+			if needs_pit and target_compound == compound:
+				target_compound = _select_next_dry_compound(d, remaining_laps)
+			if needs_pit and pit_count == 0 and d.get("used_compounds", []).size() < 2 and target_compound == compound:
+				target_compound = _select_next_dry_compound(d, remaining_laps)
 			
 		if needs_pit:
 			d["is_in_pit"] = true
@@ -442,9 +545,7 @@ func process_lap() -> Dictionary:
 			var total_pit_time_loss = track_pit_lane_loss + base_stop_duration
 			
 			# Penalidades de aderência e chuva aplicadas no pit lap base
-			var grip_time_penalty_pit = (1.0 - (track_grip / 100.0)) * 2.5 
-			var rain_time_penalty_pit = (water_level / 100.0) * 5.0 
-			var pit_lap_base = base_track_lap + grip_time_penalty_pit + rain_time_penalty_pit + _calculate_tire_lap_delta(target_compound, 1)
+			var pit_lap_base = (base_track_lap + _calculate_tire_lap_delta(target_compound, 1)) * get_track_condition_lap_time_multiplier()
 			var lap_time = pit_lap_base + total_pit_time_loss + randf_range(-0.2, 0.2)
 			
 			d["TempoTotal"] += lap_time
@@ -476,13 +577,9 @@ func process_lap() -> Dictionary:
 			var driver_time_bonus = (driver_skill - 50.0) * 0.013
 			
 			var tire_delta = _calculate_tire_lap_delta(compound, stint_lap)
-			
-			# --- PARTE D: IMPACTO NO TEMPO DE VOLTA (ADERÊNCIA E CHUVA) ---
-			# Diferença de 2 - 3 segundos entre aderência 0 (barra vazia) e 100 (barra cheia)
-			var grip_time_penalty = (1.0 - (track_grip / 100.0)) * 2.5 
-			
-			# Diferença de 4 - 6 segundos entre 0% de chuva e 100% de chuva
-			var rain_time_penalty = (water_level / 100.0) * 5.0 
+			var tire_wear_percent := 100.0 - float(d.get("tire_wear", 100.0))
+			var degradation_step := float(d.get("tire_degradation_per_5pct", 0.07))
+			var tire_degradation: float = floorf(tire_wear_percent / 5.0) * degradation_step
 			
 			var compound_weather_penalty = 0.0
 			if water_level >= 50.0 and compound != "Wet":
@@ -494,13 +591,16 @@ func process_lap() -> Dictionary:
 				
 			var morale_time_modifier = (50.0 - float(d.get("Moral", 75))) * 0.003
 			
-			var lap_time = base_track_lap - car_time_bonus - driver_time_bonus + tire_delta + grip_time_penalty + rain_time_penalty + compound_weather_penalty + morale_time_modifier + randf_range(-0.10, 0.10)
+			var lap_time = base_track_lap - car_time_bonus - driver_time_bonus + tire_delta + tire_degradation + compound_weather_penalty + morale_time_modifier + pace_time_modifier + randf_range(-0.10, 0.10)
 			
 			if current_lap == 1:
 				lap_time = base_track_lap + randf_range(-0.20, 0.20)
+			lap_time *= get_track_condition_lap_time_multiplier()
 			
-			if safety_car_status in ["SC", "VSC"]:
+			if safety_car_status == "SC":
 				lap_time *= 1.45
+			elif safety_car_status == "VSC":
+				lap_time *= 1.25
 			elif safety_car_status == "YELLOW":
 				lap_time *= 1.15
 				
@@ -571,6 +671,13 @@ func process_lap() -> Dictionary:
 					current_accumulated_gap += delta
 					race_drivers[i]["TempoTotal"] = race_drivers[0]["TempoTotal"] + current_accumulated_gap
 
+	if flag_at_lap_start in ["SC", "VSC", "YELLOW"] and safety_car_status == flag_at_lap_start:
+		safety_car_laps_left -= 1
+		if safety_car_laps_left <= 0:
+			safety_car_status = "NONE"
+			incident_sector = 0
+			lap_events.append("🟢 BANDEIRA VERDE: Pista liberada / SC recolhido.")
+
 	race_logs.append_array(lap_events)
 	pit_logs.append_array(lap_pit_events)
 	
@@ -602,6 +709,9 @@ func _check_wet_race_dnf_risk(driver_data: Dictionary) -> bool:
 	return randf() < wet_mistake_risk
 
 func _process_wheel_to_wheel_battles() -> void:
+	if safety_car_status != "NONE":
+		return
+
 	var active_drivers: Array = []
 	for d in race_drivers:
 		if d.get("Status", "Na Pista") == "Na Pista":
@@ -627,53 +737,90 @@ func _process_wheel_to_wheel_battles() -> void:
 				var swap_time = float(defender["TempoTotal"]) - 0.05
 				attacker["TempoTotal"] = swap_time
 				
-				var log_msg = "⚔️ ULTRAPASSAGEM: " + str(attacker["Nome"]) + " ultrapassou " + str(defender["Nome"]) + " na disputa por posição!"
-				race_logs.append(log_msg)
 
 # Processa o ciclo de voltas e avanço de cada piloto na qualificação
 func process_quali_tick(delta: float) -> void:
 	if is_quali_done(): return
 	
 	quali_time_elapsed += delta
+	quali_total_elapsed_time += delta
+	track_condition_time_accumulator += delta
+	while track_condition_time_accumulator >= 90.0:
+		var condition_events: Array = []
+		_process_weather_and_water_accumulation(condition_events)
+		race_logs.append_array(condition_events)
+		track_condition_time_accumulator -= 90.0
 	var current_limit = quali_durations.get(quali_phase, 1080.0)
 	
-	if quali_time_elapsed >= current_limit:
+	if quali_time_elapsed >= current_limit and not quali_checker_flag:
 		quali_checker_flag = true
 		for d in active_quali_drivers:
-			if str(d.get("quali_state", "Box")) != "Box":
+			var state := str(d.get("quali_state", "Box"))
+			if state == "Hot Lap":
 				d["force_in_lap"] = true
+			elif state != "Box":
+				d["quali_state"] = "Box"
+				d["is_in_pit"] = true
+				d["progress"] = 0.0
+				d["quali_retry_allowed"] = false
 
 	for d in active_quali_drivers:
 		var st = str(d.get("quali_state", "Box"))
 		if st == "Box":
+			if bool(d.get("manager_controlled", false)):
+				d["timer_state"] = maxf(0.0, float(d.get("timer_state", 0.0)) - delta)
+				continue
+			if quali_checker_flag or not bool(d.get("quali_retry_allowed", true)):
+				continue
+			d["timer_state"] = float(d.get("timer_state", 0.0)) - delta
+			if float(d["timer_state"]) <= 0.0:
+				d["quali_state"] = "Em pista"
+				d["is_in_pit"] = false
+				d["progress"] = 0.0
+				d["quali_retry_allowed"] = false
+				d["force_in_lap"] = true
+				d["quali_lap_duration"] = _get_base_track_lap_time() * 1.08
+				race_logs.append("🏎️ %s deixou os boxes para iniciar uma volta de classificação." % str(d.get("Nome", "Piloto")))
 			continue
 			
-		d["progress"] = float(d.get("progress", 0.0)) + (delta / maxf(1.0, _get_base_track_lap_time()))
+		d["progress"] = float(d.get("progress", 0.0)) + delta
 		
 		# Concluiu uma volta na pista
-		while d["progress"] >= 1.0 and str(d.get("quali_state", "Box")) != "Box":
-			d["progress"] = float(d["progress"]) - 1.0
+		while str(d.get("quali_state", "Box")) != "Box":
+			var lap_duration := maxf(1.0, float(d.get("quali_lap_duration", _get_base_track_lap_time())))
+			if float(d["progress"]) < lap_duration:
+				break
+			d["progress"] = float(d["progress"]) - lap_duration
 			st = str(d.get("quali_state", "Box"))
 			if st == "Em pista":
 				# Transiciona da volta de saída para a volta rápida oficial (Hot Lap)
 				d["quali_state"] = "Hot Lap"
+				d["pending_lap_time"] = _calculate_simulated_lap_time(d)
+				d["quali_lap_duration"] = d["pending_lap_time"]
 			elif st == "Hot Lap":
 				# Simula o tempo de volta com base no OVR e no Power Index
-				var lap_time = _calculate_simulated_lap_time(d)
-				d["LastLapTime"] = lap_time
-				
-				var best_t = float(d.get("BestQualiTime", 999.0))
-				if best_t >= 900.0 or lap_time < best_t:
-					d["BestQualiTime"] = lap_time
+				var lap_time = float(d.get("pending_lap_time", 0.0))
+				if lap_time <= 0.0:
+					lap_time = _calculate_simulated_lap_time(d)
+				record_driver_quali_lap(d, lap_time)
+				_process_driver_sectors(d, lap_time)
 				
 				# Se o jogador marcou para recolher ou se é IA, entra no box após o Hot Lap
 				if d.get("force_in_lap", true):
 					d["quali_state"] = "Em Entrada"
+					d["quali_lap_duration"] = _get_base_track_lap_time() * 1.08
 				else:
 					d["quali_state"] = "Hot Lap" # Permite continuar para outra volta rápida
+					d["pending_lap_time"] = _calculate_simulated_lap_time(d)
+					d["quali_lap_duration"] = d["pending_lap_time"]
 			elif st == "Em Entrada":
 				d["quali_state"] = "Box"
 				d["is_in_pit"] = true
+				d["progress"] = 0.0
+				d["timer_state"] = randf_range(30.0, 120.0)
+				d["quali_retry_allowed"] = quali_time_elapsed + float(d["timer_state"]) < float(current_limit)
+				d["force_in_lap"] = true
+				race_logs.append("🏁 %s retornou aos boxes após a volta de classificação." % str(d.get("Nome", "Piloto")))
 
 	if quali_checker_flag:
 		var drivers_finished_lap := true
@@ -686,14 +833,19 @@ func process_quali_tick(delta: float) -> void:
 
 # Calcula o tempo de volta em segundos de forma coerente com o desempenho do carro
 func _calculate_simulated_lap_time(driver_dict: Dictionary) -> float:
-	var base_track_time = 80.0 # Tempo base de 1:20.000
+	var base_track_time = _get_base_track_lap_time()
 	var driver_ovr = float(driver_dict.get("ovr", driver_dict.get("OVR", 75.0)))
 	var team_power = float(Database.get_team_power_index(driver_dict.get("Equipe", ""))["overall"])
 	
 	var time_modifier = (100.0 - driver_ovr) * 0.05 + (100.0 - team_power) * 0.08
+	match str(driver_dict.get("estilo", "Normal")):
+		"Conservador":
+			time_modifier += 0.2
+		"Agressivo", "Ataque Máximo":
+			time_modifier -= 0.2
 	var random_variance = randf_range(-0.25, 0.25)
 	
-	return base_track_time + time_modifier + random_variance
+	return (base_track_time + time_modifier + random_variance) * get_track_condition_lap_time_multiplier()
 
 # Atualiza os tempos de volta do piloto na classificação
 func record_driver_quali_lap(driver_dict: Dictionary, lap_time: float) -> void:
@@ -752,28 +904,18 @@ func _process_weather_and_water_accumulation(lap_events: Array, elapsed_time_fac
 				weather_forecast = "☀️ Estiagem Prevista"
 				lap_events.append("📡 RADAR METEOROLÓGICO: A chuva deve parar em breve.")
 
-	# Atualização gradual da barra de Umidade/Chuva (water_level)
+	# One completed lap represents 90 seconds of track evolution.
 	if rain_intensity > 0.0:
-		var accumulation = rain_intensity * randf_range(2.0, 5.0) * elapsed_time_factor
-		water_level = min(100.0, water_level + accumulation)
+		water_level = minf(100.0, water_level + WATER_GAIN_PER_LAP * elapsed_time_factor)
+		track_grip = maxf(0.0, track_grip - GRIP_LOSS_PER_WET_LAP * elapsed_time_factor)
 	else:
+		track_grip = minf(100.0, track_grip + GRIP_GAIN_PER_DRY_LAP * elapsed_time_factor)
 		if water_level > 0.0:
-			var drying = randf_range(1.5, 4.0) * elapsed_time_factor
-			water_level = max(0.0, water_level - drying)
+			water_level = maxf(0.0, water_level - WATER_DRYING_PER_LAP * elapsed_time_factor)
 			if water_level == 0.0 and weather_state != "☀️ Ensolarado":
 				weather_state = "☀️ Ensolarado"
 				weather_forecast = "☀️ Tempo Limpo"
 				lap_events.append("☀️ A PISTA SECOU COMPLETAMENTE!")
-
-	# Atualização gradual da barra de Aderência (track_grip) conforme as regras exigidas:
-	if rain_intensity > 0.0 or water_level > 15.0:
-		# Começou a chover: diminui gradualmente até zerar
-		var loss = randf_range(4.0, 9.0) * elapsed_time_factor
-		track_grip = max(0.0, track_grip - loss)
-	else:
-		# Sol ou nublado (sem chuva): aumenta gradualmente até 100%
-		var gain = randf_range(1.5, 3.5) * elapsed_time_factor
-		track_grip = min(100.0, track_grip + gain)
 
 func resolve_red_flag_restart(_ignored_user_choice: String = "") -> void:
 	pending_red_flag_modal = false
@@ -827,6 +969,26 @@ func _get_effective_driver_skill(driver_data: Dictionary, skill_name: String) ->
 	if has_temp_bonus:
 		return base_val + 2.0
 	return base_val
+
+func request_manager_pit_stop(driver_name: String, tire_compound: String = "", driving_style: String = "") -> bool:
+	for driver in race_drivers:
+		if str(driver.get("Nome", "")).strip_edges().to_lower() != driver_name.strip_edges().to_lower():
+			continue
+		if not bool(driver.get("manager_controlled", false)) or str(driver.get("Status", "")) != "Na Pista":
+			return false
+		if current_lap >= total_laps - 1:
+			pit_logs.append("⚠️ %s não pode parar na última volta." % driver_name)
+			return false
+		var used_compounds: Array = driver.get("used_compounds", [])
+		if used_compounds.size() < 2 and not tire_compound.is_empty() and used_compounds.has(tire_compound):
+			pit_logs.append("⚠️ Selecione um composto diferente para cumprir a regra dos dois tipos de pneus.")
+			return false
+		driver["pit_requested"] = true
+		driver["pit_requested_tire"] = tire_compound
+		if not driving_style.is_empty():
+			driver["estilo"] = driving_style
+		return true
+	return false
 
 # Exemplo de verificação dentro da simulação da corrida por volta
 func _check_manager_planned_pit_stop(car: Dictionary, current_lap: int) -> void:

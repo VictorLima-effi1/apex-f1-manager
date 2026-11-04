@@ -155,9 +155,11 @@ func build_ui() -> void:
 	_build_track_info_content(track_win.get_content_node(), track_curr)
 	_apply_fixed_transform(track_win, Vector2(col4_x, margin_y + col4_h1 + gap_y), Vector2(col_w, col4_h2))
 
-	var fast_sim_win = _create_resizable_window("fast_sim_panel", Database.tr_text("PANEL_FAST_SIM"), canvas)
-	_build_fast_sim_content(fast_sim_win.get_content_node())
-	_apply_fixed_transform(fast_sim_win, Vector2(col4_x, margin_y + col4_h1 + col4_h2 + (gap_y * 2.0)), Vector2(col_w, col4_h3))
+	var final_panel_title := "Finanças" if str(Database.game_mode) == "manager" else Database.tr_text("PANEL_FAST_SIM")
+	var final_panel := _create_resizable_window("fast_sim_panel", final_panel_title, canvas)
+	if str(Database.game_mode) != "manager":
+		_build_fast_sim_content(final_panel.get_content_node())
+	_apply_fixed_transform(final_panel, Vector2(col4_x, margin_y + col4_h1 + col4_h2 + (gap_y * 2.0)), Vector2(col_w, col4_h3))
 
 func _create_resizable_window(key: String, title_text: String, parent: Control) -> ResizablePanel:
 	var panel = ResizablePanel.new()
@@ -1271,16 +1273,25 @@ func _run_fast_simulation(by_season: bool, amount: int) -> void:
 			while Database.current_gp <= Database.tracks.size():
 				Database.simulate_current_gp_fast()
 				await get_tree().process_frame
-			Database.end_season_and_advance_year()
-			await get_tree().process_frame
+			await _show_season_summary_and_wait()
 	else:
 		for g in range(amount):
 			Database.simulate_current_gp_fast()
 			if Database.current_gp > Database.tracks.size():
-				Database.end_season_and_advance_year()
+				await _show_season_summary_and_wait()
 			await get_tree().process_frame
 
 	build_ui()
+
+func _show_season_summary_and_wait() -> void:
+	var summary_view = preload("res://views/season_summary_view.gd").new()
+	var continued := false
+	summary_view.open_summary(self, Database.get_season_summary(), func():
+		Database.end_season_and_advance_year()
+		continued = true
+	)
+	while not continued:
+		await get_tree().process_frame
 
 # --- UTILITÁRIOS DA UI ---
 

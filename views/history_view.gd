@@ -153,7 +153,10 @@ func build_ui() -> void:
 	
 	var target_history = Database.race_history
 	if "full_season_archive" in Database and selected_year != Database.current_year:
-		target_history = Database.full_season_archive.get(selected_year, [])
+		target_history = Database.full_season_archive.get(
+			selected_year,
+			Database.full_season_archive.get(str(selected_year), [])
+		)
 		
 	if target_history == null or target_history.is_empty():
 		var empty_lbl = Label.new()
@@ -191,9 +194,9 @@ func build_ui() -> void:
 
 			if rh.has("podium") and rh["podium"] is Array:
 				var pod = rh["podium"]
-				p1 = pod[0].get("Nome", "-") if pod.size() > 0 and pod[0] is Dictionary else "-"
-				p2 = pod[1].get("Nome", "-") if pod.size() > 1 and pod[1] is Dictionary else "-"
-				p3 = pod[2].get("Nome", "-") if pod.size() > 2 and pod[2] is Dictionary else "-"
+				p1 = _get_podium_driver_name(pod, 0)
+				p2 = _get_podium_driver_name(pod, 1)
+				p3 = _get_podium_driver_name(pod, 2)
 			else:
 				p1 = rh.get("winner", rh.get("Vencedor", "-"))
 				p2 = rh.get("second", rh.get("Segundo", "-"))
@@ -211,6 +214,14 @@ func build_ui() -> void:
 	race_vbox.add_child(race_scroll)
 	race_panel.add_child(race_vbox)
 	main_vbox.add_child(race_panel)
+
+func _get_podium_driver_name(podium: Array, position: int) -> String:
+	if position >= podium.size():
+		return "-"
+	var entry: Variant = podium[position]
+	if entry is Dictionary:
+		return str(entry.get("Nome", entry.get("nome", "-")))
+	return str(entry)
 
 func _create_stat_box(title_txt: String, main_txt: String, sub_txt: String) -> VBoxContainer:
 	var vbox = VBoxContainer.new()

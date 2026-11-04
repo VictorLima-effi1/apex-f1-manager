@@ -21,6 +21,8 @@ var session_time_left: float = 14400.0 # 4 horas em segundos (4 * 3600)
 var time_speed: float = 1.0            # Multiplicador (1x, 5x, 10x, 50x)
 var is_time_paused: bool = true        # Começa pausado para o jogador se preparar
 var lap_tick_timer: float = 0.0        # Cronômetro interno para disparar voltas
+var timing_refresh_elapsed: float = 0.0
+var day_session_finish_handled: bool = false
 
 # =============================================================
 # NOVAS VARIÁVEIS DE P&D / EVOLUÇÃO DOS TESTES DE INVERNO
@@ -38,6 +40,7 @@ var selected_sponsors: Array = [] # Lista de até 3 patrocinadores
 var selected_drivers: Array = []
 var selected_engine: Dictionary = {}
 var selected_chassis: Dictionary = {}
+var active_modal_window: Window
 
 # Animação do Background
 var time_passed: float = 0.0
@@ -120,6 +123,13 @@ func _render_current_step() -> void:
 		-1: _build_mode_selection_menu()
 		0: _build_team_creation_step()
 		3: _build_winter_testing_step()
+
+func _close_active_modal_window() -> void:
+	if not is_instance_valid(active_modal_window):
+		return
+	active_modal_window.hide()
+	active_modal_window.queue_free()
+	active_modal_window = null
 
 # =============================================================
 # ETAPA -1: SELEÇÃO DE MODO DE JOGO
@@ -678,6 +688,7 @@ func _build_team_creation_step() -> void:
 			{"pneu": "Macio (C5)", "stint": "Simulação de Quali", "on_track": true, "wear": 100.0}
 		]
 		current_step = 3
+		_sync_hired_drivers_to_global_database()
 		_init_test_grid()
 		_render_current_step()
 	)
@@ -731,6 +742,7 @@ func _recalculate_budget() -> void:
 # 1. TABELA DE PILOTOS (COM VERIFICAÇÃO DE CHANCE DE INTERESSE)
 # =============================================================
 func _open_driver_modal() -> void:
+	_close_active_modal_window()
 	var dialog = Window.new()
 	dialog.title = "🏎️ MERCADO DE PILOTOS - TABELA DE NEGOCIAÇÃO"
 	dialog.size = Vector2i(1050, 660)
@@ -948,8 +960,9 @@ func _open_driver_modal() -> void:
 					# DEFINE A MENSAGEM SOLICITADA
 					d["inegociavel"] = true
 					last_negotiation_warning = "%s não tem interesse em negociar com uma nova equipe." % d_name
+					dialog.hide()
 					dialog.queue_free()
-					_open_driver_modal()
+					call_deferred("_open_driver_modal")
 				else:
 					last_negotiation_warning = "" # Limpa qualquer aviso antigo ao abrir mesa
 					dialog.queue_free()
@@ -977,12 +990,14 @@ func _open_driver_modal() -> void:
 	margin.add_child(main_vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
+	active_modal_window = dialog
 	dialog.popup_centered()
 
 # =============================================================
 # 2. MESA DE NEGOCIAÇÃO (CONTADOR DE 3 TENTATIVAS)
 # =============================================================
 func _open_negotiation_dialog(driver: Dictionary) -> void:
+	_close_active_modal_window()
 	var dialog = Window.new()
 	var d_name = driver.get("Nome", "Piloto")
 	dialog.title = "🤝 MESA DE NEGOCIAÇÃO - " + d_name.to_upper()
@@ -1209,8 +1224,9 @@ func _open_negotiation_dialog(driver: Dictionary) -> void:
 				btn_send.disabled = true
 				
 				await get_tree().create_timer(2.0).timeout
+				dialog.hide()
 				dialog.queue_free()
-				_open_driver_modal()
+				call_deferred("_open_driver_modal")
 			else:
 				lbl_feedback.text = "❌ Proposta recusada! Tentativas restantes: %d/3." % driver["tentativas_restantes"]
 				lbl_feedback.add_theme_color_override("font_color", Color("#f59e0b"))
@@ -1222,8 +1238,9 @@ func _open_negotiation_dialog(driver: Dictionary) -> void:
 	btn_cancel.custom_minimum_size = Vector2(160, 44)
 	btn_cancel.add_theme_font_size_override("font_size", 14)
 	btn_cancel.pressed.connect(func():
+		dialog.hide()
 		dialog.queue_free()
-		_open_driver_modal()
+		call_deferred("_open_driver_modal")
 	)
 	btn_hbox.add_child(btn_cancel)
 	
@@ -1231,6 +1248,7 @@ func _open_negotiation_dialog(driver: Dictionary) -> void:
 	margin.add_child(vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
+	active_modal_window = dialog
 	dialog.popup_centered()
 
 # Função auxiliar para criar os títulos das colunas na modal
@@ -1244,6 +1262,7 @@ func _add_modal_th(parent: HBoxContainer, text: String, width: float) -> void:
 
 # MODAL MOTORES
 func _open_engine_modal() -> void:
+	_close_active_modal_window()
 	var dialog = Window.new()
 	dialog.title = "⚙️ MERCADO DE UNIDADES DE POTÊNCIA - F1 2026"
 	dialog.size = Vector2i(1050, 660)
@@ -1432,12 +1451,14 @@ func _open_engine_modal() -> void:
 	margin.add_child(main_vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
+	active_modal_window = dialog
 	dialog.popup_centered()
 
 # =============================================================
 # JANELA DE CONFIGURAÇÃO DE MOTOR PRÓPRIO (POTÊNCIA vs CONFIABILIDADE vs CUSTO)
 # =============================================================
 func _open_custom_engine_builder_modal() -> void:
+	_close_active_modal_window()
 	var dialog = Window.new()
 	dialog.title = "🛠️ ENGENHARIA DE MOTORES - ESCUDERIA PROPRIETÁRIA"
 	dialog.size = Vector2i(850, 600)
@@ -1652,6 +1673,7 @@ func _open_custom_engine_builder_modal() -> void:
 	margin.add_child(vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
+	active_modal_window = dialog
 	dialog.popup_centered()
 
 # MODAL CHASSIS
@@ -1660,6 +1682,7 @@ func _open_chassis_modal() -> void:
 	_open_custom_chassis_builder_modal()
 
 func _open_custom_chassis_builder_modal() -> void:
+	_close_active_modal_window()
 	var dialog = Window.new()
 	dialog.title = "🛠️ DEPARTAMENTO DE ENGENHARIA - PROJETO DE CHASSI E AERODINÂMICA"
 	dialog.size = Vector2i(900, 640)
@@ -1777,7 +1800,7 @@ func _open_custom_chassis_builder_modal() -> void:
 		var base_weight = 768.0
 		var weight_from_aero = (aero_val - 75.0) * 0.1
 		var weight_from_rel = (rel_val - 75.0) * 0.9
-		var calculated_weight = base_weight + weight_from_aero + weight_from_rel
+		var calculated_weight = maxf(768.0, base_weight + weight_from_aero + weight_from_rel)
 		
 		l_weight.text = "⚖️ Peso Total Estimado do Chassi: %.1f kg (Mínimo F1 Real: 768 kg)" % calculated_weight
 		l_weight.add_theme_color_override("font_color", Color("#38bdf8") if calculated_weight <= 778.0 else Color("#fbbf24"))
@@ -1828,7 +1851,7 @@ func _open_custom_chassis_builder_modal() -> void:
 		var final_aero = int(slider_aero.value)
 		var final_rel = int(slider_rel.value)
 		
-		var calculated_weight = 768.0 + ((final_aero - 75.0) * 0.1) + ((final_rel - 75.0) * 0.9)
+		var calculated_weight = maxf(768.0, 768.0 + ((final_aero - 75.0) * 0.1) + ((final_rel - 75.0) * 0.9))
 		var aero_cost = max(0.0, (final_aero - 75.0) * 0.85)
 		var rel_cost = max(0.0, (final_rel - 75.0) * 0.30)
 		var final_cost = 10.0 + aero_cost + rel_cost
@@ -1858,6 +1881,7 @@ func _open_custom_chassis_builder_modal() -> void:
 	margin.add_child(vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
+	active_modal_window = dialog
 	dialog.popup_centered()
 
 func _save_team_to_database() -> void:
@@ -2549,6 +2573,7 @@ func _on_simulate_laps_pressed() -> void:
 # JANELA MODAL DE SELEÇÃO DE PATROCINADORES (TABELA DE CONTRATOS)
 # =============================================================
 func _open_sponsors_selection_modal() -> void:
+	_close_active_modal_window()
 	var dialog = Window.new()
 	dialog.title = "🤝 ACORDOS COMERCIAIS E PATROCÍNIOS DE TEMPORADA"
 	dialog.size = Vector2i(920, 600)
@@ -2696,6 +2721,7 @@ func _open_sponsors_selection_modal() -> void:
 	margin.add_child(vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
+	active_modal_window = dialog
 	dialog.popup_centered()
 
 func _process(delta: float) -> void:
@@ -2710,6 +2736,10 @@ func _process(delta: float) -> void:
 		
 		# Avança o progresso real dos carros na pista
 		_simulate_automatic_lap_tick(simulated_delta)
+		timing_refresh_elapsed += delta
+		if timing_refresh_elapsed >= 0.25:
+			timing_refresh_elapsed = 0.0
+			_render_timing_table()
 			
 		if session_time_left <= 0.0:
 			is_time_paused = true
@@ -2743,33 +2773,30 @@ func _simulate_automatic_lap_tick(delta_simulated: float) -> void:
 			if pit_time > 0.0:
 				pit_time = max(0.0, pit_time - delta_simulated)
 				item["pit_time_left"] = pit_time
-				
-				# Quando a barra amarela de box zera:
-				if pit_time <= 0.0:
-					var should_release = false
+
+			# Carros de IA saem assim que termina o tempo de box; os do jogador aguardam o comando.
+			if pit_time <= 0.0:
+				var should_release = not bool(item.get("is_player", false))
+				if item.get("is_player", false):
+					var p_idx = int(item.get("driver_idx", -1))
+					if p_idx >= 0 and p_idx < driver_configs.size():
+						should_release = bool(driver_configs[p_idx].get("on_track", false))
+
+				if should_release:
+					item["status"] = "Volta de Saída"
+					item["wear"] = 100.0
+
 					if item.get("is_player", false):
 						var p_idx = int(item.get("driver_idx", -1))
 						if p_idx >= 0 and p_idx < driver_configs.size():
-							should_release = driver_configs[p_idx].get("on_track", false)
+							item["pneu"] = driver_configs[p_idx].get("pneu", "Duro (C3)")
+							item["estilo"] = driver_configs[p_idx].get("estilo", "Normal")
 					else:
-						should_release = true
-						
-					if should_release:
-						item["status"] = "Volta de Saída"
-						item["wear"] = 100.0
-						
-						# Aplica o pneu e o ritmo configurados no menu do jogador
-						if item.get("is_player", false):
-							var p_idx = int(item.get("driver_idx", -1))
-							if p_idx >= 0 and p_idx < driver_configs.size():
-								item["pneu"] = driver_configs[p_idx].get("pneu", "Duro (C3)")
-								item["estilo"] = driver_configs[p_idx].get("estilo", "Normal")
-						else:
-							item["pneu"] = ["Duro (C3)", "Médio (C4)", "Macio (C5)"][randi() % 3]
-							
-						item["lap_progress"] = 0.0
-						item["current_target_lap"] = 105.0
-						state_changed = true
+						item["pneu"] = ["Duro (C3)", "Médio (C4)", "Macio (C5)"][randi() % 3]
+
+					item["lap_progress"] = 0.0
+					item["current_target_lap"] = 105.0
+					state_changed = true
 
 		# 2. ESTADO: VOLTA DE SAÍDA (OUT-LAP)
 		elif current_status == "Volta de Saída":
@@ -2871,60 +2898,76 @@ func _simulate_automatic_lap_tick(delta_simulated: float) -> void:
 	if state_changed:
 		_rebuild_driver_control_boxes()
 		
-	_render_timing_table()
-
 # Ação acionada quando o tempo de 4 horas se encerra
 func _on_day_session_finished() -> void:
+	if day_session_finish_handled:
+		return
+	day_session_finish_handled = true
 	if testing_day < max_testing_days:
 		# Avança para o próximo dia
 		testing_day += 1
 		session_time_left = 14400.0 # Reseta para 4 horas
 		is_time_paused = true
+		day_session_finish_handled = false
+		timing_refresh_elapsed = 0.0
+		_reset_test_grid_for_new_day()
 		
 		var dialog = AcceptDialog.new()
 		dialog.title = "🏁 Fim do Dia %d" % (testing_day - 1)
 		dialog.dialog_text = "Dia %d encerrado! Prepare seus carros para o Dia %d de testes." % [(testing_day - 1), testing_day]
 		add_child(dialog)
+		active_modal_window = dialog
 		dialog.popup_centered()
 		_build_winter_testing_step()
 	else:
 		# Chegou ao Fim do 3º Dia -> EXIBE O RELATÓRIO DE EVOLUÇÃO
 		_open_testing_results_modal()
 
-# Sorteia um parâmetro para evoluir +0.1 na equipe e aplica diretamente
+func _reset_test_grid_for_new_day() -> void:
+	for item in test_grid_data:
+		item["status"] = "Nos Boxes"
+		item["wear"] = 100.0
+		item["pit_time_left"] = 0.0
+		item["pit_max_time"] = 0.0
+		item["lap_progress"] = 0.0
+		item["current_target_lap"] = 91.5
+		if bool(item.get("is_player", false)):
+			var driver_idx := int(item.get("driver_idx", -1))
+			if driver_idx >= 0 and driver_idx < driver_configs.size():
+				driver_configs[driver_idx]["on_track"] = false
+
+# Sorteia um parâmetro para evoluir a equipe durante os testes.
 func _apply_random_testing_upgrade(target_team_name: String) -> void:
 	if not team_testing_upgrades.has(target_team_name):
 		team_testing_upgrades[target_team_name] = {"Motor": 0.0, "Aero": 0.0, "Chassi": 0.0, "Confiabilidade": 0.0, "Peso": 0.0}
 		
-	var attributes = ["Motor", "Aero", "Chassi", "Confiabilidade", "Peso"]
-	var chosen_attr = attributes[randi() % attributes.size()]
-	
-	team_testing_upgrades[target_team_name][chosen_attr] += 0.1
-	
-	# Se a equipe sorteada for a do jogador, reduz o peso no banco de dados e nos carros em pista
-	if target_team_name == team_name:
-		if chosen_attr == "Motor":
-			Database.user_team["potencia"] = float(Database.user_team.get("potencia", 85.0)) + 0.1
-		elif chosen_attr == "Aero":
-			Database.user_team["aero"] = float(Database.user_team.get("aero", 85.0)) + 0.1
-		elif chosen_attr == "Chassi":
-			Database.user_team["chassi"] = float(Database.user_team.get("chassi", 85.0)) + 0.1
-		elif chosen_attr == "Confiabilidade":
-			Database.user_team["confiabilidade"] = float(Database.user_team.get("confiabilidade", 85.0)) + 0.1
-		elif chosen_attr == "Peso":
-			var current_w = float(Database.user_team.get("peso", 778.0))
-			var new_w = max(768.0, current_w - 0.1)
-			Database.user_team["peso"] = new_w
-			
-			# Atualiza o peso imediatamente nos carros da sua equipe na tabela da sessão
-			for item in test_grid_data:
-				if item.get("is_player", false):
-					item["peso"] = new_w
+	var attributes = ["Motor", "Aero", "Chassi", "Confiabilidade"]
+	var chosen_attr: String = "Peso" if randf() < 0.35 else attributes[randi() % attributes.size()]
+	var upgrade_amount := 0.1
+	var team_weight := 778.0
+	if chosen_attr == "Peso":
+		if target_team_name == team_name:
+			team_weight = float(Database.user_team.get("peso", 778.0))
+		else:
+			var target_team := Database._get_team_by_name(target_team_name)
+			if not target_team.is_empty():
+				team_weight = float(target_team.get("peso", target_team.get("Peso", 778.0)))
+		var already_reduced := float(team_testing_upgrades[target_team_name].get("Peso", 0.0))
+		var remaining_weight := maxf(0.0, team_weight - 768.0 - already_reduced)
+		upgrade_amount = randf_range(0.05, minf(0.6, remaining_weight)) if remaining_weight >= 0.05 else 0.0
+	team_testing_upgrades[target_team_name][chosen_attr] += upgrade_amount
+
+	if chosen_attr == "Peso":
+		var new_weight := maxf(768.0, team_weight - float(team_testing_upgrades[target_team_name]["Peso"]))
+		for item in test_grid_data:
+			if str(item.get("equipe", "")) == target_team_name:
+				item["peso"] = new_weight
 
 # =============================================================
 # JANELA DE RELATÓRIO FINAL DE EVOLUÇÃO DE P&D DA PRÉ-TEMPORADA
 # =============================================================
 func _open_testing_results_modal() -> void:
+	_close_active_modal_window()
 	var dialog = Window.new()
 	dialog.title = "📊 RELATÓRIO DE EVOLUÇÃO TÉCNICA - TESTES DE INVERNO"
 	dialog.size = Vector2i(850, 620)
@@ -2991,7 +3034,7 @@ func _open_testing_results_modal() -> void:
 		cv.add_child(l_name)
 		
 		# Estatísticas de Evolução Formatadas Exatamente como Solicitado
-		var stats_txt = "   Motor: +%.1f   |   Aero: +%.1f   |   Chassi: +%.1f   |   Confiab: +%.1f   |   Peso: -%.1fkg" % [
+		var stats_txt = "   Motor: +%.1f   |   Aero: +%.1f   |   Chassi: +%.1f   |   Confiab: +%.1f   |   Peso: -%.2fkg" % [
 			upg["Motor"], upg["Aero"], upg["Chassi"], upg["Confiabilidade"], upg["Peso"]
 		]
 		
@@ -3019,20 +3062,27 @@ func _open_testing_results_modal() -> void:
 	btn_proceed.add_theme_stylebox_override("normal", st_b)
 	
 	btn_proceed.pressed.connect(func():
+		dialog.hide()
 		dialog.queue_free()
 		
 		# APLICA AS EVOLUÇÕES E SALVA A EQUIPE ANTES DE MUDAR DE TELA
 		_apply_final_testing_upgrades_to_database()
 		
 		Database.current_view = "dashboard"
-		get_tree().change_scene_to_file("res://main.tscn")
+		call_deferred("_change_to_main_game_scene")
 	)
 	vbox.add_child(btn_proceed)
 	
 	margin.add_child(vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
+	active_modal_window = dialog
 	dialog.popup_centered()
+
+func _change_to_main_game_scene() -> void:
+	var scene_error := get_tree().change_scene_to_file("res://main.tscn")
+	if scene_error != OK:
+		push_error("Não foi possível abrir o dashboard após a pré-temporada. Erro: %d" % scene_error)
 
 # =============================================================
 # SALVA A EQUIPE DO JOGADOR E APLICAR O P&D FINAL NA DATABASE
@@ -3139,12 +3189,17 @@ func _safe_add_team_attribute(team_dict: Dictionary, attr_name: String, amount: 
 # Vincula a nova equipe aos pilotos contratados na lista global de pilotos
 func _sync_hired_drivers_to_global_database() -> void:
 	if not "drivers" in Database: return
-	var hired_names = []
+	var hired_names: Array[String] = []
 	for d in selected_drivers:
 		hired_names.append(str(d.get("Nome", d.get("nome", ""))))
-		
+	var teams_to_replenish: Dictionary = {}
 	for driver_dict in Database.drivers:
 		var d_name = str(driver_dict.get("Nome", driver_dict.get("nome", "")))
 		if d_name in hired_names:
+			var previous_team := str(driver_dict.get("Equipe", driver_dict.get("equipe", ""))).strip_edges()
+			if not previous_team.is_empty() and previous_team != "Free Agent" and previous_team != team_name:
+				teams_to_replenish[previous_team] = true
 			driver_dict["Equipe"] = team_name
 			driver_dict["equipe"] = team_name
+	for previous_team in teams_to_replenish.keys():
+		Database._auto_fill_team_seat(str(previous_team))

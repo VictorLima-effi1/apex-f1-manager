@@ -95,6 +95,7 @@ var custom_team_data: Dictionary = {
 # --- TETO ORÇAMENTÁRIO (COST CAP) ---
 const COST_CAP_LIMIT: float = 135_000_000.0 # $135 Milhões base por temporada
 const UPGRADE_COST: float = 8_500_000.0       # Custo por pacote de evolução (+1 Power Index)
+const PLAYER_RD_COST: float = 8_500_000.0
 
 # Estrutura da equipe do usuário
 var user_team = {
@@ -150,9 +151,9 @@ var dashboard_layout: Dictionary = {
 }
 
 var transfer_history: Array = [
-	{"temporada": "2026", "detalhe": "Lewis Hamilton assina com a Ferrari por 3 anos.", "tipo": "Transferência"},
-	{"temporada": "2026", "detalhe": "Carlos Sainz fecha acordo com a Williams.", "tipo": "Transferência"},
-	{"temporada": "2026", "detalhe": "Gabriel Bortoleto promovido a titular na Audi.", "tipo": "Estreia"}
+	{"temporada": "2026", "detalhe": "Lewis Hamilton assina com a Ferrari por 3 anos.", "tipo": "Transferência", "nome": "Lewis Hamilton", "idade": 41, "anos": 3, "equipe": "Ferrari"},
+	{"temporada": "2026", "detalhe": "Carlos Sainz fecha acordo com a Williams.", "tipo": "Transferência", "nome": "Carlos Sainz", "idade": 32, "anos": 2, "equipe": "Williams"},
+	{"temporada": "2026", "detalhe": "Gabriel Bortoleto promovido a titular na Audi.", "tipo": "Estreia", "nome": "Gabriel Bortoleto", "idade": 21, "anos": 1, "equipe": "Audi"}
 ]
 
 const F1_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
@@ -169,7 +170,7 @@ func _ready() -> void:
 func init_season_budget_cap() -> void:
 	team_season_expenses.clear()
 	for team in teams:
-		var team_name = str(team.get("Nome", ""))
+		var team_name = str(team.get("Nome", team.get("nome", "")))
 		team_season_expenses[team_name] = 0.0
 		if not team_budget_caps.has(team_name):
 			var last_rank = int(team.get("LastSeasonRank", 5))
@@ -203,7 +204,8 @@ func process_ai_team_upgrades() -> void:
 		"Unidade de Potência": [],
 		"Aerodinâmica": [],
 		"Chassi": [],
-		"Confiabilidade": []
+		"Confiabilidade": [],
+		"Peso": []
 	}
 	
 	var total_upgrades_in_gp = 0
@@ -248,10 +250,17 @@ func process_ai_team_upgrades() -> void:
 		if t["Aero"] < 99.0: available_focuses.append(1)
 		if t["Chassi"] < 99.0: available_focuses.append(2)
 		if t["Confiabilidade"] < 99.0: available_focuses.append(3)
+		if float(t.get("peso", 778.0)) > 768.0: available_focuses.append(4)
 		
 		if available_focuses.size() > 0:
-			var focus = available_focuses[randi() % available_focuses.size()]
+			var focus: int
+			if available_focuses.has(4) and randf() < 0.30:
+				focus = 4
+			else:
+				var non_weight_focuses: Array = available_focuses.filter(func(item): return item != 4)
+				focus = non_weight_focuses[randi() % non_weight_focuses.size()] if not non_weight_focuses.is_empty() else 4
 			var component_name = ""
+			var weight_reduction := 0.0
 			
 			if focus == 0:
 				t["Motor"] = min(99.0, t["Motor"] + gain)
@@ -265,13 +274,18 @@ func process_ai_team_upgrades() -> void:
 			elif focus == 3:
 				t["Confiabilidade"] = min(99.0, t["Confiabilidade"] + gain)
 				component_name = "Confiabilidade"
+			elif focus == 4:
+				weight_reduction = minf(randf_range(0.05, 0.6), float(t.get("peso", 778.0)) - 768.0)
+				if weight_reduction > 0.0:
+					t["peso"] = maxf(768.0, float(t.get("peso", 778.0)) - weight_reduction)
+					component_name = "Peso"
 
 			if not component_name.is_empty():
 				team_season_expenses[team_name] = current_expense + UPGRADE_COST
 				total_upgrades_in_gp += 1
 				
 				# Formata o trecho individual (ex: "Audi (+0.90)")
-				var entry_str = "%s (+%.2f)" % [team_name, gain]
+				var entry_str := "%s (-%.2f kg)" % [team_name, weight_reduction] if component_name == "Peso" else "%s (+%.2f)" % [team_name, gain]
 				gp_upgrades_by_type[component_name].append(entry_str)
 		else:
 			if remaining >= UPGRADE_COST:
@@ -281,7 +295,7 @@ func process_ai_team_upgrades() -> void:
 	if total_upgrades_in_gp > 0:
 		var summary_parts: Array = []
 		
-		for comp in ["Unidade de Potência", "Aerodinâmica", "Chassi", "Confiabilidade"]:
+		for comp in ["Unidade de Potência", "Aerodinâmica", "Chassi", "Confiabilidade", "Peso"]:
 			var team_list: Array = gp_upgrades_by_type[comp]
 			if team_list.size() > 0:
 				var teams_formatted = ""
@@ -293,8 +307,11 @@ func process_ai_team_upgrades() -> void:
 					var all_except_last = team_list.slice(0, team_list.size() - 1)
 					teams_formatted = ", ".join(all_except_last) + " e " + team_list.back()
 				
-				var action_verb = "Atualizam a" if comp == "Unidade de Potência" else "Atualizam"
-				summary_parts.append("%s %s %s" % [teams_formatted, action_verb, comp])
+				if comp == "Peso":
+					summary_parts.append("%s reduzem o peso dos carros" % teams_formatted)
+				else:
+					var action_verb = "Atualizam a" if comp == "Unidade de Potência" else "Atualizam"
+					summary_parts.append("%s %s %s" % [teams_formatted, action_verb, comp])
 
 		var final_msg = "🛠️ UPGRADES: " + ". ".join(summary_parts) + "."
 		add_news(final_msg)
@@ -428,27 +445,42 @@ func get_team_power_index(team_input) -> Dictionary:
 				var v = d[k]
 				var num: float = 0.0
 				if typeof(v) == TYPE_DICTIONARY:
-					num = float(v.get("qualidade", v.get("potencia", v.get("level", v.get("value", default_val)))))
-				else:
+					var nested_value: Variant = v.get("qualidade", v.get("potencia", v.get("level", v.get("value", null))))
+					if not (nested_value is int or nested_value is float):
+						continue
+					num = float(nested_value)
+				elif v is int or v is float:
 					num = float(v)
+				elif v is String and str(v).is_valid_float():
+					num = float(v)
+				else:
+					continue
 				if num > 0.0 and num <= 1.0:
 					num = num * 100.0
 				return num
 		return default_val
 
-	var motor_val = _get_normalized_val.call(team_dict, ["potencia", "Potencia", "motor", "Motor", "engine", "Engine"], 75.0)
+	var motor_val = _get_normalized_val.call(team_dict, ["potencia", "Potencia", "Motor", "motor", "engine", "Engine"], 75.0)
 	var aero_val = _get_normalized_val.call(team_dict, ["aero", "Aero", "aerodinamica", "Aerodinamica"], 75.0)
 	var chassis_val = _get_normalized_val.call(team_dict, ["chassi", "Chassi", "chassis", "Chassis"], 75.0)
 	var rel_val = _get_normalized_val.call(team_dict, ["confiabilidade", "Confiabilidade", "reliability"], 75.0)
 
-	var min_weight = 768.0
-	var current_weight = _get_normalized_val.call(team_dict, ["peso", "Peso", "weight", "Weight"], 768.0)
+	var min_weight: float = 768.0
+	var current_weight: float = min_weight
+	for weight_key in ["peso", "Peso", "weight", "Weight"]:
+		var weight_value: Variant = team_dict.get(weight_key)
+		if weight_value is int or weight_value is float:
+			current_weight = float(weight_value)
+			break
+		if weight_value is String and str(weight_value).is_valid_float():
+			current_weight = float(weight_value)
+			break
 	if current_weight > 5000.0:
 		current_weight = current_weight / 1000.0
 	if current_weight <= 0.0:
 		current_weight = min_weight
 
-	var weight_percentage = (min_weight / current_weight) * 100.0
+	var weight_percentage = clampf((min_weight / current_weight) * 100.0, 0.0, 100.0)
 	var final_power_index = (motor_val + aero_val + chassis_val + rel_val + weight_percentage) / 5.0
 
 	return {
@@ -567,25 +599,86 @@ func _get_teammate_finish_position(standings: Array, team_name: String, driver_n
 	return 99
 
 func _update_driver_stats_after_race(driver: Dictionary, grid_start_pos: int, race_finish_pos: int, is_dnf: bool) -> void:
+	var pos_diff := grid_start_pos - race_finish_pos
+	if pos_diff > 0:
+		driver["PosicoesGanhaAno"] = int(driver.get("PosicoesGanhaAno", 0)) + pos_diff
+	elif pos_diff < 0:
+		driver["PosicoesPerdidasAno"] = int(driver.get("PosicoesPerdidasAno", 0)) + abs(pos_diff)
+
 	if is_dnf:
 		driver["DNFsAno"] = int(driver.get("DNFsAno", 0)) + 1
 		driver["SequenciaPontos"] = 0
 	else:
-		var pos_diff = grid_start_pos - race_finish_pos
-		if pos_diff > 0:
-			driver["PosicoesGanhaAno"] = int(driver.get("PosicoesGanhaAno", 0)) + pos_diff
-		elif pos_diff < 0:
-			driver["PosicoesPerdidasAno"] = int(driver.get("PosicoesPerdidasAno", 0)) + abs(pos_diff)
-
 		if race_finish_pos <= 10:
 			driver["SequenciaPontos"] = int(driver.get("SequenciaPontos", 0)) + 1
 		else:
 			driver["SequenciaPontos"] = 0
 
+func record_completed_race(results: Array, track_name: String = "") -> void:
+	if race_finished or results.is_empty():
+		return
+
+	var podium: Array = []
+	var podium_teams: Array = []
+	var winner_team := ""
+	for i in range(results.size()):
+		var result: Dictionary = results[i]
+		var driver_name := str(result.get("Nome", result.get("nome", "")))
+		var is_dnf := _check_is_dnf(result)
+		result["pos"] = i + 1
+		result["dnf"] = is_dnf
+		result["abandonou"] = is_dnf
+		var podium_position := 0
+		if not is_dnf and podium.size() < 3:
+			podium.append(driver_name)
+			var podium_team := str(result.get("Equipe", result.get("equipe", "")))
+			podium_teams.append(podium_team)
+			podium_position = podium.size()
+			if podium_position == 1:
+				winner_team = podium_team
+
+		var grid_position := int(result.get("grid_start_pos", result.get("grid_pos", i + 1)))
+		result["grid_pos"] = grid_position
+		var db_driver := _get_driver_by_name(driver_name)
+		if not db_driver.is_empty():
+			_update_driver_stats_after_race(db_driver, grid_position, i + 1, is_dnf)
+			if podium_position > 0:
+				if podium_position == 1:
+					db_driver["VitoriasAno"] = int(db_driver.get("VitoriasAno", 0)) + 1
+				db_driver["PodiosAno"] = int(db_driver.get("PodiosAno", 0)) + 1
+			var team_name := str(db_driver.get("Equipe", ""))
+			if team_name != "Free Agent" and team_name != "Aposentado" and not team_name.is_empty():
+				db_driver["races_with_team"] = int(db_driver.get("races_with_team", 0)) + 1
+
+	apply_race_points(results)
+	record_standings_history_after_gp()
+	record_gp_constructors_snapshot()
+
+	if track_name.is_empty() and current_gp > 0 and current_gp <= tracks.size():
+		track_name = str(tracks[current_gp - 1].get("Nome", "GP"))
+	var winner := str(podium[0]) if podium.size() > 0 else "-"
+	var track_index := current_gp - 1
+	if podium.size() > 0 and track_index >= 0 and track_index < tracks.size():
+		record_gp_winner(track_index, winner, winner_team)
+	race_history.append({
+		"year": current_year,
+		"gp_num": current_gp,
+		"gp_index": current_gp,
+		"track": track_name,
+		"winner": winner,
+		"winner_team": winner_team,
+		"second": str(podium[1]) if podium.size() > 1 else "-",
+		"third": str(podium[2]) if podium.size() > 2 else "-",
+		"podium": podium.duplicate(),
+		"podium_teams": podium_teams.duplicate()
+	})
+	race_finished = true
+
 func simulate_current_gp_fast() -> void:
 	ensure_full_grid()
 	if current_gp > tracks.size():
 		return
+	process_due_user_team_upgrades()
 		
 	var engine = RaceEngine.new()
 	var current_track = tracks[current_gp - 1]
@@ -611,57 +704,24 @@ func simulate_current_gp_fast() -> void:
 			engine.process_lap()
 		safety_counter += 1
 		
-	var results = engine.race_drivers if engine.get("race_drivers") != null else []
+	var results: Array = engine.race_drivers if engine.get("race_drivers") != null else []
 	for i in range(results.size()):
-		results[i]["pos"] = i + 1
 		var d_name = results[i].get("Nome", results[i].get("nome", ""))
 		results[i]["grid_pos"] = grid_positions.get(d_name, i + 1)
 		
 		var is_dnf = _check_is_dnf(results[i])
 		results[i]["dnf"] = is_dnf
 		results[i]["abandonou"] = is_dnf
-		
-		var db_driver = _get_driver_by_name(d_name)
-		if not db_driver.is_empty():
-			if is_dnf:
-				db_driver["DNFsAno"] = int(db_driver.get("DNFsAno", 0)) + 1
-			else:
-				if i == 0:
-					db_driver["VitoriasAno"] = int(db_driver.get("VitoriasAno", 0)) + 1
-				if i < 3:
-					db_driver["PodiosAno"] = int(db_driver.get("PodiosAno", 0)) + 1
-				
-				_update_driver_stats_after_race(db_driver, int(results[i]["grid_pos"]), i + 1, false)
-	
-	for d in drivers:
-		var eq = str(d.get("Equipe", ""))
-		if eq != "Free Agent" and eq != "Aposentado":
-			d["races_with_team"] = int(d.get("races_with_team", 0)) + 1
 
 	if results.size() > 0:
-		apply_race_points(results)
-		record_standings_history_after_gp() # <--- ESSA LINHA FAZ TUDO SOZINHA COM SEGURANÇA
+		var track_name := str(current_track.get("Nome", "GP"))
+		record_completed_race(results, track_name)
 		process_post_race_morale_and_respect(results)
 		process_ai_team_upgrades()
 		process_mid_season_renewals()
 		
-		var winner_name = results[0].get("Nome", results[0].get("nome", "-"))
-		var winner_team = results[0].get("Equipe", results[0].get("equipe", "-"))
-		var second_name = results[1].get("Nome", results[1].get("nome", "-")) if results.size() > 1 else "-"
-		var third_name = results[2].get("Nome", results[2].get("nome", "-")) if results.size() > 2 else "-"
-		
-		record_gp_winner(current_gp - 1, winner_name, winner_team)
-		
-		race_history.append({
-			"gp_num": current_gp,
-			"gp_index": current_gp,
-			"track": current_track["Nome"],
-			"winner": winner_name,
-			"second": second_name,
-			"third": third_name
-		})
-		
 	current_gp += 1
+	race_finished = false
 
 func record_gp_constructors_snapshot() -> void:
 	var snapshot: Dictionary = {}
@@ -779,7 +839,7 @@ func _auto_fill_team_seat(team_name: String) -> void:
 		# Se o piloto nunca correu na temporada atual, garante estatísticas zeradas
 		if not candidate.has("CorridasAno"): candidate["CorridasAno"] = 0
 		
-		log_transfer_event("✍️ REPOSIÇÃO: " + team_name + " contratou " + str(candidate["Nome"]) + " por " + str(candidate["AnosContrato"]) + " ano(s)!", "Contratação")
+		log_transfer_event("✍️ REPOSIÇÃO: " + team_name + " contratou " + str(candidate["Nome"]) + " por " + str(candidate["AnosContrato"]) + " ano(s)!", "Contratação", str(candidate["Nome"]), team_name, int(candidate.get("Idade", 25)), int(candidate["AnosContrato"]))
 		
 		_auto_fill_team_seat(team_name)
 		candidate["races_with_team"] = 0
@@ -830,7 +890,7 @@ func get_season_drivers() -> Array:
 			
 	return season_drivers
 
-func log_transfer_event(detail: String, type_str: String = "Transferência") -> void:
+func log_transfer_event(detail: String, type_str: String = "Transferência", driver_name: String = "", team_name: String = "", driver_age: int = 25, contract_years: int = 1) -> void:
 	var entry = {
 		"ano": current_year,
 		"gp_num": current_gp,
@@ -838,11 +898,97 @@ func log_transfer_event(detail: String, type_str: String = "Transferência") -> 
 		"detalhe": detail,
 		"tipo": type_str
 	}
+	if not driver_name.is_empty():
+		entry["nome"] = driver_name
+		entry["equipe"] = team_name
+		entry["idade"] = driver_age
+		entry["anos"] = contract_years
 	
 	if "transfer_history" in self:
 		transfer_history.push_front(entry)
 		
 	add_news("[%d - GP %d] %s" % [current_year, current_gp, detail])
+
+func get_season_summary() -> Dictionary:
+	var season_drivers := get_season_drivers().duplicate(true)
+	season_drivers.sort_custom(func(a, b):
+		var points_a := int(a.get("Pontos", 0))
+		var points_b := int(b.get("Pontos", 0))
+		if points_a != points_b:
+			return points_a > points_b
+		var wins_a := int(a.get("VitoriasAno", 0))
+		var wins_b := int(b.get("VitoriasAno", 0))
+		if wins_a != wins_b:
+			return wins_a > wins_b
+		var podiums_a := int(a.get("PodiosAno", 0))
+		var podiums_b := int(b.get("PodiosAno", 0))
+		if podiums_a != podiums_b:
+			return podiums_a > podiums_b
+		return str(a.get("Nome", "")) < str(b.get("Nome", ""))
+	)
+
+	var constructor_tiebreak: Dictionary = {}
+	for race in race_history:
+		var race_podium_teams: Array = race.get("podium_teams", [])
+		if race_podium_teams.is_empty() and not str(race.get("winner_team", "")).is_empty():
+			race_podium_teams = [str(race.get("winner_team", ""))]
+		for position in range(min(3, race_podium_teams.size())):
+			var team_name := str(race_podium_teams[position])
+			if team_name.is_empty():
+				continue
+			if not constructor_tiebreak.has(team_name):
+				constructor_tiebreak[team_name] = {"wins": 0, "seconds": 0, "thirds": 0}
+			var team_stats: Dictionary = constructor_tiebreak[team_name]
+			var stat_key: String = ["wins", "seconds", "thirds"][position]
+			team_stats[stat_key] = int(team_stats.get(stat_key, 0)) + 1
+
+	var constructor_standings := teams.duplicate(true)
+	constructor_standings.sort_custom(func(a, b):
+		var points_a := int(a.get("Pontos", 0))
+		var points_b := int(b.get("Pontos", 0))
+		if points_a != points_b:
+			return points_a > points_b
+		var stats_a: Dictionary = constructor_tiebreak.get(str(a.get("Nome", "")), {})
+		var stats_b: Dictionary = constructor_tiebreak.get(str(b.get("Nome", "")), {})
+		for stat_key in ["wins", "seconds", "thirds"]:
+			var stat_a := int(stats_a.get(stat_key, 0))
+			var stat_b := int(stats_b.get(stat_key, 0))
+			if stat_a != stat_b:
+				return stat_a > stat_b
+		return str(a.get("Nome", "")) < str(b.get("Nome", ""))
+	)
+
+	var manager_team := str(user_team.get("nome", user_team.get("Nome", "")))
+	if manager_team.is_empty():
+		manager_team = str(selected_manager_team.get("Nome", selected_manager_team.get("nome", "")))
+	var manager_drivers: Array = []
+	if game_mode == "manager" and not manager_team.is_empty():
+		for driver in season_drivers:
+			if str(driver.get("Equipe", "")).strip_edges().to_lower() == manager_team.strip_edges().to_lower():
+				manager_drivers.append(driver)
+
+	var wins_leader: Dictionary = {}
+	var dnfs_leader: Dictionary = {}
+	var positions_leader: Dictionary = {}
+	for driver in season_drivers:
+		if wins_leader.is_empty() or int(driver.get("VitoriasAno", 0)) > int(wins_leader.get("VitoriasAno", 0)):
+			wins_leader = driver
+		if dnfs_leader.is_empty() or int(driver.get("DNFsAno", 0)) > int(dnfs_leader.get("DNFsAno", 0)):
+			dnfs_leader = driver
+		if positions_leader.is_empty() or int(driver.get("PosicoesGanhaAno", 0)) > int(positions_leader.get("PosicoesGanhaAno", 0)):
+			positions_leader = driver
+
+	return {
+		"year": current_year,
+		"driver_champion": season_drivers[0] if not season_drivers.is_empty() else {},
+		"constructor_champion": constructor_standings[0] if not constructor_standings.is_empty() else {},
+		"driver_standings": season_drivers.slice(0, min(5, season_drivers.size())),
+		"manager_team": manager_team,
+		"manager_drivers": manager_drivers,
+		"wins_leader": wins_leader,
+		"dnfs_leader": dnfs_leader,
+		"positions_leader": positions_leader
+	}
 
 # Processa tentativas proativas de renovação em qualquer GP para pilotos próximos do fim de contrato (<= 2 anos)
 func process_mid_season_renewals() -> void:
@@ -882,7 +1028,21 @@ func end_season_and_advance_year() -> void:
 	sanitize_unique_drivers()
 	
 	var sorted_d = drivers.duplicate()
-	sorted_d.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+	sorted_d.sort_custom(func(a, b):
+		var points_a := int(a.get("Pontos", 0))
+		var points_b := int(b.get("Pontos", 0))
+		if points_a != points_b:
+			return points_a > points_b
+		var wins_a := int(a.get("VitoriasAno", 0))
+		var wins_b := int(b.get("VitoriasAno", 0))
+		if wins_a != wins_b:
+			return wins_a > wins_b
+		var podiums_a := int(a.get("PodiosAno", 0))
+		var podiums_b := int(b.get("PodiosAno", 0))
+		if podiums_a != podiums_b:
+			return podiums_a > podiums_b
+		return str(a.get("Nome", "")) < str(b.get("Nome", ""))
+	)
 	
 	if sorted_d.size() > 0:
 		var champ = sorted_d[0]
@@ -897,6 +1057,7 @@ func end_season_and_advance_year() -> void:
 	
 	current_year += 1
 	current_gp = 1
+	race_finished = false
 	race_history.clear()
 	constructors_points_history.clear()
 	
@@ -1033,13 +1194,14 @@ func _process_ai_transfer_market() -> void:
 				best_candidate["Equipe"] = team_name
 				best_candidate["AnosContrato"] = randi_range(2, 3)
 				best_candidate["Moral"] = 75.0
-				log_transfer_event("✍️ REPOSIÇÃO: " + team_name + " contratou o agente livre " + str(best_candidate.get("Nome", "")) + " por " + str(best_candidate["AnosContrato"]) + " ano(s)!", "Contratação")
+				log_transfer_event("✍️ REPOSIÇÃO: " + team_name + " contratou o agente livre " + str(best_candidate.get("Nome", "")) + " por " + str(best_candidate["AnosContrato"]) + " ano(s)!", "Contratação", str(best_candidate.get("Nome", "")), team_name, int(best_candidate.get("Idade", 25)), int(best_candidate["AnosContrato"]))
 				active_team_drivers.append(best_candidate)
 			else:
 				var new_promoted_name = "Novato " + team_name.substr(0, 3).to_upper() + " " + str(randi_range(10, 99))
+				var rookie_age := randi_range(18, 22)
 				var ovr_tmp = randi_range(68, 75)
-				add_new_driver(new_promoted_name, randi_range(18, 22), ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, team_name)
-				log_transfer_event("🌟 PROMOÇÃO: " + team_name + " promoveu o jovem " + new_promoted_name + " da base!", "Contratação")
+				add_new_driver(new_promoted_name, rookie_age, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, team_name)
+				log_transfer_event("🌟 PROMOÇÃO: " + team_name + " promoveu o jovem " + new_promoted_name + " da base!", "Contratação", new_promoted_name, team_name, rookie_age, 1)
 				active_team_drivers = get_team_drivers(team_name)
 
 	ensure_full_grid()
@@ -1089,7 +1251,7 @@ func _try_poach_driver_from_rival(buyer_team_name: String) -> bool:
 		best_target["races_with_team"] = 0 # RESETA A TRAVA DAS 12 CORRIDAS
 		
 		var msg = Database.tr_text("NEWS_TRANSFER") % [buyer_team_name, poached_name, seller_team]
-		log_transfer_event(msg, "Transferência")
+		log_transfer_event(msg, "Transferência", poached_name, buyer_team_name, int(best_target.get("Idade", 25)), int(best_target.get("AnosContrato", 1)))
 
 		# Efeito em cadeia: A equipe rival lesada repõe a vaga
 		_auto_fill_team_seat(seller_team)
@@ -1135,56 +1297,61 @@ func get_driver_moral_label(driver: Dictionary) -> String:
 	elif moral_val >= 30: return "Baixa (" + str(moral_val) + "%)"
 	else: return "Crítica (" + str(moral_val) + "%)"
 
-func get_save_path(slot_index: int) -> String:
-	return "user://savegame_slot_%d.json" % clamp(slot_index, 1, MAX_SAVE_SLOTS)
+func _normalize_game_mode(mode: String) -> String:
+	return "observer" if mode.to_lower() == "observer" else "manager"
+
+func get_save_path(slot_index: int, mode: String = "") -> String:
+	var save_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
+	var slot: int = clampi(slot_index, 1, MAX_SAVE_SLOTS)
+	if save_mode == "observer":
+		return "user://savegame_observer_slot_%d.json" % slot
+	return "user://savegame_slot_%d.json" % slot
 
 func get_all_slots_info() -> Array:
 	var slots_info: Array = []
-	for i in range(1, MAX_SAVE_SLOTS + 1):
-		var path = get_save_path(i)
-		if FileAccess.file_exists(path):
-			var file = FileAccess.open(path, FileAccess.READ)
-			if file:
-				var content = file.get_as_text()
-				file.close()
-				var json = JSON.new()
-				if json.parse(content) == OK:
-					var data = json.get_data()
-					slots_info.append({
-						"slot": i,
-						"exists": true,
-						"name": "Slot %d (%s)" % [i, tr_text("SAVE_SLOT_EMPTY") if has_method("tr_text") else "Vazio"],
-						"year": int(data.get("current_year", 2026)),
-						"gp": int(data.get("current_gp", 1)),
-						"team": str(data.get("user_team", "McLaren")),
-						"date": str(data.get("save_date", "--/--/----"))
-					})
-					continue
-		slots_info.append({
-			"slot": i,
-			"exists": false,
-			"name": "Slot %d (%s)" % [i, tr_text("SAVE_SLOT_EMPTY") if has_method("tr_text") else "Vazio"],
-			"year": 2026,
-			"gp": 1,
-			"team": "McLaren",
-			"date": "-"
-		})
+	for mode in ["manager", "observer"]:
+		for i in range(1, MAX_SAVE_SLOTS + 1):
+			var path := get_save_path(i, mode)
+			var empty_name := "Slot %d (%s)" % [
+				i, tr_text("SAVE_SLOT_EMPTY") if has_method("tr_text") else "Vazio"
+			]
+			var slot_info := {
+				"slot": i,
+				"mode": mode,
+				"exists": false,
+				"name": empty_name,
+				"year": 2026
+			}
+			if FileAccess.file_exists(path):
+				var file := FileAccess.open(path, FileAccess.READ)
+				if file:
+					var content := file.get_as_text()
+					file.close()
+					var json := JSON.new()
+					if json.parse(content) == OK and json.get_data() is Dictionary:
+						var data: Dictionary = json.get_data()
+						slot_info["exists"] = true
+						slot_info["name"] = str(data.get("save_name", empty_name))
+						slot_info["year"] = int(data.get("current_year", 2026))
+			slots_info.append(slot_info)
 	return slots_info
 
-func delete_save_slot(slot_index: int) -> bool:
+func delete_save_slot(slot_index: int, mode: String = "") -> bool:
 	slot_index = clamp(slot_index, 1, MAX_SAVE_SLOTS)
-	var path = get_save_path(slot_index)
+	var save_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
+	var path := get_save_path(slot_index, save_mode)
 	if FileAccess.file_exists(path):
 		var dir = DirAccess.open("user://")
 		if dir:
-			var err = dir.remove("savegame_slot_%d.json" % slot_index)
+			var filename := "savegame_observer_slot_%d.json" % slot_index if save_mode == "observer" else "savegame_slot_%d.json" % slot_index
+			var err = dir.remove(filename)
 			if err == OK:
-				add_news_event("🗑️ Save do Slot %d foi excluído." % slot_index)
 				return true
 	return false
 
-func save_game_slot(slot_index: int, custom_name: String = "") -> bool:
+func save_game_slot(slot_index: int, custom_name: String = "", mode: String = "") -> bool:
 	slot_index = clamp(slot_index, 1, MAX_SAVE_SLOTS)
+	var save_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
 	current_slot = slot_index
 	
 	var datetime = Time.get_datetime_dict_from_system()
@@ -1192,13 +1359,18 @@ func save_game_slot(slot_index: int, custom_name: String = "") -> bool:
 	
 	var save_name = custom_name.strip_edges()
 	if save_name.is_empty():
-		var slots = get_all_slots_info()
-		var existing = slots[slot_index - 1]
-		save_name = existing["name"] if existing["exists"] else "Carreira %s" % user_team
+		var existing_name := "Carreira %s" % str(user_team.get("nome", user_team.get("Nome", save_mode)))
+		for slot in get_all_slots_info():
+			if int(slot["slot"]) == slot_index and str(slot["mode"]) == save_mode:
+				if bool(slot["exists"]):
+					existing_name = str(slot["name"])
+				break
+		save_name = existing_name
 
 	var save_data = {
 		"save_name": save_name,
 		"save_date": formatted_date,
+		"game_mode": save_mode,
 		"current_year": current_year,
 		"current_gp": current_gp,
 		"user_team": user_team,
@@ -1206,6 +1378,18 @@ func save_game_slot(slot_index: int, custom_name: String = "") -> bool:
 		"teams": teams,
 		"tracks": tracks,
 		"champions_history": champions_history,
+		"race_history": race_history,
+		"news_feed": news_feed,
+		"available_sponsors": available_sponsors,
+		"selected_manager_team": selected_manager_team,
+		"is_custom_team": is_custom_team,
+		"custom_team_data": custom_team_data,
+		"player_finances": player_finances,
+		"team_budget_caps": team_budget_caps,
+		"current_session": current_session,
+		"race_finished": race_finished,
+		"driver_market_interests": driver_market_interests,
+		"constructors_points_history": constructors_points_history,
 		"transfer_history": transfer_history,
 		"dashboard_layout": dashboard_layout,
 		"team_season_expenses": team_season_expenses,
@@ -1219,7 +1403,7 @@ func save_game_slot(slot_index: int, custom_name: String = "") -> bool:
 		print_debug("Erro de serialização JSON!")
 		return false
 		
-	var file = FileAccess.open(get_save_path(slot_index), FileAccess.WRITE)
+	var file = FileAccess.open(get_save_path(slot_index, save_mode), FileAccess.WRITE)
 	if file:
 		file.store_string(json_string)
 		file.close()
@@ -1252,9 +1436,10 @@ func _make_json_safe(value):
 				return null
 			return str(value)
 
-func load_game_slot(slot_index: int) -> bool:
+func load_game_slot(slot_index: int, mode: String = "") -> bool:
 	slot_index = clamp(slot_index, 1, MAX_SAVE_SLOTS)
-	var path = get_save_path(slot_index)
+	var requested_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
+	var path := get_save_path(slot_index, requested_mode)
 	
 	if not FileAccess.file_exists(path):
 		return false
@@ -1265,56 +1450,83 @@ func load_game_slot(slot_index: int) -> bool:
 		file.close()
 		
 		var json = JSON.new()
-		if json.parse(content) == OK:
-			var data = json.get_data()
+		if json.parse(content) == OK and json.get_data() is Dictionary:
+			var data: Dictionary = json.get_data()
+			var stored_mode := str(data.get("game_mode", requested_mode)).to_lower()
+			if stored_mode != requested_mode:
+				return false
 			current_slot = slot_index
+			game_mode = requested_mode
 			current_year = data.get("current_year", 2026)
 			current_gp = data.get("current_gp", 1)
-			user_team = data.get("user_team", "McLaren")
+			user_team = data.get("user_team", {})
 			drivers = data.get("drivers", drivers)
 			teams = data.get("teams", teams)
 			tracks = data.get("tracks", tracks)
 			champions_history = data.get("champions_history", champions_history)
+			race_history = data.get("race_history", race_history)
+			news_feed = data.get("news_feed", news_feed)
+			available_sponsors = data.get("available_sponsors", available_sponsors)
+			selected_manager_team = data.get("selected_manager_team", {})
+			is_custom_team = bool(data.get("is_custom_team", false))
+			custom_team_data = data.get("custom_team_data", custom_team_data)
+			player_finances = data.get("player_finances", player_finances)
+			team_budget_caps = data.get("team_budget_caps", team_budget_caps)
+			current_session = str(data.get("current_session", "preseason"))
+			race_finished = bool(data.get("race_finished", false))
+			driver_market_interests = data.get("driver_market_interests", driver_market_interests)
+			constructors_points_history = data.get("constructors_points_history", constructors_points_history)
 			transfer_history = data.get("transfer_history", transfer_history)
 			dashboard_layout = data.get("dashboard_layout", dashboard_layout)
 			team_season_expenses = data.get("team_season_expenses", team_season_expenses)
+			full_season_archive = data.get("full_season_archive", full_season_archive)
+			active_engine = null
 			sanitize_unique_drivers()
 			ensure_full_grid()
 			return true
 	return false
 
 func has_any_save() -> bool:
-	for i in range(1, MAX_SAVE_SLOTS + 1):
-		if FileAccess.file_exists(get_save_path(i)):
-			return true
+	for mode in ["manager", "observer"]:
+		for i in range(1, MAX_SAVE_SLOTS + 1):
+			if FileAccess.file_exists(get_save_path(i, mode)):
+				return true
 	return false
 
-func reset_database() -> void:
+func reset_database(mode: String = "") -> void:
+	if not mode.is_empty():
+		game_mode = _normalize_game_mode(mode)
 	current_year = 2026
 	current_gp = 1
+	current_view = "dashboard"
+	current_session = "preseason"
 	race_finished = false
 	active_engine = null
+	user_team = {}
+	selected_manager_team = {}
+	is_custom_team = false
+	custom_team_data = {"nome": "", "cor": Color.WHITE, "chefe": "", "pais": ""}
+	tracks = TracksData.get_initial_tracks()
+	teams = TeamsData.get_initial_teams()
+	drivers.clear()
+	news_feed.clear()
+	race_history.clear()
+	champions_history.clear()
+	full_season_archive.clear()
+	transfer_history.clear()
+	available_sponsors = generate_dynamic_sponsors_for_new_save()
+	driver_market_interests.clear()
+	constructors_points_history.clear()
+	player_finances = {
+		"budget": 45000000.0,
+		"budget_cap_used": 82500000.0,
+		"budget_cap_limit": 135000000.0,
+		"projected_prize": 32000000.0
+	}
+	team_budget_caps.clear()
+	team_season_expenses.clear()
 	init_season_budget_cap()
-	
-	if news_feed != null: news_feed.clear()
-	if transfer_history != null: transfer_history.clear()
-
-	if teams != null and teams is Array:
-		for t in teams:
-			t["Pontos"] = 0
-
-	if drivers != null and drivers is Array:
-		for d in drivers:
-			d["Pontos"] = 0
-			d["VitoriasAno"] = 0
-			d["PodiosAno"] = 0
-			d["DNFsAno"] = 0
-			d["SequenciaPontos"] = 0
-			d["PosicoesGanhaAno"] = 0
-			d["PosicoesPerdidasAno"] = 0
-
-	if has_method("load_drivers_from_json"):
-		call("load_drivers_from_json")
+	load_drivers_from_json()
 	ensure_full_grid()
 
 func record_gp_winner(track_index: int, winner_driver_name: String, winner_team_name: String) -> void:
@@ -1525,12 +1737,31 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 	var team_name = str(team.get("Nome", ""))
 	
 	# Obtém os dados base do motor e do chassi
-	var e_info = ENGINE_DATA.get(engine_name, {"potencia": team.get("Motor", 80), "confiabilidade": 80})
-	var c_info = CHASSIS_DATA.get(chassis_name, {"chassi": team.get("Chassi", 80), "aero": team.get("Aero", 80), "confiabilidade": 80})
+	var e_info: Dictionary
+	if engine_name is Dictionary:
+		e_info = engine_name
+	else:
+		e_info = ENGINE_DATA.get(engine_name, {
+			"potencia": team.get("potencia", team.get("Motor", 80)),
+			"confiabilidade": team.get("Confiabilidade", team.get("confiabilidade", 80))
+		})
+	var c_info: Dictionary
+	if chassis_name is Dictionary:
+		c_info = chassis_name
+	else:
+		c_info = CHASSIS_DATA.get(chassis_name, {
+			"chassi": team.get("Chassi", 80),
+			"aero": team.get("Aero", 80),
+			"confiabilidade": 80
+		})
+	var upgrades: Dictionary = team.get("development_upgrades", {})
 	
 	var team_hash = abs(hash(team_name))
 	
-	var calculated_motor = int(e_info.get("potencia", 80))
+	var motor_base := float(e_info.get("potencia", team.get("potencia", team.get("Motor", 80))))
+	if engine_name is Dictionary and team.has("potencia"):
+		motor_base = float(team.get("potencia", motor_base))
+	var calculated_motor = int(clampi(int(motor_base) + int(upgrades.get("Motor", 0)), 50, 99))
 	var calculated_chassis: int = 80
 	var calculated_aero: int = 80
 	var calculated_rel: int = 80
@@ -1548,20 +1779,22 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 		
 		if typeof(chassis_name) == TYPE_DICTIONARY:
 			var c_dict = chassis_name as Dictionary
-			c_chassi = float(c_dict.get("chassi", c_dict.get("qualidade", 88.0)))
-			c_aero = float(c_dict.get("aero", c_dict.get("desempenho", 87.0)))
+			c_chassi = float(team.get("chassi", c_dict.get("chassi", c_dict.get("qualidade", 88.0))))
+			c_aero = float(team.get("aero", c_dict.get("aero", c_dict.get("desempenho", 87.0))))
 			c_conf = float(c_dict.get("confiabilidade", 88.0))
 		elif typeof(c_info) == TYPE_DICTIONARY:
 			c_chassi = float(c_info.get("chassi", 88.0))
 			c_aero = float(c_info.get("aero", 87.0))
 			c_conf = float(c_info.get("confiabilidade", 88.0))
 
-		calculated_chassis = int(clamp(c_chassi + var_chassis, 50, 99))
-		calculated_aero = int(clamp(c_aero + var_aero, 50, 99))
+		calculated_chassis = int(clampi(int(c_chassi + var_chassis) + int(upgrades.get("Chassi", 0)), 50, 99))
+		calculated_aero = int(clampi(int(c_aero + var_aero) + int(upgrades.get("Aero", 0)), 50, 99))
 		
 		var base_chassis_rel = c_conf + var_conf
 		var base_rel = (float(e_info.get("confiabilidade", 80.0)) + float(base_chassis_rel)) / 2.0
-		calculated_rel = int(clamp(base_rel, 50, 99))
+		if team.has("confiabilidade"):
+			base_rel = float(team.get("confiabilidade", base_rel))
+		calculated_rel = int(clampi(int(base_rel) + int(upgrades.get("Confiabilidade", 0)), 50, 99))
 	
 	# -------------------------------------------------------------
 	# NOVO: LEITURA DO PESO INDIVIDUAL DA EQUIPE (KG)
@@ -1580,6 +1813,131 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 		"Confiabilidade": calculated_rel,
 		"Peso": calculated_weight # Retorno do peso adicionado!
 	}
+
+func ensure_user_team_rd_slots() -> Array:
+	var slots: Array = user_team.get("rd_slots", [])
+	while slots.size() < 3:
+		slots.append({})
+	user_team["rd_slots"] = slots.slice(0, 3)
+	return user_team["rd_slots"]
+
+func schedule_user_team_upgrade(attribute: String, amount: float) -> bool:
+	if game_mode != "manager" or user_team.is_empty():
+		return false
+	var allowed_amount := 1.0
+	if attribute == "Peso":
+		allowed_amount = 0.3
+	elif not ["Motor", "Aero", "Chassi", "Confiabilidade"].has(attribute):
+		return false
+	if not is_equal_approx(amount, allowed_amount):
+		return false
+	var current_stats := calculate_team_dev_stats(user_team)
+	if attribute == "Peso" and float(current_stats.get("Peso", 778.0)) <= 768.0:
+		return false
+	if attribute != "Peso" and int(current_stats.get(attribute, 80)) >= 99:
+		return false
+	var slots := ensure_user_team_rd_slots()
+	var free_slot := -1
+	for index in range(slots.size()):
+		if not slots[index] is Dictionary or slots[index].is_empty():
+			free_slot = index
+			break
+	if free_slot < 0:
+		return false
+
+	var balance := float(user_team.get("orcamento", 0.0))
+	var cost_m := PLAYER_RD_COST / 1_000_000.0
+	if balance < cost_m:
+		return false
+
+	var tracks_per_season := maxi(1, tracks.size())
+	var duration := 3
+	var ready_absolute_gp := current_gp + duration
+	var ready_year := current_year + int((ready_absolute_gp - 1) / tracks_per_season)
+	var ready_gp := ((ready_absolute_gp - 1) % tracks_per_season) + 1
+	var year_offset := current_year * tracks_per_season + current_gp
+	var due_offset := ready_year * tracks_per_season + ready_gp
+
+	user_team["orcamento"] = balance - cost_m
+	slots[free_slot] = {
+		"atributo": attribute,
+		"valor": amount,
+		"custo": cost_m,
+		"inicio_offset": year_offset,
+		"pronta_ano": ready_year,
+		"pronta_etapa": ready_gp,
+		"duracao": duration,
+		"progresso": 0.0
+	}
+	user_team["rd_slots"] = slots
+	add_news_event("🛠️ Desenvolvimento iniciado: %s para sua equipe. Conclusão na etapa %d de %d." % [attribute, ready_gp, ready_year])
+	return true
+
+func process_due_user_team_upgrades() -> void:
+	if game_mode != "manager" or user_team.is_empty():
+		return
+	var slots := ensure_user_team_rd_slots()
+	var tracks_per_season := maxi(1, tracks.size())
+	var current_offset := current_year * tracks_per_season + current_gp
+	var upgrades: Dictionary = user_team.get("development_upgrades", {})
+	var completed: Array[String] = []
+	for index in range(slots.size()):
+		if not slots[index] is Dictionary or slots[index].is_empty():
+			continue
+		var upgrade: Dictionary = slots[index]
+		var ready_year := int(upgrade.get("pronta_ano", current_year))
+		var ready_gp := int(upgrade.get("pronta_etapa", current_gp))
+		var due_offset := ready_year * tracks_per_season + ready_gp
+		var start_offset := int(upgrade.get("inicio_offset", current_offset))
+		upgrade["progresso"] = clampf(float(current_offset - start_offset) / float(maxi(1, due_offset - start_offset)), 0.0, 1.0) * 100.0
+		if current_year < ready_year or (current_year == ready_year and current_gp < ready_gp):
+			continue
+
+		var attribute := str(upgrade.get("atributo", ""))
+		var amount := float(upgrade.get("valor", 0.0))
+		if attribute == "Peso":
+			update_team_weight(-amount)
+			completed.append("Peso -%.2f kg" % amount)
+		elif ["Motor", "Aero", "Chassi", "Confiabilidade"].has(attribute):
+			upgrades[attribute] = float(upgrades.get(attribute, 0.0)) + amount
+			completed.append("%s +%.1f" % [attribute, amount])
+		slots[index] = {}
+
+	if not completed.is_empty():
+		user_team["development_upgrades"] = upgrades
+		user_team["rd_slots"] = slots
+		_sync_user_team_development_stats()
+		add_news_event("✅ Melhoria concluída para %s: %s." % [str(user_team.get("nome", "Sua equipe")), ", ".join(completed)])
+
+func _sync_user_team_development_stats() -> void:
+	var stats := calculate_team_dev_stats(user_team)
+	for attribute in ["Motor", "Aero", "Chassi", "Confiabilidade"]:
+		user_team[attribute] = stats[attribute]
+	var team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges().to_lower()
+	user_team["peso"] = float(stats.get("Peso", user_team.get("peso", 778.0)))
+	for team in teams:
+		var stored_name := str(team.get("Nome", team.get("nome", ""))).strip_edges().to_lower()
+		if stored_name == team_name:
+			for attribute in ["Motor", "Aero", "Chassi", "Confiabilidade", "peso"]:
+				team[attribute] = user_team[attribute] if attribute != "peso" else user_team.get("peso", 778.0)
+			break
+
+func can_inject_team_capital() -> bool:
+	if game_mode != "manager" or user_team.is_empty():
+		return false
+	if not user_team.has("injecao_capital_ano"):
+		return true
+	return current_year - int(user_team.get("injecao_capital_ano", current_year)) >= 3
+
+func inject_team_capital(amount_millions: float) -> bool:
+	if game_mode != "manager" or not can_inject_team_capital():
+		return false
+	if amount_millions < 10.0 or amount_millions > 50.0:
+		return false
+	user_team["orcamento"] = float(user_team.get("orcamento", 0.0)) + amount_millions
+	user_team["injecao_capital_ano"] = current_year
+	add_news_event("💰 Injeção de capital de $%.1fM realizada na equipe." % amount_millions)
+	return true
 
 # Função para calcular a premiação de fim de temporada com base no ranking dos Construtores
 func calculate_season_prize_money(rank_position: int) -> float:

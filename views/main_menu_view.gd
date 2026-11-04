@@ -320,6 +320,7 @@ func _show_mode_selection_modal() -> void:
 		lbl_desc.add_theme_color_override("font_color", Color("#94a3b8"))
 	)
 	btn_man.pressed.connect(func():
+		Database.reset_database("manager")
 		var pre_season_script = load("res://views/pre_season_view.gd")
 		if pre_season_script:
 			var new_view = pre_season_script.new()
@@ -388,7 +389,7 @@ func _apply_custom_option_button_styles(opt_btn: OptionButton) -> void:
 
 func _start_observer_mode() -> void:
 	if Database.has_method("reset_database"):
-		Database.reset_database()
+		Database.reset_database("observer")
 	Database.current_view = "dashboard"
 	get_tree().change_scene_to_file("res://main.tscn")
 

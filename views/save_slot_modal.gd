@@ -55,9 +55,21 @@ func _render_contents() -> void:
 	vbox.add_child(lbl_title)
 	
 	var slots_data = Database.get_all_slots_info()
+	var visible_slots: Array = []
 	for slot_info in slots_data:
+		if current_mode == Mode.LOAD or str(slot_info["mode"]) == str(Database.game_mode):
+			visible_slots.append(slot_info)
+
+	var slots_scroll := ScrollContainer.new()
+	slots_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	slots_scroll.custom_minimum_size.y = 260
+	var slots_list := VBoxContainer.new()
+	slots_list.add_theme_constant_override("separation", 10)
+	for slot_info in visible_slots:
 		var slot_card = _build_slot_row(slot_info)
-		vbox.add_child(slot_card)
+		slots_list.add_child(slot_card)
+	slots_scroll.add_child(slots_list)
+	vbox.add_child(slots_scroll)
 		
 	# Botão Voltar traduzido
 	var btn_close = Button.new()
@@ -98,10 +110,8 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 	
 	var details_lbl = Label.new()
 	if slot_info["exists"]:
-		var txt_year = Database.tr_text("TEXT_YEAR") if Database.has_method("tr_text") else "Ano"
-		var txt_team = Database.tr_text("TEXT_TEAM") if Database.has_method("tr_text") else "Equipe"
-		var txt_date = Database.tr_text("TEXT_DATE") if Database.has_method("tr_text") else "Data"
-		details_lbl.text = "%s: %d | GP %d | %s: %s | %s: %s" % [txt_year, slot_info["year"], slot_info["gp"], txt_team, slot_info["team"], txt_date, slot_info["date"]]
+		var mode_name := "Observador" if str(slot_info["mode"]) == "observer" else "Manager"
+		details_lbl.text = "Modo: %s | Ano: %d" % [mode_name, slot_info["year"]]
 		details_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 	else:
 		details_lbl.text = Database.tr_text("SAVE_SLOT_EMPTY") if Database.has_method("tr_text") else "Slot Vazio"
@@ -124,7 +134,7 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 		btn_delete.add_theme_stylebox_override("normal", style_del)
 		
 		btn_delete.pressed.connect(func():
-			if Database.delete_save_slot(slot_info["slot"]):
+			if Database.delete_save_slot(slot_info["slot"], slot_info["mode"]):
 				_render_contents()
 		)
 		hbox.add_child(btn_delete)
@@ -137,7 +147,7 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 	if current_mode == Mode.SAVE:
 		btn_action.text = Database.tr_text("BTN_SAVE") if Database.has_method("tr_text") else "💾 SALVAR"
 		btn_action.pressed.connect(func():
-			if Database.save_game_slot(slot_info["slot"], name_input.text):
+			if Database.save_game_slot(slot_info["slot"], name_input.text, slot_info["mode"]):
 				if on_completed_callback.is_valid():
 					on_completed_callback.call()
 				queue_free()
@@ -146,7 +156,7 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 		btn_action.text = Database.tr_text("BTN_LOAD") if Database.has_method("tr_text") else "▶ CARREGAR"
 		btn_action.disabled = not slot_info["exists"]
 		btn_action.pressed.connect(func():
-			if Database.load_game_slot(slot_info["slot"]):
+			if Database.load_game_slot(slot_info["slot"], slot_info["mode"]):
 				if on_completed_callback.is_valid():
 					on_completed_callback.call()
 				queue_free()

@@ -11,14 +11,15 @@ var views = {
 	"dev": preload("res://views/dev_view.gd"),
 	"market": preload("res://views/market_view.gd"),
 	"editor": preload("res://views/editor_view.gd"),
+	"team": preload("res://views/team_view.gd"),
 	"history": preload("res://views/history_view.gd")
 }
 
 # Configura o tipo de jogo selecionado na tela inicial
 func start_game_mode(selected_mode: String) -> void:
-	Database.game_mode = selected_mode
+	Database.reset_database(selected_mode)
 	
-	if selected_mode == "observer":
+	if Database.game_mode == "observer":
 		# No Modo Observador, limpa a equipe criada pelo jogador para manter apenas as 11 equipes oficiais
 		Database.user_team = {}
 		
@@ -46,30 +47,20 @@ func _ready() -> void:
 	setup_layout()
 	
 	var start_view = Database.current_view if Database.current_view != "" else "dashboard"
+	
+	if Database.has_signal("language_changed") and not Database.language_changed.is_connected(_on_language_changed):
+		Database.language_changed.connect(_on_language_changed)
+	
 	switch_view(start_view)
-	
-	if Database.has_signal("language_changed"):
-		Database.language_changed.connect(setup_layout)
-	
-	Database.language_changed.connect(_on_language_changed)
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	setup_layout()
-	switch_view("dashboard")
 
 func _on_language_changed() -> void:
-	# Reconstruir ou atualizar os textos da barra lateral
-	for item in nav_buttons.keys():
-		var btn = nav_buttons[item]
-		match item:
-			"dashboard": btn.text = "  " + Database.tr_text("NAV_DASHBOARD")
-			"race": btn.text = "  " + Database.tr_text("NAV_RACE")
-			"dev": btn.text = "  " + Database.tr_text("NAV_DEV")
-			"market": btn.text = "  " + Database.tr_text("NAV_MARKET")
-			"editor": btn.text = "  " + Database.tr_text("NAV_EDITOR")
-			"history": btn.text = "  " + Database.tr_text("NAV_HISTORY")
+	var active_view := Database.current_view
+	setup_layout()
+	switch_view(active_view)
 
 func setup_layout() -> void:
 	# Limpa filhos anteriores da sidebar ao trocar o idioma
+	nav_buttons.clear()
 	for c in get_children():
 		c.queue_free()
 
@@ -93,20 +84,23 @@ func setup_layout() -> void:
 	
 	# --- LOGO DO JOGO NO LUGAR DO TEXTO ---
 	var logo_texture = TextureRect.new()
-	logo_texture.texture = load("res://icon.png") 
-	logo_texture.expand_mode = TextureRect.EXPAND_KEEP_SIZE 
+	logo_texture.texture = load("res://apexlogo.png.jpg")
+	logo_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo_texture.custom_minimum_size = Vector2(160, 60)
+	logo_texture.custom_minimum_size = Vector2(210, 90)
 	sidebar_vbox.add_child(logo_texture)
 	
 	var nav_items = [
 		{"label": Database.tr_text("NAV_DASHBOARD"), "view": "dashboard"},
 		{"label": Database.tr_text("NAV_RACE"), "view": "race"},
 		{"label": Database.tr_text("NAV_DEV"), "view": "dev"},
-		{"label": Database.tr_text("NAV_MARKET"), "view": "market"},
-		{"label": Database.tr_text("NAV_EDITOR"), "view": "editor"},
-		{"label": Database.tr_text("NAV_HISTORY"), "view": "history"}
+		{"label": Database.tr_text("NAV_MARKET"), "view": "market"}
 	]
+	if str(Database.game_mode) == "manager":
+		nav_items.append({"label": "👥 Equipe", "view": "team"})
+	else:
+		nav_items.append({"label": Database.tr_text("NAV_EDITOR"), "view": "editor"})
+	nav_items.append({"label": Database.tr_text("NAV_HISTORY"), "view": "history"})
 	
 	for item in nav_items:
 		var btn = Button.new()
@@ -119,7 +113,7 @@ func setup_layout() -> void:
 		
 		var view_target = item["view"]
 		nav_buttons[view_target] = btn
-		btn.pressed.connect(func(): switch_view(view_target))
+		btn.pressed.connect(switch_view.bind(view_target))
 		sidebar_vbox.add_child(btn)
 	
 	sidebar_vbox.add_child(HSeparator.new())
@@ -203,43 +197,49 @@ func update_sidebar_active_tab(active_view: String) -> void:
 			btn.add_theme_color_override("font_color", Color("#94a3b8"))
 
 func switch_view(view_name: String) -> void:
+	if not views.has(view_name):
+		push_error("Tela desconhecida: %s" % view_name)
+		return
+	if content_container == null or content_container.get_child_count() == 0:
+		push_error("Não foi possível trocar de tela: o contêiner principal ainda não está pronto.")
+		return
+
 	Database.current_view = view_name
 	
 	update_sidebar_active_tab(view_name)
 	
-	var margin_node = content_container.get_child(0)
-	if current_view_node:
+	var margin_node := content_container.get_child(0)
+	if is_instance_valid(current_view_node):
 		current_view_node.queue_free()
-		
-	if views.has(view_name):
-		current_view_node = views[view_name].new()
-		if current_view_node.has_signal("request_advance_gp"):
-			current_view_node.request_advance_gp.connect(_advance_gp)
-		margin_node.add_child(current_view_node)
-		# #region agent log
-		if view_name == "race":
-			var path := "C:/Users/Limad/Desktop/Apex/apex-f1-manager/debug-2b010b.log"
-			var fa := FileAccess.open(path, FileAccess.READ_WRITE)
-			if fa == null:
-				fa = FileAccess.open(path, FileAccess.WRITE)
-			else:
-				fa.seek_end()
-			if fa != null:
-				fa.store_line(JSON.stringify({
-					"sessionId": "2b010b",
-					"timestamp": int(Time.get_unix_time_from_system() * 1000.0),
-					"location": "main.gd:switch_view",
-					"message": "Race view added to tree",
-					"data": {
-						"parent": str(margin_node.get_path()),
-						"view_class": current_view_node.get_class(),
-						"size": {"x": current_view_node.size.x, "y": current_view_node.size.y} if current_view_node is Control else {"x": -1, "y": -1}
-					},
-					"hypothesisId": "D",
-					"runId": "pre-fix"
-				}))
-				fa.close()
-		# #endregion
+
+	current_view_node = views[view_name].new()
+	if current_view_node.has_signal("request_advance_gp"):
+		current_view_node.request_advance_gp.connect(_advance_gp)
+	margin_node.add_child(current_view_node)
+	# #region agent log
+	if view_name == "race":
+		var path := "C:/Users/Limad/Desktop/Apex/apex-f1-manager/debug-2b010b.log"
+		var fa := FileAccess.open(path, FileAccess.READ_WRITE)
+		if fa == null:
+			fa = FileAccess.open(path, FileAccess.WRITE)
+		else:
+			fa.seek_end()
+		if fa != null:
+			fa.store_line(JSON.stringify({
+				"sessionId": "2b010b",
+				"timestamp": int(Time.get_unix_time_from_system() * 1000.0),
+				"location": "main.gd:switch_view",
+				"message": "Race view added to tree",
+				"data": {
+					"parent": str(margin_node.get_path()),
+					"view_class": current_view_node.get_class(),
+					"size": {"x": current_view_node.size.x, "y": current_view_node.size.y} if current_view_node is Control else {"x": -1, "y": -1}
+				},
+				"hypothesisId": "D",
+				"runId": "pre-fix"
+			}))
+			fa.close()
+	# #endregion
 
 func _advance_gp() -> void:
 	Database.process_ai_team_upgrades()
@@ -386,7 +386,8 @@ func _show_esc_pause_modal() -> void:
 	btn_menu.pressed.connect(func():
 		_close_esc_modal()
 		Database.current_view = "main_menu"
-		get_tree().change_scene_to_file("res://views/main_menu_view.tscn")
+		Database.active_engine = null
+		call_deferred("_return_to_main_menu_scene")
 	)
 
 	# Botão 2: Ver Opções
@@ -435,3 +436,8 @@ func _close_esc_modal() -> void:
 	if is_instance_valid(esc_modal):
 		esc_modal.queue_free()
 		esc_modal = null
+
+func _return_to_main_menu_scene() -> void:
+	var scene_error := get_tree().change_scene_to_file("res://views/main_menu_view.tscn")
+	if scene_error != OK:
+		push_error("Não foi possível voltar ao menu principal. Erro: %d" % scene_error)
