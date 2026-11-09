@@ -436,8 +436,10 @@ func process_lap() -> Dictionary:
 	var lap_events: Array = []
 	var lap_pit_events: Array = []
 	var flag_at_lap_start := safety_car_status
+	var was_raining := rain_intensity > 0.0
 	
 	_process_weather_and_water_accumulation(lap_events)
+	var weather_changed_this_lap := was_raining != (rain_intensity > 0.0)
 
 	var accident_this_lap = false
 	var accident_sector = 0
@@ -463,6 +465,7 @@ func process_lap() -> Dictionary:
 			continue
 
 		var compound = str(d.get("tire_compound", "Medium"))
+		var tire_durability_before_lap := clampf(float(d.get("tire_wear", 100.0)), 0.0, 100.0)
 		var wear_rate = 3.5 if compound in ["Soft", "Macio"] else (2.2 if compound in ["Medium", "Médio", "Inter", "Wet"] else 1.5)
 		if safety_car_status in ["SC", "VSC"]:
 			wear_rate *= 0.35
@@ -485,17 +488,26 @@ func process_lap() -> Dictionary:
 		var pit_count = int(d.get("pit_stops", 0))
 		var offset = int(d.get("pit_window_offset", 0))
 		
-		var wear_percent := 100.0 - float(d.get("tire_wear", 100.0))
-		var wear_thresholds := int(floor(wear_percent / 10.0))
-		var wear_pit_chance := clampf(float(wear_thresholds) * 0.07, 0.0, 1.0)
+		var wear_pit_chance := 0.0
+		if tire_durability_before_lap <= 70.0:
+			wear_pit_chance = clampf(0.01 + ((70.0 - tire_durability_before_lap) / 60.0) * 0.99, 0.01, 1.0)
 		var pit_for_wear := randf() < wear_pit_chance
 		
 		if bool(d.get("manager_controlled", false)):
-			needs_pit = remaining_laps > 0 and bool(d.get("pit_requested", false))
+			var manager_requested_pit := bool(d.get("pit_requested", false))
+			needs_pit = remaining_laps > 0 and manager_requested_pit
 			if needs_pit:
 				target_compound = str(d.get("pit_requested_tire", compound))
 				d["pit_requested"] = false
 				d["pit_requested_tire"] = ""
+		elif remaining_laps > 0 and weather_changed_this_lap:
+			needs_pit = true
+			if rain_intensity > 0.0:
+				target_compound = "Wet" if water_level >= 50.0 or rain_intensity >= 2.0 else "Inter"
+			else:
+				target_compound = _get_ideal_compound_for_water(water_level)
+				if target_compound in ["Wet", "Inter"] and water_level < 16.0:
+					target_compound = _select_next_dry_compound(d, remaining_laps)
 		elif remaining_laps > 0:
 			if ideal_compound in ["Wet", "Inter"] and compound != ideal_compound:
 				needs_pit = true
@@ -510,9 +522,9 @@ func process_lap() -> Dictionary:
 				needs_pit = true
 				target_compound = ideal_compound if ideal_compound in ["Wet", "Inter"] else _select_next_dry_compound(d, remaining_laps)
 
-			if needs_pit and target_compound == compound:
+			if needs_pit and not weather_changed_this_lap and target_compound == compound:
 				target_compound = _select_next_dry_compound(d, remaining_laps)
-			if needs_pit and pit_count == 0 and d.get("used_compounds", []).size() < 2 and target_compound == compound:
+			if needs_pit and not weather_changed_this_lap and pit_count == 0 and d.get("used_compounds", []).size() < 2 and target_compound == compound:
 				target_compound = _select_next_dry_compound(d, remaining_laps)
 			
 		if needs_pit:

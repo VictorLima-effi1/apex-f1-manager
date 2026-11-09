@@ -142,7 +142,7 @@ func build_ui() -> void:
 	_apply_fixed_transform(market_win, Vector2(col3_x, margin_y), Vector2(col_w, col3_h1))
 
 	# --- COLUNA 4 ---
-	# 1. Etapas Próximas | 2. Info do Próximo GP | 3. Simulação Acelerada
+	# 1. Etapas Próximas | 2. Info do Próximo GP | 3. Simulação Acelerada / Finanças
 	var col4_h1 = avail_height * 0.28
 	var col4_h2 = avail_height * 0.35
 	var col4_h3 = avail_height * 0.33
@@ -1112,6 +1112,7 @@ func _build_news_content(parent: Control, track_name: String, gp_num: int) -> vo
 
 func _build_fast_sim_content(parent: Control) -> void:
 	if parent == null: return
+	
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.add_theme_constant_override("separation", 8)
@@ -1157,6 +1158,17 @@ func _build_fast_sim_content(parent: Control) -> void:
 
 	parent.add_child(vbox)
 
+	# EXIBE A BOX DE FINANÇAS APENAS SE O MODO FOR MANAGER
+	if str(Database.game_mode).to_lower() == "manager":
+		var team_view_script = load("res://views/team_view.gd")
+		var temp_team_view = team_view_script.new()
+		
+		# Instancia o painel de finanças sem o botão de injeção de capital
+		var finances_panel: PanelContainer = temp_team_view._build_finances_panel(false)
+		finances_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		finances_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		
+		parent.add_child(finances_panel)
 # --- MODAL ESTILIZADO E LÓGICA DE SIMULAÇÃO ---
 
 func _confirm_and_run_fast_simulation(by_season: bool, amount: int) -> void:

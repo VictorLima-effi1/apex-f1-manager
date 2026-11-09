@@ -11,6 +11,7 @@ var modal_layer: CanvasLayer
 var modal_overlay: ColorRect
 var create_team_modal: PanelContainer
 var create_driver_modal: PanelContainer
+var data_file_dialog: FileDialog
 
 # Campos do formulário - Criar Equipe
 var input_team_name: LineEdit
@@ -63,12 +64,10 @@ func _ready() -> void:
 
 # --- CRIAÇÃO DOS MODAIS COM DESIGN CUSTOMIZADO E CANVASLAYER PARA ELEVAÇÃO ---
 func _setup_custom_modals() -> void:
-	# CanvasLayer com prioridade alta (100) para garantir renderização sobre qualquer elemento 2D/UI
 	modal_layer = CanvasLayer.new()
 	modal_layer.layer = 100
 	add_child(modal_layer)
 
-	# 1. Overlay Escuro Semi-Transparente
 	modal_overlay = ColorRect.new()
 	modal_overlay.color = Color(0, 0, 0, 0.65)
 	modal_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -236,7 +235,6 @@ func build_ui() -> void:
 	main_vbox.add_theme_constant_override("separation", 14)
 	add_child(main_vbox)
 	
-	# Mão dupla: Garante que o CanvasLayer fique sempre no final da árvore de nós
 	if modal_layer:
 		move_child(modal_layer, -1)
 	
@@ -269,6 +267,14 @@ func build_ui() -> void:
 	btn_add_team.pressed.connect(_open_create_team_modal)
 	header_hbox.add_child(btn_add_team)
 	
+	# NOVO BOTÃO: Carregar Dados (Roxo)
+	var btn_load_data = Button.new()
+	btn_load_data.text = "📥 Carregar Dados"
+	btn_load_data.custom_minimum_size = Vector2(140, 36)
+	btn_load_data.add_theme_color_override("font_color", Color("#a855f7"))
+	btn_load_data.pressed.connect(_on_load_data_pressed)
+	header_hbox.add_child(btn_load_data)
+
 	var btn_save_all = Button.new()
 	btn_save_all.text = "💾 SALVAR TUDO"
 	btn_save_all.custom_minimum_size = Vector2(140, 36)
@@ -591,6 +597,88 @@ func _on_create_driver_confirmed() -> void:
 	_close_modal(create_driver_modal)
 	build_ui()
 
+func _on_load_data_pressed() -> void:
+	_open_data_file_dialog(FileDialog.FILE_MODE_OPEN_FILE)
+
+func _open_data_file_dialog(mode: FileDialog.FileMode) -> void:
+	if is_instance_valid(data_file_dialog):
+		data_file_dialog.queue_free()
+	data_file_dialog = FileDialog.new()
+	data_file_dialog.file_mode = mode
+	data_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	data_file_dialog.filters = PackedStringArray(["*.json ; Arquivos JSON"])
+	data_file_dialog.title = "Carregar dados JSON" if mode == FileDialog.FILE_MODE_OPEN_FILE else "Salvar dados JSON"
+	if mode == FileDialog.FILE_MODE_SAVE_FILE:
+		data_file_dialog.current_file = "apex_f1_manager_data.json"
+	data_file_dialog.file_selected.connect(_on_data_file_selected.bind(mode))
+	data_file_dialog.canceled.connect(func():
+		data_file_dialog.queue_free()
+		data_file_dialog = null
+	)
+	add_child(data_file_dialog)
+	data_file_dialog.popup_centered(Vector2i(800, 600))
+
+func _on_data_file_selected(path: String, mode: FileDialog.FileMode) -> void:
+	if mode == FileDialog.FILE_MODE_SAVE_FILE:
+		_save_editor_data_to_file(path)
+	else:
+		_load_editor_data_from_file(path)
+	if is_instance_valid(data_file_dialog):
+		data_file_dialog.queue_free()
+	data_file_dialog = null
+
+func _save_editor_data_to_file(path: String) -> void:
+	var export_data: Variant = Database._make_json_safe({
+		"drivers": Database.drivers,
+		"teams": Database.teams
+	})
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		_show_data_result("Não foi possível salvar o arquivo JSON.")
+		return
+	file.store_string(JSON.stringify(export_data, "\t"))
+	file.close()
+	_show_data_result("Dados de pilotos e equipes salvos com sucesso.")
+
+func _load_editor_data_from_file(path: String) -> void:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_show_data_result("Não foi possível abrir o arquivo selecionado.")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not parsed is Dictionary:
+		_show_data_result("O JSON precisa conter os dados de pilotos e equipes.")
+		return
+	var imported_drivers: Variant = parsed.get("drivers", parsed.get("pilotos", null))
+	var imported_teams: Variant = parsed.get("teams", parsed.get("equipes", null))
+	if not imported_drivers is Array or not imported_teams is Array:
+		_show_data_result("O JSON precisa conter listas válidas de pilotos e equipes.")
+		return
+	for driver in imported_drivers:
+		if not driver is Dictionary:
+			_show_data_result("A lista de pilotos contém um registro inválido.")
+			return
+	for team in imported_teams:
+		if not team is Dictionary:
+			_show_data_result("A lista de equipes contém um registro inválido.")
+			return
+	Database.drivers = imported_drivers
+	Database.teams = imported_teams
+	Database.sanitize_unique_drivers()
+	Database.ensure_full_grid()
+	build_ui()
+	_show_data_result("Dados de pilotos e equipes carregados com sucesso.")
+
+func _show_data_result(message: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "Dados do Editor"
+	dialog.dialog_text = message
+	add_child(dialog)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered()
+
 func _on_save_all_pressed() -> void:
 	var all_driver_inputs = grid_driver_inputs + fa_driver_inputs
 	for item in all_driver_inputs:
@@ -618,11 +706,7 @@ func _on_save_all_pressed() -> void:
 		t["Chassi"] = int(item["chassis_node"].value)
 		t["Confiabilidade"] = int(item["rel_node"].value)
 
-	Database.save_game()
-	if Database.has_method("add_news_event"):
-		Database.add_news_event("💾 ALTERAÇÕES SALVAS: Atributos de pilotos e equipes atualizados!")
-	print("✅ Todas as alterações foram salvas no Database!")
-	build_ui()
+	_open_data_file_dialog(FileDialog.FILE_MODE_SAVE_FILE)
 
 func _add_header(grid: GridContainer, text: String, min_w: float) -> void:
 	var lbl = Label.new()

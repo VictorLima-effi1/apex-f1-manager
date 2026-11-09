@@ -34,43 +34,74 @@ const CHASSIS_DATA: Dictionary = {
 # =============================================================
 # GERAÇÃO DINÂMICA DE PATROCINADORES A CADA NOVO SAVE
 # =============================================================
+
+const SPONSOR_PREFIXES = ["Apex", "Quantum", "Veloce", "Aero", "Hyper", "Global", "Nexus", "Titan", "Starlight", "Petro", "Cyber", "Horizon", "Kinetic", "Alpha"]
+const SPONSOR_SUFFIXES = ["Tech", "Energy", "Dynamics", "Telecom", "Motors", "Logistics", "AI", "Petroleum", "Capital", "Pharma", "Industries", "Networks"]
+const SPONSOR_CATEGORIES = ["Tecnologia", "Energia & Combustível", "Finanças & Cripto", "Telecomunicações", "Automotivo", "Aeroespacial"]
+
 func generate_dynamic_sponsors_for_new_save() -> Array:
 	randomize()
-	
 	var generated_sponsors = []
 	
-	var base_list = [
-		{"id": "sp_tech", "nome": "Apex Tech Solutions", "tipo": "Temporada", "base_val": 35.0},
-		{"id": "sp_petro", "nome": "PetroMax Energy", "tipo": "Temporada", "base_val": 28.0},
-		{"id": "sp_hyper", "nome": "HyperDrive Dynamics", "tipo": "Por Corrida", "base_val": 1.5},
-		{"id": "sp_aero", "nome": "AeroSpace Tech", "tipo": "Por Corrida", "base_val": 1.2},
-		{"id": "sp_quantum", "nome": "Quantum AI Performance", "tipo": "Por Ponto", "base_val": 0.40},
-		{"id": "sp_velo", "nome": "Veloce Telecom", "tipo": "Por Ponto", "base_val": 0.30}
-	]
+	# Tipos de slots disponíveis na liga
+	var types = ["Master", "Principal", "Principal", "Secundário", "Secundário", "Secundário", "Secundário"]
 	
-	for sp in base_list:
-		var item = sp.duplicate()
-		var variation_factor = randf_range(0.85, 1.15)
+	var used_names = []
+	var id_counter = 1
+	
+	for tier_type in types:
+		# Gera um nome aleatório inédito
+		var name = ""
+		while name == "" or name in used_names:
+			var prefix = SPONSOR_PREFIXES[randi() % SPONSOR_PREFIXES.size()]
+			var suffix = SPONSOR_SUFFIXES[randi() % SPONSOR_SUFFIXES.size()]
+			name = prefix + " " + suffix
+		used_names.append(name)
 		
-		if item["tipo"] == "Temporada":
-			item["valor_temporada"] = snapped(item["base_val"] * variation_factor, 0.1)
-			item["valor_corrida"] = 0.0
-			item["valor_ponto"] = 0.0
-			item["desc"] = "Contrato de temporada. Paga $%.1fM adiantados no caixa!" % item["valor_temporada"]
-			
-		elif item["tipo"] == "Por Corrida":
-			item["valor_temporada"] = 0.0
-			item["valor_corrida"] = snapped(item["base_val"] * variation_factor, 0.1)
-			item["valor_ponto"] = 0.0
-			item["desc"] = "Patrocínio recorrente. Paga $%.1fM a cada GP disputado." % item["valor_corrida"]
-			
-		else:
-			item["valor_temporada"] = 0.0
-			item["valor_corrida"] = 0.0
-			item["valor_ponto"] = snapped(item["base_val"] * variation_factor, 0.05)
-			item["desc"] = "Bônus por performance. Paga $%.2fM por cada ponto marcado." % item["valor_ponto"]
-			
+		var category = SPONSOR_CATEGORIES[randi() % SPONSOR_CATEGORIES.size()]
+		var item = {
+			"id": "sp_%d_%d" % [id_counter, randi() % 9999],
+			"nome": name,
+			"categoria": category,
+			"tipo": tier_type, # "Master", "Principal" ou "Secundário"
+			"satisfacao": 100, # 0 a 100%
+			"contrato_anos": randi_range(1, 3),
+			"anos_restantes": 0
+		}
+		
+		# Define os valores com variação aleatória de +/- 20%
+		var mult = randf_range(0.8, 1.2)
+		
+		match tier_type:
+			"Master":
+				item["valor_temporada"] = snapped(randf_range(25.0, 45.0) * mult, 0.1) # Adiantado no caixa
+				item["valor_corrida"] = snapped(randf_range(1.0, 2.5) * mult, 0.1)     # Bônus por GP
+				item["valor_ponto"] = snapped(randf_range(0.3, 0.6) * mult, 0.05)     # Bônus por ponto
+				item["meta_gp"] = "Pódio ou Top 5 no GP"
+				item["multa_rescisao"] = snapped(item["valor_temporada"] * 0.4, 0.1)
+				item["reputacao_minima"] = 70
+				item["desc"] = "Patrocinador Master (Title Sponsor). Exige alto desempenho da equipe."
+				
+			"Principal":
+				item["valor_temporada"] = snapped(randf_range(10.0, 20.0) * mult, 0.1)
+				item["valor_corrida"] = snapped(randf_range(0.5, 1.2) * mult, 0.1)
+				item["valor_ponto"] = snapped(randf_range(0.15, 0.35) * mult, 0.05)
+				item["meta_gp"] = "Terminar no Top 10"
+				item["multa_rescisao"] = snapped(item["valor_temporada"] * 0.3, 0.1)
+				item["reputacao_minima"] = 40
+				item["desc"] = "Patrocinador Principal. Garante renda estável e bônus por pontos."
+				
+			"Secundário":
+				item["valor_temporada"] = snapped(randf_range(2.0, 8.0) * mult, 0.1)
+				item["valor_corrida"] = snapped(randf_range(0.2, 0.6) * mult, 0.05)
+				item["valor_ponto"] = snapped(randf_range(0.05, 0.15) * mult, 0.01)
+				item["meta_gp"] = "Pontuar no GP"
+				item["multa_rescisao"] = snapped(item["valor_temporada"] * 0.2, 0.1)
+				item["reputacao_minima"] = 0
+				item["desc"] = "Patrocinador Secundário/Regional. Fácil aceitação e menor exigência."
+				
 		generated_sponsors.append(item)
+		id_counter += 1
 		
 	return generated_sponsors
 
@@ -220,7 +251,7 @@ func process_ai_team_upgrades() -> void:
 		var remaining = max_cap - current_expense
 		
 		# Bloqueia se a equipe já estourou o teto de gastos
-		if remaining < UPGRADE_COST:
+		if max_cap <= 0.0 or remaining < UPGRADE_COST:
 			continue
 			
 		# Chance dinâmica de compra por GP
@@ -232,9 +263,17 @@ func process_ai_team_upgrades() -> void:
 			continue
 			
 		# Cálculo de rendimento decrescente (P&D)
-		var motor_val = float(t.get("Motor", 80))
-		var aero_val = float(t.get("Aero", 80))
-		var chassi_val = float(t.get("Chassi", 80))
+		var motor_val := float(t.get("Motor", t.get("potencia", 80.0)))
+		var aero_val := float(t.get("Aero", t.get("aero", 80.0)))
+		var chassis_value: Variant = t.get("Chassi", t.get("chassi", 80.0))
+		if chassis_value is Dictionary:
+			chassis_value = chassis_value.get("chassi", chassis_value.get("qualidade", 88.0))
+		var chassi_val := float(chassis_value)
+		var reliability_val := float(t.get("Confiabilidade", t.get("confiabilidade", 80.0)))
+		var weight_val := float(t.get("peso", t.get("Peso", 778.0)))
+		var uses_legacy_motor: bool = not t.has("Motor")
+		var uses_legacy_aero: bool = not t.has("Aero")
+		var uses_legacy_reliability: bool = not t.has("Confiabilidade")
 		var current_avg = (motor_val + aero_val + chassi_val) / 3.0
 		
 		var gain: float = 0.0
@@ -246,11 +285,11 @@ func process_ai_team_upgrades() -> void:
 			gain = randf_range(0.15, 0.35)
 			
 		var available_focuses = []
-		if t["Motor"] < 99.0: available_focuses.append(0)
-		if t["Aero"] < 99.0: available_focuses.append(1)
-		if t["Chassi"] < 99.0: available_focuses.append(2)
-		if t["Confiabilidade"] < 99.0: available_focuses.append(3)
-		if float(t.get("peso", 778.0)) > 768.0: available_focuses.append(4)
+		if motor_val < 99.0: available_focuses.append(0)
+		if aero_val < 99.0: available_focuses.append(1)
+		if chassi_val < 99.0: available_focuses.append(2)
+		if reliability_val < 99.0: available_focuses.append(3)
+		if weight_val > 768.0: available_focuses.append(4)
 		
 		if available_focuses.size() > 0:
 			var focus: int
@@ -263,21 +302,27 @@ func process_ai_team_upgrades() -> void:
 			var weight_reduction := 0.0
 			
 			if focus == 0:
-				t["Motor"] = min(99.0, t["Motor"] + gain)
+				t["Motor"] = min(99.0, motor_val + gain)
+				if uses_legacy_motor:
+					t["potencia"] = t["Motor"]
 				component_name = "Unidade de Potência"
 			elif focus == 1:
-				t["Aero"] = min(99.0, t["Aero"] + gain)
+				t["Aero"] = min(99.0, aero_val + gain)
+				if uses_legacy_aero:
+					t["aero"] = t["Aero"]
 				component_name = "Aerodinâmica"
 			elif focus == 2:
-				t["Chassi"] = min(99.0, t["Chassi"] + gain)
+				t["Chassi"] = min(99.0, chassi_val + gain)
 				component_name = "Chassi"
 			elif focus == 3:
-				t["Confiabilidade"] = min(99.0, t["Confiabilidade"] + gain)
+				t["Confiabilidade"] = min(99.0, reliability_val + gain)
+				if uses_legacy_reliability:
+					t["confiabilidade"] = t["Confiabilidade"]
 				component_name = "Confiabilidade"
 			elif focus == 4:
-				weight_reduction = minf(randf_range(0.05, 0.6), float(t.get("peso", 778.0)) - 768.0)
+				weight_reduction = minf(randf_range(0.05, 0.6), weight_val - 768.0)
 				if weight_reduction > 0.0:
-					t["peso"] = maxf(768.0, float(t.get("peso", 778.0)) - weight_reduction)
+					t["peso"] = maxf(768.0, weight_val - weight_reduction)
 					component_name = "Peso"
 
 			if not component_name.is_empty():
@@ -1779,7 +1824,10 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 		
 		if typeof(chassis_name) == TYPE_DICTIONARY:
 			var c_dict = chassis_name as Dictionary
-			c_chassi = float(team.get("chassi", c_dict.get("chassi", c_dict.get("qualidade", 88.0))))
+			var chassi_value: Variant = team.get("Chassi", c_dict.get("chassi", c_dict.get("qualidade", 88.0)))
+			if chassi_value is Dictionary:
+				chassi_value = chassi_value.get("chassi", chassi_value.get("qualidade", 88.0))
+			c_chassi = float(chassi_value)
 			c_aero = float(team.get("aero", c_dict.get("aero", c_dict.get("desempenho", 87.0))))
 			c_conf = float(c_dict.get("confiabilidade", 88.0))
 		elif typeof(c_info) == TYPE_DICTIONARY:
@@ -1821,7 +1869,7 @@ func ensure_user_team_rd_slots() -> Array:
 	user_team["rd_slots"] = slots.slice(0, 3)
 	return user_team["rd_slots"]
 
-func schedule_user_team_upgrade(attribute: String, amount: float) -> bool:
+func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races: int = 3) -> bool:
 	if game_mode != "manager" or user_team.is_empty():
 		return false
 	var allowed_amount := 1.0
@@ -1851,12 +1899,11 @@ func schedule_user_team_upgrade(attribute: String, amount: float) -> bool:
 		return false
 
 	var tracks_per_season := maxi(1, tracks.size())
-	var duration := 3
+	var duration := clampi(delivery_races, 1, 7)
 	var ready_absolute_gp := current_gp + duration
 	var ready_year := current_year + int((ready_absolute_gp - 1) / tracks_per_season)
 	var ready_gp := ((ready_absolute_gp - 1) % tracks_per_season) + 1
 	var year_offset := current_year * tracks_per_season + current_gp
-	var due_offset := ready_year * tracks_per_season + ready_gp
 
 	user_team["orcamento"] = balance - cost_m
 	slots[free_slot] = {
@@ -1985,3 +2032,21 @@ func end_preseason() -> void:
 		user_team["peso"] = max(768.0, float(user_team.get("peso", 778.0)) - float(dev.get("peso_reduction", 0.0)))
 	
 	current_session = "regular_season"
+
+# Retorna ou inicializa a estrutura de finanças da temporada da equipe do jogador
+func get_user_finances_history() -> Dictionary:
+	if not user_team.has("financas_detalhadas"):
+		user_team["financas_detalhadas"] = {
+			"patrocinios_acumulados": 0.0,
+			"gastos_pd": 0.0,
+			"gastos_dnf": 0.0,
+			"gastos_salarios": 0.0,
+			"multas_patrocinio": 0.0
+		}
+	return user_team["financas_detalhadas"]
+
+# Registra uma transação no histórico financeiro da equipe
+func register_financial_transaction(category: String, amount: float) -> void:
+	var fin := get_user_finances_history()
+	if fin.has(category):
+		fin[category] += amount

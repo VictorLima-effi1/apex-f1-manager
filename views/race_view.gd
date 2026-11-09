@@ -15,7 +15,7 @@ var grip_value_label: Label
 @onready var btn_speed_2x: Button
 @onready var btn_speed_5x: Button
 @onready var btn_speed_10x: Button
-@onready var btn_speed_20x: Button
+@onready var btn_speed_30x: Button
 @onready var btn_speed_skip: Button
 @onready var race_grid_node: GridContainer
 @onready var log_text_node: RichTextLabel
@@ -171,10 +171,10 @@ func build_ui() -> void:
 	btn_speed_10x.pressed.connect(func(): _set_speed_mode(10.0))
 	ctrl_hbox.add_child(btn_speed_10x)
 
-	btn_speed_20x = Button.new()
-	btn_speed_20x.text = "20x"
-	btn_speed_20x.pressed.connect(func(): _set_speed_mode(20.0))
-	ctrl_hbox.add_child(btn_speed_20x)
+	btn_speed_30x = Button.new()
+	btn_speed_30x.text = "30x"
+	btn_speed_30x.pressed.connect(func(): _set_speed_mode(30.0))
+	ctrl_hbox.add_child(btn_speed_30x)
 
 	btn_speed_skip = Button.new()
 	btn_speed_skip.text = "⏭ PULAR PARA O FINAL DA SESSÃO"
@@ -465,6 +465,15 @@ func _on_manager_quali_action_pressed(driver_idx: int, tire_sel_idx: int, pace_s
 	var chosen_pace = paces[pace_sel_idx] if pace_sel_idx < paces.size() else "Normal"
 	
 	if engine != null and engine.is_quali_done():
+		var used_compounds: Array = target_driver.get("used_compounds", [])
+		if used_compounds.size() < 2 and used_compounds.has(chosen_tire):
+			var legal_compound := engine._get_ideal_compound_for_water(engine.water_level)
+			if used_compounds.has(legal_compound):
+				for candidate in tires:
+					if not used_compounds.has(candidate):
+						legal_compound = candidate
+						break
+			chosen_tire = legal_compound
 		if engine.request_manager_pit_stop(target_name, chosen_tire, chosen_pace):
 			simulation_running = true
 			_update_simulation_button()
@@ -667,12 +676,24 @@ func _skip_to_end_of_session() -> void:
 		_update_simulation_button()
 		_update_ui()
 	elif engine != null and not engine.is_finished():
-		while not engine.is_finished():
+		simulation_running = false
+		_update_simulation_button()
+		var processed_laps := 0
+		var max_laps := engine.total_laps - engine.current_lap
+		while not engine.is_finished() and processed_laps < max_laps:
+			var lap_before := engine.current_lap
 			var res = engine.process_lap()
 			if res.get("red_flag", false):
 				_show_red_flag_modal()
 				break
-		simulation_running = false
+			if res.get("awaiting_manager_pit", false) or engine.current_lap == lap_before:
+				break
+			processed_laps += 1
+			if processed_laps % 4 == 0:
+				_update_ui()
+				await get_tree().process_frame
+		simulation_tick_accumulator = 0.0
+		race_lap_elapsed = 0.0
 		_update_simulation_button()
 		_update_ui()
 
@@ -692,7 +713,7 @@ func _update_simulation_button() -> void:
 	if not is_instance_valid(btn_start) or engine == null:
 		return
 	if engine.is_finished():
-		btn_start.text = "🏠 VOLTAR AO MENU"
+		btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
 	else:
 		btn_start.text = "⏸️ PAUSAR" if simulation_running else "▶ CONTINUAR"
 
@@ -1072,7 +1093,7 @@ func _finish_race_and_advance() -> void:
 	else:
 		Database.current_gp += 1
 		Database.race_finished = false
-		_return_to_main_menu()
+		_return_to_dashboard()
 
 func _continue_to_next_season() -> void:
 	Database.active_engine = null
@@ -1083,11 +1104,17 @@ func _continue_to_next_season() -> void:
 	else:
 		_change_to_main_menu_scene()
 
-func _return_to_main_menu() -> void:
+func _return_to_dashboard() -> void:
 	simulation_running = false
 	Database.active_engine = null
-	Database.current_view = "main_menu"
-	call_deferred("_change_to_main_menu_scene")
+	Database.current_view = "dashboard"
+	var main_scene := get_tree().current_scene
+	if is_instance_valid(main_scene) and main_scene.has_method("switch_view"):
+		main_scene.call_deferred("switch_view", "dashboard")
+	else:
+		var scene_error := get_tree().change_scene_to_file("res://main.tscn")
+		if scene_error != OK:
+			push_error("Não foi possível voltar ao dashboard. Erro: %d" % scene_error)
 
 func _change_to_main_menu_scene() -> void:
 	var scene_error := get_tree().change_scene_to_file("res://views/main_menu_view.tscn")

@@ -102,14 +102,12 @@ func _build_driver_card(title: String, driver_data: Dictionary, index: int) -> P
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 6)
 	
-	# Título da Box (Fonte ampliada de 13 para 15)
 	var lbl_title = Label.new()
 	lbl_title.text = title
 	lbl_title.add_theme_font_size_override("font_size", 15)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
 	
-	# Sub-Painel de Stats & Points
 	var stats_panel = PanelContainer.new()
 	stats_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var inner_style = StyleBoxFlat.new()
@@ -133,14 +131,12 @@ func _build_driver_card(title: String, driver_data: Dictionary, index: int) -> P
 		var podiums = int(driver_data.get("podios", 0))
 		var contract = int(driver_data.get("contrato_anos", driver_data.get("AnosContrato", 1)))
 		
-		# Nome do Piloto (Fonte ampliada de 14 para 16)
 		var l_name = Label.new()
 		l_name.text = p_name
 		l_name.add_theme_font_size_override("font_size", 16)
 		l_name.add_theme_color_override("font_color", Color("#ffffff"))
 		stats_vbox.add_child(l_name)
 		
-		# Atributos (Fonte ampliada de 11 para 13)
 		var l_attr = Label.new()
 		l_attr.text = "OVR: %d  |  Ritmo: %d" % [ovr, pace]
 		l_attr.add_theme_font_size_override("font_size", 13)
@@ -150,14 +146,12 @@ func _build_driver_card(title: String, driver_data: Dictionary, index: int) -> P
 		var separator = HSeparator.new()
 		stats_vbox.add_child(separator)
 		
-		# Título de Estatísticas (Fonte ampliada de 10 para 12)
 		var l_stats_title = Label.new()
 		l_stats_title.text = "Estatísticas da Temporada:"
 		l_stats_title.add_theme_font_size_override("font_size", 12)
 		l_stats_title.add_theme_color_override("font_color", Color("#94a3b8"))
 		stats_vbox.add_child(l_stats_title)
 		
-		# Corpo de Estatísticas (Fonte ampliada de 11 para 13)
 		var l_stats = Label.new()
 		l_stats.text = "Pontos: %d pts\nVitórias: %d\nPódios: %d\nContrato: %d ano(s)" % [pts, wins, podiums, contract]
 		l_stats.add_theme_font_size_override("font_size", 13)
@@ -173,7 +167,6 @@ func _build_driver_card(title: String, driver_data: Dictionary, index: int) -> P
 	stats_panel.add_child(stats_vbox)
 	vbox.add_child(stats_panel)
 	
-	# Botões: Demitir e Renovar (Fonte ampliada de 10 para 12)
 	var btn_hbox = HBoxContainer.new()
 	btn_hbox.add_theme_constant_override("separation", 6)
 	
@@ -207,7 +200,6 @@ func _build_car_card() -> PanelContainer:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 6)
 	
-	# Título da Box (Fonte ampliada de 13 para 15)
 	var lbl_title = Label.new()
 	lbl_title.text = "CARRO - DESEMPENHO E ATRIBUTOS"
 	lbl_title.add_theme_font_size_override("font_size", 15)
@@ -226,14 +218,55 @@ func _build_car_card() -> PanelContainer:
 	_add_attribute_bar(vbox, "CHASSI", chassi_val, Color("#f59e0b"))
 	_add_attribute_bar(vbox, "CONFIABILIDADE", rel_val, Color("#22c55e"))
 	_add_weight_attribute_bar(vbox, "⚖️ PESO", weight_val)
+	vbox.add_child(HSeparator.new())
+	_add_other_teams_average(vbox)
 	
 	panel.add_child(vbox)
 	return panel
 
+func _add_other_teams_average(parent: Control) -> void:
+	var manager_team_name := str(Database.user_team.get("nome", Database.user_team.get("Nome", ""))).strip_edges().to_lower()
+	var totals := {"Motor": 0.0, "Aero": 0.0, "Chassi": 0.0, "Confiabilidade": 0.0, "Peso": 0.0}
+	var counted_teams := 0
+	
+	for team in Database.teams:
+		var team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges().to_lower()
+		if team_name == manager_team_name:
+			continue
+		var stats: Dictionary = Database.calculate_team_dev_stats(team)
+		for attribute in totals.keys():
+			totals[attribute] += float(stats.get(attribute, 0.0))
+		counted_teams += 1
+
+	# Título do módulo da média
+	var title_label := Label.new()
+	title_label.add_theme_font_size_override("font_size", 12)
+	title_label.add_theme_color_override("font_color", Color("#94a3b8"))
+	
+	if counted_teams == 0:
+		title_label.text = "MÉDIA DAS OUTRAS EQUIPES: indisponível"
+		parent.add_child(title_label)
+	else:
+		title_label.text = "MÉDIA DAS OUTRAS EQUIPES (%d EQUIPES):" % counted_teams
+		parent.add_child(title_label)
+
+		# Calcula as médias numéricas
+		var avg_motor: float = float(totals["Motor"]) / counted_teams
+		var avg_aero: float = float(totals["Aero"]) / counted_teams
+		var avg_chassis: float = float(totals["Chassi"]) / counted_teams
+		var avg_rel: float = float(totals["Confiabilidade"]) / counted_teams
+		var avg_weight: float = float(totals["Peso"]) / counted_teams
+
+		# Renderiza cada atributo utilizando o mesmo formato visual de barras
+		_add_attribute_bar(parent, "MOTOR (MÉDIA)", avg_motor, Color("#ef4444"))
+		_add_attribute_bar(parent, "AERO (MÉDIA)", avg_aero, Color("#38bdf8"))
+		_add_attribute_bar(parent, "CHASSI (MÉDIA)", avg_chassis, Color("#f59e0b"))
+		_add_attribute_bar(parent, "CONFIAB. (MÉDIA)", avg_rel, Color("#22c55e"))
+		_add_weight_attribute_bar(parent, "⚖️ PESO (MÉDIA)", avg_weight)
+
 func _add_attribute_bar(parent: Control, attr_name: String, val: float, color: Color) -> void:
 	var hbox = HBoxContainer.new()
 	
-	# Nome do Atributo (Fonte ampliada de 10 para 12 e largura de 130 para 150)
 	var lbl = Label.new()
 	lbl.text = attr_name
 	lbl.custom_minimum_size.x = 150
@@ -262,7 +295,6 @@ func _add_attribute_bar(parent: Control, attr_name: String, val: float, color: C
 	
 	hbox.add_child(progress)
 	
-	# Valor do Atributo (Fonte ampliada de 10 para 12)
 	var val_lbl = Label.new()
 	val_lbl.text = "%.1f" % val
 	val_lbl.custom_minimum_size.x = 40
@@ -322,26 +354,16 @@ func _build_rd_panel() -> PanelContainer:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
 	
-	# Título da Box (Fonte ampliada de 13 para 15)
 	var lbl_title = Label.new()
 	lbl_title.text = "P. E D. (DESENVOLVIMENTO)"
 	lbl_title.add_theme_font_size_override("font_size", 15)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
 	
-	# Botão de Seleção (Fonte ampliada de 11 para 13)
 	var btn_select = Button.new()
 	btn_select.text = "🛠️ ESCOLHER MELHORIA"
 	btn_select.custom_minimum_size.y = 35
 	btn_select.add_theme_font_size_override("font_size", 13)
-	var available_slots := false
-	for slot in Database.ensure_user_team_rd_slots():
-		if not slot is Dictionary or slot.is_empty():
-			available_slots = true
-			break
-	btn_select.disabled = not available_slots or float(Database.user_team.get("orcamento", 0.0)) < Database.PLAYER_RD_COST / 1_000_000.0
-	btn_select.pressed.connect(_on_select_upgrade_pressed)
-	vbox.add_child(btn_select)
 	
 	var rd_slots := Database.ensure_user_team_rd_slots()
 	var has_available_slot := false
@@ -349,21 +371,25 @@ func _build_rd_panel() -> PanelContainer:
 		if not slot is Dictionary or slot.is_empty():
 			has_available_slot = true
 			break
+			
 	var available_cash := float(Database.user_team.get("orcamento", 0.0))
 	btn_select.disabled = not has_available_slot or available_cash < Database.PLAYER_RD_COST / 1_000_000.0
 	if not has_available_slot:
 		btn_select.tooltip_text = "Todos os slots de desenvolvimento estão ocupados."
 	elif available_cash < Database.PLAYER_RD_COST / 1_000_000.0:
 		btn_select.tooltip_text = "Caixa insuficiente para iniciar uma melhoria."
+		
+	btn_select.pressed.connect(_on_select_upgrade_pressed)
+	vbox.add_child(btn_select)
 	
 	for i in range(3):
 		var slot_data: Dictionary = rd_slots[i] if i < rd_slots.size() and rd_slots[i] is Dictionary else {}
-		vbox.add_child(_create_slot_card("UPDATE %d" % (i + 1), slot_data))
+		vbox.add_child(_create_slot_card("UPDATE %d" % (i + 1), slot_data, i))
 		
 	panel.add_child(vbox)
 	return panel
 
-func _create_slot_card(title_slot: String, data: Dictionary) -> PanelContainer:
+func _create_slot_card(title_slot: String, data: Dictionary, slot_index: int) -> PanelContainer:
 	var slot_panel = PanelContainer.new()
 	var st = StyleBoxFlat.new()
 	st.bg_color = Color("#1a1c23")
@@ -375,8 +401,9 @@ func _create_slot_card(title_slot: String, data: Dictionary) -> PanelContainer:
 	slot_panel.add_theme_stylebox_override("panel", st)
 	
 	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 3)
 	
-	# Rótulo do Slot (Fonte ampliada de 10 para 12)
+	var head_hbox = HBoxContainer.new()
 	var l_head = Label.new()
 	if data.is_empty():
 		l_head.text = "%s: Slot disponível" % title_slot
@@ -387,7 +414,19 @@ func _create_slot_card(title_slot: String, data: Dictionary) -> PanelContainer:
 		l_head.text = "%s: %s %s" % [title_slot, attribute, amount_text]
 	l_head.add_theme_font_size_override("font_size", 12)
 	l_head.add_theme_color_override("font_color", Color("#ffffff"))
-	vbox.add_child(l_head)
+	l_head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head_hbox.add_child(l_head)
+	
+	# Botão de cancelar melhoria no slot ocupado
+	if not data.is_empty():
+		var btn_cancel_rd = Button.new()
+		btn_cancel_rd.text = "✖ Cancelar"
+		btn_cancel_rd.add_theme_font_size_override("font_size", 10)
+		btn_cancel_rd.add_theme_color_override("font_color", Color("#ef4444"))
+		btn_cancel_rd.pressed.connect(func(): _cancel_rd_upgrade(slot_index))
+		head_hbox.add_child(btn_cancel_rd)
+		
+	vbox.add_child(head_hbox)
 	
 	var progress = ProgressBar.new()
 	progress.min_value = 0.0
@@ -401,6 +440,7 @@ func _create_slot_card(title_slot: String, data: Dictionary) -> PanelContainer:
 	fill.set_corner_radius_all(2)
 	progress.add_theme_stylebox_override("fill", fill)
 	vbox.add_child(progress)
+	
 	var status := Label.new()
 	if data.is_empty():
 		status.text = "Nenhuma melhoria selecionada"
@@ -417,6 +457,14 @@ func _create_slot_card(title_slot: String, data: Dictionary) -> PanelContainer:
 	slot_panel.add_child(vbox)
 	return slot_panel
 
+# Função para cancelar o desenvolvimento de P&D
+func _cancel_rd_upgrade(slot_index: int) -> void:
+	var rd_slots: Array = Database.ensure_user_team_rd_slots()
+	if slot_index >= 0 and slot_index < rd_slots.size():
+		rd_slots[slot_index] = {}
+		print("🗑️ Melhoria de P&D no slot %d foi cancelada." % (slot_index + 1))
+		build_ui()
+		Database.register_financial_transaction("gastos_pd", - (Database.PLAYER_RD_COST / 1_000_000.0))
 # =================================================================
 # 4. MÓDULO DE PATROCÍNIOS
 # =================================================================
@@ -428,12 +476,18 @@ func _build_sponsors_panel() -> PanelContainer:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
 	
-	# Título da Box (Fonte ampliada de 13 para 15)
 	var lbl_title = Label.new()
 	lbl_title.text = "PATROCÍNIOS"
 	lbl_title.add_theme_font_size_override("font_size", 15)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
+	
+	var btn_manage_sp = Button.new()
+	btn_manage_sp.text = "🤝 GERENCIAR PATROCÍNIOS"
+	btn_manage_sp.custom_minimum_size.y = 32
+	btn_manage_sp.add_theme_font_size_override("font_size", 12)
+	btn_manage_sp.pressed.connect(_open_sponsors_market_modal)
+	vbox.add_child(btn_manage_sp)
 	
 	var sponsors: Array = Database.user_team.get("patrocinadores", [])
 	
@@ -458,19 +512,31 @@ func _build_sponsors_panel() -> PanelContainer:
 		
 		var cvbox = VBoxContainer.new()
 		
-		# Nome do Patrocinador (Fonte ampliada de 10 para 12)
+		var top_sp_hbox = HBoxContainer.new()
 		var l_sname = Label.new()
 		l_sname.text = "SLOT %d: %s" % [i + 1, sponsor_name]
 		l_sname.add_theme_font_size_override("font_size", 12)
 		l_sname.add_theme_color_override("font_color", Color("#ffffff"))
-		cvbox.add_child(l_sname)
+		l_sname.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		top_sp_hbox.add_child(l_sname)
 		
-		# Valor Anual (Fonte ampliada de 10 para 12)
+		# Botão de cancelar patrocínio no slot ativo
+		if not sp.is_empty():
+			var btn_cancel_sp = Button.new()
+			btn_cancel_sp.text = "✖ Cancelar"
+			btn_cancel_sp.add_theme_font_size_override("font_size", 10)
+			btn_cancel_sp.add_theme_color_override("font_color", Color("#ef4444"))
+			btn_cancel_sp.pressed.connect(func(): _cancel_sponsor(i))
+			top_sp_hbox.add_child(btn_cancel_sp)
+			
+		cvbox.add_child(top_sp_hbox)
+		
 		var l_sval = Label.new()
 		l_sval.text = contract_text
 		l_sval.add_theme_font_size_override("font_size", 12)
 		l_sval.add_theme_color_override("font_color", Color("#34d399") if not sp.is_empty() else Color("#64748b"))
 		cvbox.add_child(l_sval)
+		
 		if not sp.is_empty():
 			var duration := int(sp.get("contrato_anos", sp.get("duracao", 0)))
 			if duration > 0:
@@ -483,7 +549,6 @@ func _build_sponsors_panel() -> PanelContainer:
 		card.add_child(cvbox)
 		vbox.add_child(card)
 		
-	# Total por Ano (Fonte ampliada de 12 para 14)
 	var l_total = Label.new()
 	l_total.text = "RECEITA FIXA POR TEMPORADA: +$%.1fM" % total_per_year
 	l_total.add_theme_font_size_override("font_size", 14)
@@ -492,11 +557,34 @@ func _build_sponsors_panel() -> PanelContainer:
 	
 	panel.add_child(vbox)
 	return panel
+	
+# Função para cancelar o patrocínio na aba de Equipe aplicando a multa rescisória
+func _cancel_sponsor(index: int) -> void:
+	var sponsors: Array = Database.user_team.get("patrocinadores", [])
+	if index >= 0 and index < sponsors.size():
+		var sp: Dictionary = sponsors[index] if sponsors[index] is Dictionary else {}
+		if not sp.is_empty():
+			# 1. Calcula a multa rescisória configurada no patrocinador
+			var penalty: float = float(sp.get("multa_rescisao", 0.0))
+			var current_cash: float = float(Database.user_team.get("orcamento", 0.0))
+			
+			# 2. Desconta a multa do orçamento do time (impedindo de ficar abaixo de 0)
+			Database.user_team["orcamento"] = maxf(0.0, current_cash - penalty)
+			
+			# 3. Limpa o slot do patrocinador
+			sponsors[index] = {}
+			Database.user_team["patrocinadores"] = sponsors
+			
+			print("🗑️ Patrocínio no slot %d cancelado. Multa cobrada: $%.1fM" % [index + 1, penalty])
+			
+			# 4. Redesenha toda a interface para atualizar o caixa e os botões
+			build_ui()
+			Database.register_financial_transaction("multas_patrocinio", penalty)
 
 # =================================================================
 # 5. MÓDULO DE FINANÇAS
 # =================================================================
-func _build_finances_panel() -> PanelContainer:
+func _build_finances_panel(show_capital_button: bool = true) -> PanelContainer:
 	var panel = PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _get_card_style())
@@ -504,7 +592,6 @@ func _build_finances_panel() -> PanelContainer:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
 	
-	# Título da Box (Fonte ampliada de 13 para 15)
 	var lbl_title = Label.new()
 	lbl_title.text = "FINANÇAS DA TEMPORADA"
 	lbl_title.add_theme_font_size_override("font_size", 15)
@@ -518,11 +605,16 @@ func _build_finances_panel() -> PanelContainer:
 	fin_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fin_vbox.add_theme_constant_override("separation", 4)
 	
-	# Extrato com fontes ampliadas de 10 para 12
-	_add_finance_entry(fin_vbox, "🟢 Patrocínios Acumulados", "+$26.0M", Color("#34d399"))
-	_add_finance_entry(fin_vbox, "🔴 Melhorias (P&D Desenvolvido)", "-$8.5M", Color("#ef4444"))
-	_add_finance_entry(fin_vbox, "🔴 Quebras & Reparos (DNFs)", "-$2.1M", Color("#ef4444"))
-	_add_finance_entry(fin_vbox, "🔴 Salários da Equipe", "-$5.0M", Color("#ef4444"))
+	var fin_data := Database.get_user_finances_history()
+	
+	# Exibição dos itens dinâmicos
+	_add_finance_entry(fin_vbox, "🟢 Patrocínios Acumulados", "+$%.1fM" % float(fin_data.get("patrocinios_acumulados", 0.0)), Color("#34d399"))
+	_add_finance_entry(fin_vbox, "🔴 Melhorias (P&D Desenvolvido)", "-$%.1fM" % float(fin_data.get("gastos_pd", 0.0)), Color("#ef4444"))
+	_add_finance_entry(fin_vbox, "🔴 Quebras & Reparos (DNFs)", "-$%.1fM" % float(fin_data.get("gastos_dnf", 0.0)), Color("#ef4444"))
+	_add_finance_entry(fin_vbox, "🔴 Salários da Equipe", "-$%.1fM" % float(fin_data.get("gastos_salarios", 0.0)), Color("#ef4444"))
+	
+	if float(fin_data.get("multas_patrocinio", 0.0)) > 0.0:
+		_add_finance_entry(fin_vbox, "🔴 Multas Rescisórias (Patrocínio)", "-$%.1fM" % float(fin_data.get("multas_patrocinio", 0.0)), Color("#ef4444"))
 	
 	scroll.add_child(fin_vbox)
 	vbox.add_child(scroll)
@@ -542,15 +634,12 @@ func _build_finances_panel() -> PanelContainer:
 	cash_panel.add_theme_stylebox_override("panel", st)
 	
 	var cash_hbox = HBoxContainer.new()
-	
-	# Rótulo do Caixa (Fonte ampliada de 11 para 13)
 	var l_caixa_tag = Label.new()
 	l_caixa_tag.text = "CAIXA DISPONÍVEL:"
 	l_caixa_tag.add_theme_font_size_override("font_size", 13)
 	l_caixa_tag.add_theme_color_override("font_color", Color("#ffffff"))
 	cash_hbox.add_child(l_caixa_tag)
 	
-	# Valor do Caixa (Fonte ampliada de 12 para 15)
 	var l_caixa_val = Label.new()
 	l_caixa_val.text = " $%.1fM" % current_cash
 	l_caixa_val.add_theme_font_size_override("font_size", 15)
@@ -560,16 +649,18 @@ func _build_finances_panel() -> PanelContainer:
 	cash_panel.add_child(cash_hbox)
 	vbox.add_child(cash_panel)
 
-	var capital_button := Button.new()
-	if Database.can_inject_team_capital():
-		capital_button.text = "💰 INJEÇÃO DE CAPITAL ($10M–$50M)"
-		capital_button.pressed.connect(_open_capital_injection)
-	else:
-		var available_year := int(Database.user_team.get("injecao_capital_ano", Database.current_year)) + 3
-		capital_button.text = "Injeção de Capital — disponível na temporada %d" % available_year
-		capital_button.disabled = true
-	capital_button.custom_minimum_size.y = 36
-	vbox.add_child(capital_button)
+	# Exibe o botão de injeção apenas se solicitado (Aba Equipe = true | Dashboard = false)
+	if show_capital_button:
+		var capital_button := Button.new()
+		if Database.can_inject_team_capital():
+			capital_button.text = "💰 INJEÇÃO DE CAPITAL ($10M–$50M)"
+			capital_button.pressed.connect(_open_capital_injection)
+		else:
+			var available_year := int(Database.user_team.get("injecao_capital_ano", Database.current_year)) + 3
+			capital_button.text = "Injeção de Capital — disponível na temporada %d" % available_year
+			capital_button.disabled = true
+		capital_button.custom_minimum_size.y = 36
+		vbox.add_child(capital_button)
 	
 	panel.add_child(vbox)
 	return panel
@@ -631,10 +722,22 @@ func _fire_driver(index: int) -> void:
 
 func _renew_driver(index: int) -> void:
 	var my_drivers = Database.user_team.get("pilotos", [])
-	if index < my_drivers.size():
-		var c = int(my_drivers[index].get("contrato_anos", 1))
-		my_drivers[index]["contrato_anos"] = c + 1
+	if index >= my_drivers.size():
+		return
+	var driver: Dictionary = my_drivers[index]
+	var team_name := str(Database.user_team.get("nome", Database.user_team.get("Nome", "")))
+	var dialog_script = preload("res://views/contract_negotiation_dialog.gd")
+	var dialog = dialog_script.new()
+	dialog.open_for_driver(self, driver, team_name, func(accepted_driver: Dictionary, salary: float, years: int, _status: String):
+		accepted_driver["salario"] = salary
+		accepted_driver["contrato_anos"] = years
+		accepted_driver["AnosContrato"] = years
+		var database_driver := Database._get_driver_by_name(str(accepted_driver.get("Nome", "")))
+		if not database_driver.is_empty():
+			database_driver["salario"] = salary
+			database_driver["AnosContrato"] = years
 		build_ui()
+	, true)
 
 func _on_select_upgrade_pressed() -> void:
 	var slots := Database.ensure_user_team_rd_slots()
@@ -643,10 +746,11 @@ func _on_select_upgrade_pressed() -> void:
 			_open_upgrade_selection()
 			return
 
+# Modal de escolha de P&D (prazo aleatório de 2 a 5 corridas)
 func _open_upgrade_selection() -> void:
 	var dialog := Window.new()
-	dialog.title = "🛠️ Escolher melhoria"
-	dialog.size = Vector2i(640, 500)
+	dialog.title = "🛠️ Escolher melhoria de P&D"
+	dialog.size = Vector2i(540, 400)
 	dialog.exclusive = true
 	dialog.close_requested.connect(func(): dialog.queue_free())
 
@@ -661,18 +765,9 @@ func _open_upgrade_selection() -> void:
 	margin.add_child(layout)
 
 	var info := Label.new()
-	info.text = "Selecione uma melhoria. Cada projeto custa $%.1fM e leva 3 etapas." % (Database.PLAYER_RD_COST / 1_000_000.0)
+	info.text = "Selecione uma melhoria abaixo. O prazo de entrega será definido aleatoriamente pela equipe de engenharia (de 2 a 5 corridas). Cada projeto custa $%.1fM." % (Database.PLAYER_RD_COST / 1_000_000.0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(info)
-
-	var tracks_per_season := maxi(1, Database.tracks.size())
-	var ready_absolute_gp := Database.current_gp + 3
-	var ready_year := Database.current_year + int((ready_absolute_gp - 1) / tracks_per_season)
-	var ready_gp := ((ready_absolute_gp - 1) % tracks_per_season) + 1
-	var ready_label := Label.new()
-	ready_label.text = "Previsão: etapa %d de %d." % [ready_gp, ready_year]
-	ready_label.add_theme_color_override("font_color", Color("#38bdf8"))
-	layout.add_child(ready_label)
 
 	var options := [
 		{"atributo": "Motor", "valor": 1.0, "texto": "Motor +1.0"},
@@ -681,15 +776,15 @@ func _open_upgrade_selection() -> void:
 		{"atributo": "Confiabilidade", "valor": 1.0, "texto": "Confiabilidade +1.0"},
 		{"atributo": "Peso", "valor": 0.3, "texto": "Redução de peso: −0.30 kg"}
 	]
+	
 	for option in options:
 		var selection := (option as Dictionary).duplicate()
 		var button := Button.new()
-		button.text = "%s  |  $%.1fM  |  pronta na etapa %d" % [
+		button.text = "%s  |  $%.1fM" % [
 			str(selection["texto"]),
-			Database.PLAYER_RD_COST / 1_000_000.0,
-			ready_gp
+			Database.PLAYER_RD_COST / 1_000_000.0
 		]
-		button.custom_minimum_size.y = 42
+		button.custom_minimum_size.y = 40
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.disabled = float(Database.user_team.get("orcamento", 0.0)) < Database.PLAYER_RD_COST / 1_000_000.0
 		var team_stats := Database.calculate_team_dev_stats(Database.user_team)
@@ -697,24 +792,31 @@ func _open_upgrade_selection() -> void:
 			button.disabled = button.disabled or float(team_stats.get("Peso", 778.0)) <= 768.0
 		elif int(team_stats.get(str(selection["atributo"]), 80)) >= 99:
 			button.disabled = true
-		button.pressed.connect(func(): _start_team_upgrade(selection, dialog))
+			
+		# Sorteia aleatoriamente a duração entre 2 e 5 corridas ao clicar
+		button.pressed.connect(func():
+			var random_delivery_races := randi_range(2, 5)
+			_start_team_upgrade(selection, random_delivery_races, dialog)
+		)
 		layout.add_child(button)
 
 	var cancel_button := Button.new()
 	cancel_button.text = "Cancelar"
-	cancel_button.custom_minimum_size.y = 36
+	cancel_button.custom_minimum_size.y = 34
 	cancel_button.pressed.connect(func(): dialog.queue_free())
 	layout.add_child(cancel_button)
+	
 	dialog.add_child(margin)
 	add_child(dialog)
 	dialog.popup_centered()
 
-func _start_team_upgrade(option: Dictionary, dialog: Window) -> void:
-	if not Database.schedule_user_team_upgrade(str(option.get("atributo", "")), float(option.get("valor", 0.0))):
+func _start_team_upgrade(option: Dictionary, delivery_races: int, dialog: Window) -> void:
+	if not Database.schedule_user_team_upgrade(str(option.get("atributo", "")), float(option.get("valor", 0.0)), delivery_races):
 		push_warning("Não foi possível iniciar a melhoria: verifique os slots disponíveis e o caixa da equipe.")
 		return
 	dialog.queue_free()
 	build_ui()
+	Database.register_financial_transaction("gastos_pd", Database.PLAYER_RD_COST / 1_000_000.0)
 
 func _open_capital_injection() -> void:
 	if not Database.can_inject_team_capital():
@@ -767,6 +869,144 @@ func _open_capital_injection() -> void:
 	action_row.add_child(cancel_button)
 	layout.add_child(action_row)
 
+	dialog.add_child(margin)
+	add_child(dialog)
+	dialog.popup_centered()
+
+# Modal de busca e contratação de patrocinadores na aba Equipe
+func _open_sponsors_market_modal() -> void:
+	var dialog = Window.new()
+	dialog.title = "🤝 MERCADO DE PATROCÍNIOS E ACORDOS COMERCIAIS"
+	dialog.size = Vector2i(900, 580)
+	dialog.exclusive = true
+	dialog.close_requested.connect(func(): dialog.queue_free())
+
+	var bg = ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color("#0b0e14")
+	dialog.add_child(bg)
+
+	var margin = MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 15)
+	margin.add_theme_constant_override("margin_bottom", 15)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	
+	var title = Label.new()
+	title.text = "🏢 MARCAS DISPONÍVEIS PARA CONTRATAÇÃO"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color("#fbbf24"))
+	vbox.add_child(title)
+
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var list_vbox = VBoxContainer.new()
+	list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_vbox.add_theme_constant_override("separation", 8)
+
+	var current_sponsors: Array = Database.user_team.get("patrocinadores", [])
+
+	for sp in Database.available_sponsors:
+		var item_card = PanelContainer.new()
+		var st = StyleBoxFlat.new()
+		st.bg_color = Color("#1e293b")
+		st.set_corner_radius_all(6)
+
+		var is_signed = false
+		for active_sp in current_sponsors:
+			if active_sp is Dictionary and active_sp.get("id") == sp.get("id"):
+				is_signed = true
+				break
+
+		if is_signed:
+			st.border_width_left = 4
+			st.border_color = Color("#22c55e")
+
+		item_card.add_theme_stylebox_override("panel", st)
+
+		var im = MarginContainer.new()
+		im.add_theme_constant_override("margin_left", 12)
+		im.add_theme_constant_override("margin_right", 12)
+		im.add_theme_constant_override("margin_top", 8)
+		im.add_theme_constant_override("margin_bottom", 8)
+
+		var ihbox = HBoxContainer.new()
+		ihbox.add_theme_constant_override("separation", 10)
+
+		var info_vbox = VBoxContainer.new()
+		info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+		var l_name = Label.new()
+		l_name.text = "🏢 %s [%s]" % [str(sp.get("nome", "Marca")), str(sp.get("tipo", "Geral")).to_upper()]
+		l_name.add_theme_font_size_override("font_size", 14)
+		info_vbox.add_child(l_name)
+
+		var l_pay = Label.new()
+		l_pay.text = "💰 Adiantado: $%.1fM  |  🏁 Por GP: $%.1fM" % [
+			float(sp.get("valor_temporada", 0.0)),
+			float(sp.get("valor_corrida", 0.0))
+		]
+		l_pay.add_theme_font_size_override("font_size", 12)
+		l_pay.add_theme_color_override("font_color", Color("#10b981"))
+		info_vbox.add_child(l_pay)
+
+		ihbox.add_child(info_vbox)
+
+		var btn_action = Button.new()
+		btn_action.custom_minimum_size = Vector2(130, 34)
+
+		if is_signed:
+			btn_action.text = "✓ ASSINADO"
+			btn_action.disabled = true
+		else:
+			btn_action.text = "✍️ ASSINAR"
+			btn_action.pressed.connect(func():
+				# Encontra um slot livre (máximo 3)
+				var signed_count = 0
+				for s in current_sponsors:
+					if s is Dictionary and not s.is_empty():
+						signed_count += 1
+				
+				if signed_count < 3:
+					# Garante que o array tenha tamanho 3
+					while current_sponsors.size() < 3:
+						current_sponsors.append({})
+					
+					# Encontra o primeiro slot vazio
+					for i in range(3):
+						if current_sponsors[i].is_empty():
+							current_sponsors[i] = sp.duplicate()
+							break
+					
+					# Credita o valor adiantado no caixa do time
+					var current_cash = float(Database.user_team.get("orcamento", 0.0))
+					Database.user_team["orcamento"] = current_cash + float(sp.get("valor_temporada", 0.0))
+					Database.user_team["patrocinadores"] = current_sponsors
+					
+					dialog.queue_free()
+					build_ui()
+			)
+
+		ihbox.add_child(btn_action)
+		im.add_child(ihbox)
+		item_card.add_child(im)
+		list_vbox.add_child(item_card)
+
+	scroll.add_child(list_vbox)
+	vbox.add_child(scroll)
+
+	var btn_close = Button.new()
+	btn_close.text = "Fechar"
+	btn_close.custom_minimum_size.y = 36
+	btn_close.pressed.connect(func(): dialog.queue_free())
+	vbox.add_child(btn_close)
+
+	margin.add_child(vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
 	dialog.popup_centered()

@@ -196,7 +196,7 @@ func _build_select_team_panel() -> void:
 func _build_popup_dialog() -> void:
 	popup_dialog = AcceptDialog.new()
 	popup_dialog.title = "Aviso"
-	popup_dialog.dialog_text = "Modo em desenvolvimento!"
+	popup_dialog.dialog_text = "Ainda estamos quebrando a cabeça para desenvolver esse modo de jogo, por favor, escolha o outro :("
 	popup_dialog.confirmed.connect(_on_popup_confirmed)
 	add_child(popup_dialog)
 

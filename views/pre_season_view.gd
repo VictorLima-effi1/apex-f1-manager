@@ -734,6 +734,17 @@ func _recalculate_budget() -> void:
 	
 	remaining_budget = total_initial_funds - (drivers_cost + engine_cost + chassis_cost)
 
+## Atualiza os textos de orçamento e a mensagem dos patrocinadores contratados
+func atualizar_interface_criacao() -> void:
+	_recalculate_budget()
+	
+	# Sincroniza a lista local com o que foi assinado no banco de dados temporário
+	if Database.user_team.has("patrocinadores") and not Database.user_team["patrocinadores"].is_empty():
+		selected_sponsors = Database.user_team["patrocinadores"].duplicate()
+		
+	# Redesenha a etapa atual para atualizar os textos de "Contratados: Marc1, Marc2..."
+	_render_current_step()
+
 # =============================================================
 # MODAIS DE SELEÇÃO (PILOTOS, MOTORES E CHASSIS)
 # =============================================================
@@ -1994,7 +2005,12 @@ func _build_winter_testing_step() -> void:
 			_update_speed_buttons_ui(controls_hbox)
 		)
 		controls_hbox.add_child(btn_s)
-		
+	
+	var total_salarios := 0.0
+	for drv in Database.user_team.get("pilotos", []):
+		total_salarios += float(drv.get("salario", 0.0))
+		Database.register_financial_transaction("gastos_salarios", total_salarios)
+
 	# -------------------------------------------------------------
 	# NOVO: BOTÃO PARA PULAR O DIA DE TESTES IMEDIATAMENTE
 	# -------------------------------------------------------------
@@ -2569,18 +2585,12 @@ func _on_simulate_laps_pressed() -> void:
 	sp_card.add_child(sp_margin)
 	sp_vbox.add_child(sp_card) # Adiciona no layout principal
 
-# =============================================================
-# JANELA MODAL DE SELEÇÃO DE PATROCINADORES (TABELA DE CONTRATOS)
-# =============================================================
 func _open_sponsors_selection_modal() -> void:
 	_close_active_modal_window()
 	var dialog = Window.new()
-	dialog.title = "🤝 ACORDOS COMERCIAIS E PATROCÍNIOS DE TEMPORADA"
-	dialog.size = Vector2i(920, 600)
+	dialog.title = "🤝 CENTRAL DE NEGOCIAÇÕES E PATROCÍNIOS"
+	dialog.size = Vector2i(980, 650)
 	dialog.exclusive = true
-	
-	dialog.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
-	dialog.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
 	
 	var bg = ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2589,18 +2599,17 @@ func _open_sponsors_selection_modal() -> void:
 	
 	var margin = MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 25)
-	margin.add_theme_constant_override("margin_right", 25)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_bottom", 20)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 15)
+	margin.add_theme_constant_override("margin_bottom", 15)
 	
 	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 15)
+	vbox.add_theme_constant_override("separation", 12)
 	
-	# Título e Instrução
 	var l_title = Label.new()
-	l_title.text = "📋 SELECIONE ATÉ 3 PATROCINADORES OFICIAIS PARA A ESCUDERIA"
-	l_title.add_theme_font_size_override("font_size", 18)
+	l_title.text = "🏢 PATROCINADORES DISPONÍVEIS PARA O SEU NIVEL DE REPUTAÇÃO"
+	l_title.add_theme_font_size_override("font_size", 16)
 	l_title.add_theme_color_override("font_color", Color("#fbbf24"))
 	vbox.add_child(l_title)
 	
@@ -2611,95 +2620,89 @@ func _open_sponsors_selection_modal() -> void:
 	list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_vbox.add_theme_constant_override("separation", 10)
 	
-	# Renderiza a Tabela de Patrocinadores
+	var user_sponsors: Array = Database.user_team.get("patrocinadores", selected_sponsors)
+	
 	for sp in Database.available_sponsors:
 		var item_card = PanelContainer.new()
 		var st_i = StyleBoxFlat.new()
 		st_i.bg_color = Color("#1e293b")
 		st_i.set_corner_radius_all(6)
 		
-		# Verifica se o patrocinador já está selecionado
+		# Verifica se já está assinado
 		var is_selected = false
-		for selected in selected_sponsors:
-			if selected["id"] == sp["id"]:
+		for active_sp in user_sponsors:
+			if active_sp is Dictionary and active_sp.get("id") == sp["id"]:
 				is_selected = true
 				break
 				
 		if is_selected:
-			st_i.border_width_left = 4
-			st_i.border_color = Color("#22c55e") # Verde
-			
+			st_i.border_width_left = 5
+			st_i.border_color = Color("#22c55e") # Verde se assinado
+		else:
+			if sp["tipo"] == "Master":
+				st_i.border_width_left = 5
+				st_i.border_color = Color("#ef4444") # Vermelho Master
+			elif sp["tipo"] == "Principal":
+				st_i.border_width_left = 5
+				st_i.border_color = Color("#38bdf8") # Azul Principal
+			else:
+				st_i.border_width_left = 5
+				st_i.border_color = Color("#94a3b8") # Cinza Secundário
+				
 		item_card.add_theme_stylebox_override("panel", st_i)
 		
 		var im = MarginContainer.new()
-		im.add_theme_constant_override("margin_left", 15)
-		im.add_theme_constant_override("margin_right", 15)
-		im.add_theme_constant_override("margin_top", 12)
-		im.add_theme_constant_override("margin_bottom", 12)
+		im.add_theme_constant_override("margin_left", 12)
+		im.add_theme_constant_override("margin_right", 12)
+		im.add_theme_constant_override("margin_top", 10)
+		im.add_theme_constant_override("margin_bottom", 10)
 		
 		var ihbox = HBoxContainer.new()
-		ihbox.add_theme_constant_override("separation", 15)
+		ihbox.add_theme_constant_override("separation", 12)
 		
-		# Informações do Contrato
 		var info_vbox = VBoxContainer.new()
 		info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		
 		var l_sp_name = Label.new()
-		l_sp_name.text = "🏢 " + str(sp["nome"]) + " (" + str(sp["tipo"]) + ")"
-		l_sp_name.add_theme_font_size_override("font_size", 15)
+		l_sp_name.text = "🏢 %s [%s] — %s" % [str(sp["nome"]), str(sp["tipo"]).to_upper(), str(sp["categoria"])]
+		l_sp_name.add_theme_font_size_override("font_size", 14)
 		l_sp_name.add_theme_color_override("font_color", Color("#ffffff"))
 		info_vbox.add_child(l_sp_name)
 		
 		var l_sp_desc = Label.new()
-		l_sp_desc.text = str(sp["desc"])
-		l_sp_desc.add_theme_font_size_override("font_size", 12)
+		l_sp_desc.text = "%s | Meta por GP: %s" % [str(sp["desc"]), str(sp["meta_gp"])]
+		l_sp_desc.add_theme_font_size_override("font_size", 11)
 		l_sp_desc.add_theme_color_override("font_color", Color("#94a3b8"))
 		info_vbox.add_child(l_sp_desc)
 		
-		# Valor do Pagamento
+		# Exibição financeira detalhada
 		var l_pay = Label.new()
-		if sp["tipo"] == "Temporada":
-			l_pay.text = "💰 Paga: $%.1fM (Adiantado)" % sp["valor_temporada"]
-		elif sp["tipo"] == "Por Corrida":
-			l_pay.text = "🏁 Paga: $%.1fM / Corrida" % sp["valor_corrida"]
-		else:
-			l_pay.text = "🏆 Paga: $%.2fM / Ponto Conquistado" % sp["valor_ponto"]
-			
-		l_pay.add_theme_font_size_override("font_size", 14)
+		l_pay.text = "💰 Adiantado: $%.1fM  |  🏁 Por GP: $%.1fM  |  🏆 Por Ponto: $%.2fM" % [
+			sp["valor_temporada"], sp["valor_corrida"], sp["valor_ponto"]
+		]
+		l_pay.add_theme_font_size_override("font_size", 12)
 		l_pay.add_theme_color_override("font_color", Color("#10b981"))
 		info_vbox.add_child(l_pay)
 		
 		ihbox.add_child(info_vbox)
 		
-		# Botão de Ação (Assinar / Cancelar)
+		# Botão de Ação / Negociação
 		var btn_action = Button.new()
-		btn_action.custom_minimum_size = Vector2(140, 40)
+		btn_action.custom_minimum_size = Vector2(150, 36)
+		btn_action.add_theme_font_size_override("font_size", 12)
 		
 		if is_selected:
-			btn_action.text = "✓ ASSINADO"
-			var st_sel = StyleBoxFlat.new()
-			st_sel.bg_color = Color("#15803d")
-			btn_action.add_theme_stylebox_override("normal", st_sel)
+			btn_action.text = "✖ RESCINDIR"
+			btn_action.add_theme_color_override("font_color", Color("#ef4444"))
+			btn_action.pressed.connect(func():
+				_cancel_sponsor_contract(sp, dialog)
+			)
 		else:
-			btn_action.text = "✍️ ASSINAR"
+			btn_action.text = "🤝 NEGOCIAR"
+			btn_action.pressed.connect(func():
+				_open_sponsor_negotiation_dialog(sp, dialog)
+			)
 			
-		btn_action.pressed.connect(func():
-			if is_selected:
-				# Remove da lista
-				for i in range(selected_sponsors.size()):
-					if selected_sponsors[i]["id"] == sp["id"]:
-						selected_sponsors.remove_at(i)
-						break
-			else:
-				# Adiciona se ainda tiver vaga (limite de 3)
-				if selected_sponsors.size() < 3:
-					selected_sponsors.append(sp)
-			
-			_recalculate_budget()
-			dialog.queue_free()
-			_open_sponsors_selection_modal() # Atualiza a modal
-		)
-		
 		ihbox.add_child(btn_action)
 		im.add_child(ihbox)
 		item_card.add_child(im)
@@ -2708,21 +2711,119 @@ func _open_sponsors_selection_modal() -> void:
 	scroll.add_child(list_vbox)
 	vbox.add_child(scroll)
 	
-	# Botão Concluir
 	var btn_close = Button.new()
-	btn_close.text = "CONCLUIR SELEÇÃO"
-	btn_close.custom_minimum_size.y = 45
+	btn_close.text = "CONCLUIR E SALVAR SELEÇÃO"
+	btn_close.custom_minimum_size.y = 40
 	btn_close.pressed.connect(func():
 		dialog.queue_free()
-		_render_current_step()
+		atualizar_interface_criacao()
 	)
 	vbox.add_child(btn_close)
 	
 	margin.add_child(vbox)
 	dialog.add_child(margin)
 	add_child(dialog)
-	active_modal_window = dialog
 	dialog.popup_centered()
+
+# =============================================================
+# DIÁLOGO DE CONTRA-PROPOSTA E ASSINATURA
+# =============================================================
+func _open_sponsor_negotiation_dialog(sponsor: Dictionary, parent_modal: Window) -> void:
+	var neg_dialog = Window.new()
+	neg_dialog.title = "🤝 NEGOCIAÇÃO: " + str(sponsor["nome"])
+	neg_dialog.size = Vector2i(500, 380)
+	neg_dialog.exclusive = true
+	
+	var margin = MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 15)
+	margin.add_theme_constant_override("margin_right", 15)
+	margin.add_theme_constant_override("margin_top", 15)
+	margin.add_theme_constant_override("margin_bottom", 15)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	
+	var lbl_info = Label.new()
+	lbl_info.text = "Defina os termos do contrato de patrocínio:"
+	lbl_info.add_theme_font_size_override("font_size", 13)
+	vbox.add_child(lbl_info)
+	
+	# Seleção de Duração
+	var dur_hbox = HBoxContainer.new()
+	var lbl_dur = Label.new()
+	lbl_dur.text = "Duração do Contrato:"
+	lbl_dur.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dur_hbox.add_child(lbl_dur)
+	
+	var opt_years = OptionButton.new()
+	opt_years.add_item("1 Temporada", 1)
+	opt_years.add_item("2 Temporadas", 2)
+	opt_years.add_item("3 Temporadas", 3)
+	opt_years.select(sponsor.get("contrato_anos", 1) - 1)
+	dur_hbox.add_child(opt_years)
+	vbox.add_child(dur_hbox)
+	
+	# Resumo da Oferta
+	var lbl_summary = Label.new()
+	lbl_summary.text = "Adiantamento: $%.1fM\nReceita por GP: $%.1fM\nBônus p/ Ponto: $%.2fM\nMulta por Rescisão: $%.1fM" % [
+		sponsor["valor_temporada"], sponsor["valor_corrida"], sponsor["valor_ponto"], sponsor["multa_rescisao"]
+	]
+	lbl_summary.add_theme_font_size_override("font_size", 12)
+	lbl_summary.add_theme_color_override("font_color", Color("#38bdf8"))
+	vbox.add_child(lbl_summary)
+	
+	var btn_sign = Button.new()
+	btn_sign.text = "✍️ ASSINAR CONTRATO"
+	btn_sign.custom_minimum_size.y = 40
+	btn_sign.pressed.connect(func():
+		var chosen_years = opt_years.get_selected_id()
+		var sp_copy = sponsor.duplicate()
+		sp_copy["contrato_anos"] = chosen_years
+		sp_copy["anos_restantes"] = chosen_years
+		
+		# Adiciona o patrocinador na lista local da tela de criação (selected_sponsors)
+		var já_assinado = false
+		for sel in selected_sponsors:
+			if sel.get("id") == sp_copy.get("id"):
+				já_assinado = true
+				break
+				
+		if not já_assinado and selected_sponsors.size() < 3:
+			selected_sponsors.append(sp_copy)
+			print("✅ Patrocínio %s assinado por %d temporada(s)!" % [sp_copy["nome"], chosen_years])
+			
+		neg_dialog.queue_free()
+		parent_modal.queue_free()
+		_open_sponsors_selection_modal()
+		Database.register_financial_transaction("patrocinios_acumulados", valor_adiantado)
+	)
+	vbox.add_child(btn_sign)
+	
+	var btn_cancel = Button.new()
+	btn_cancel.text = "Cancelar"
+	btn_cancel.pressed.connect(func(): neg_dialog.queue_free())
+	vbox.add_child(btn_cancel)
+	
+	margin.add_child(vbox)
+	neg_dialog.add_child(margin)
+	add_child(neg_dialog)
+	neg_dialog.popup_centered()
+	
+# =============================================================
+# RESCISÃO DE CONTRATO COM MULTA
+# =============================================================
+func _cancel_sponsor_contract(sponsor: Dictionary, parent_modal: Window) -> void:
+	for i in range(selected_sponsors.size()):
+		var active_sp = selected_sponsors[i]
+		if active_sp is Dictionary and active_sp.get("id") == sponsor.get("id"):
+			selected_sponsors.remove_at(i)
+			print("🗑️ Patrocínio %s removido da seleção de pré-temporada." % sponsor.get("nome", "Patrocinador"))
+			break
+			
+	parent_modal.queue_free()
+	_recalculate_budget()
+	_open_sponsors_selection_modal()
 
 func _process(delta: float) -> void:
 	time_passed += delta
@@ -2907,7 +3008,7 @@ func _on_day_session_finished() -> void:
 		# Avança para o próximo dia
 		testing_day += 1
 		session_time_left = 14400.0 # Reseta para 4 horas
-		is_time_paused = true
+		is_time_paused = false
 		day_session_finish_handled = false
 		timing_refresh_elapsed = 0.0
 		_reset_test_grid_for_new_day()
