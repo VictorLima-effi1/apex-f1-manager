@@ -464,7 +464,6 @@ func _cancel_rd_upgrade(slot_index: int) -> void:
 		rd_slots[slot_index] = {}
 		print("🗑️ Melhoria de P&D no slot %d foi cancelada." % (slot_index + 1))
 		build_ui()
-		Database.register_financial_transaction("gastos_pd", - (Database.PLAYER_RD_COST / 1_000_000.0))
 # =================================================================
 # 4. MÓDULO DE PATROCÍNIOS
 # =================================================================
@@ -985,8 +984,10 @@ func _open_sponsors_market_modal() -> void:
 					
 					# Credita o valor adiantado no caixa do time
 					var current_cash = float(Database.user_team.get("orcamento", 0.0))
-					Database.user_team["orcamento"] = current_cash + float(sp.get("valor_temporada", 0.0))
+					var sponsor_advance := float(sp.get("valor_temporada", 0.0))
+					Database.user_team["orcamento"] = current_cash + sponsor_advance
 					Database.user_team["patrocinadores"] = current_sponsors
+					Database.register_financial_transaction("patrocinios_acumulados", sponsor_advance)
 					
 					dialog.queue_free()
 					build_ui()

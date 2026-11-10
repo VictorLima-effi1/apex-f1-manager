@@ -4,7 +4,7 @@ class_name TracksData
 static func get_initial_tracks() -> Array:
 	return [
 	{
-		"Nome": "Albert Park",
+		"Nome": "Melbourne",
 		"Pais": "Austrália",
 		"Voltas": 58,
 		"ComprimentoKM": 5.278,
@@ -13,7 +13,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 4,
 		"UltimoVencedorPiloto": "Lando Norris",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.5
+		"pit_loss_time": 22.5,
+		"imagem": "res://assets/tracks/melbourne.svg"
 	},
 	{
 		"Nome": "Shanghai",
@@ -25,7 +26,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Oscar Piastri",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 23.0
+		"pit_loss_time": 23.0,
+		"imagem": "res://assets/tracks/shanghai.svg"
 	},
 	{
 		"Nome": "Suzuka",
@@ -37,7 +39,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 1,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/suzuka.svg"
 	},
 	{
 		"Nome": "Sakhir",
@@ -49,7 +52,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 3,
 		"UltimoVencedorPiloto": "Oscar Piastri",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 23.0
+		"pit_loss_time": 23.0,
+		"imagem": "res://assets/tracks/bahrain.svg"
 	},
 	{
 		"Nome": "Jeddah",
@@ -61,7 +65,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 3,
 		"UltimoVencedorPiloto": "Oscar Piastri",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 21.0
+		"pit_loss_time": 21.0,
+		"imagem": "res://assets/tracks/jeddah.svg"
 	},
 	{
 		"Nome": "Miami",
@@ -73,7 +78,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 3,
 		"UltimoVencedorPiloto": "Oscar Piastri",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/miami.svg"
 	},
 	{
 		"Nome": "Imola",
@@ -85,7 +91,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 1,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/imola.svg"
 	},
 	{
 		"Nome": "Monaco",
@@ -97,7 +104,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 1,
 		"UltimoVencedorPiloto": "Lando Norris",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 19.0
+		"pit_loss_time": 19.0,
+		"imagem": "res://assets/tracks/monaco.svg"
 	},
 	{
 		"Nome": "Catalunya",
@@ -109,7 +117,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Oscar Piastri",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/catalunya.svg"
 	},
 	{
 		"Nome": "Gilles Villeneuve",
@@ -121,7 +130,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 3,
 		"UltimoVencedorPiloto": "George Russell",
 		"UltimoVencedorEquipe": "Mercedes",
-		"pit_loss_time": 19.0
+		"pit_loss_time": 19.0,
+		"imagem": "res://assets/tracks/montreal.svg"
 	},
 	{
 		"Nome": "Red Bull Ring",
@@ -133,7 +143,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 3,
 		"UltimoVencedorPiloto": "Lando Norris",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 20.0
+		"pit_loss_time": 20.0,
+		"imagem": "res://assets/tracks/red_bull_ring.svg"
 	},
 	{
 		"Nome": "Silverstone",
@@ -145,7 +156,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Lando Norris",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 20.0
+		"pit_loss_time": 20.0,
+		"imagem": "res://assets/tracks/silverstone.svg"
 	},
 	{
 		"Nome": "Hungaroring",
@@ -157,7 +169,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Lando Norris",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/hungaroring.svg"
 	},
 	{
 		"Nome": "Spa-Francorchamps",
@@ -169,7 +182,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Oscar Piastri",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 20.0
+		"pit_loss_time": 20.0,
+		"imagem": "res://assets/tracks/spa_francorchamps.svg"
 	},
 	{
 		"Nome": "Zandvoort",
@@ -181,7 +195,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Oscar Piastri",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/zandvoort.svg"
 	},
 	{
 		"Nome": "Monza",
@@ -193,7 +208,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 25.0
+		"pit_loss_time": 25.0,
+		"imagem": "res://assets/tracks/monza.svg"
 	},
 	{
 		"Nome": "Baku",
@@ -205,7 +221,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 19.0
+		"pit_loss_time": 19.0,
+		"imagem": "res://assets/tracks/baku.svg"
 	},
 	{
 		"Nome": "Marina Bay",
@@ -217,7 +234,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 3,
 		"UltimoVencedorPiloto": "George Russell",
 		"UltimoVencedorEquipe": "Mercedes",
-		"pit_loss_time": 27.0
+		"pit_loss_time": 27.0,
+		"imagem": "res://assets/tracks/marina_bay.svg"
 	},
 	{
 		"Nome": "COTA",
@@ -229,7 +247,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 21.0
+		"pit_loss_time": 21.0,
+		"imagem": "res://assets/tracks/austin.svg"
 	},
 	{
 		"Nome": "Hermanos Rodríguez",
@@ -241,7 +260,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 3,
 		"UltimoVencedorPiloto": "Lando Norris",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 23.0
+		"pit_loss_time": 23.0,
+		"imagem": "res://assets/tracks/mexico.svg"
 	},
 	{
 		"Nome": "Interlagos",
@@ -253,7 +273,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Lando Norris",
 		"UltimoVencedorEquipe": "McLaren",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/interlagos.svg"
 	},
 	{
 		"Nome": "Las Vegas",
@@ -265,7 +286,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 26.0
+		"pit_loss_time": 26.0,
+		"imagem": "res://assets/tracks/las_vegas.svg"
 	},
 	{
 		"Nome": "Lusail",
@@ -277,7 +299,8 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 1,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 22.0
+		"pit_loss_time": 22.0,
+		"imagem": "res://assets/tracks/lusail.svg"
 	},
 	{
 		"Nome": "Yas Marina",
@@ -289,6 +312,7 @@ static func get_initial_tracks() -> Array:
 		"ZonasDRS": 2,
 		"UltimoVencedorPiloto": "Max Verstappen",
 		"UltimoVencedorEquipe": "Red Bull Racing",
-		"pit_loss_time": 21.0
+		"pit_loss_time": 21.0,
+		"imagem": "res://assets/tracks/yas_marina.svg"
 	}
 ]

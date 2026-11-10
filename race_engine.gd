@@ -79,7 +79,7 @@ func get_water_lap_time_multiplier() -> float:
 	return lerpf(1.0, 1.30, clampf(water_level, 0.0, 100.0) / 100.0)
 
 func get_grip_lap_time_multiplier() -> float:
-	return lerpf(1.10, 0.90, clampf(track_grip, 0.0, 100.0) / 100.0)
+	return lerpf(1.02, 0.98, clampf(track_grip, 0.0, 100.0) / 100.0)
 
 func get_track_condition_lap_time_multiplier() -> float:
 	return get_water_lap_time_multiplier() * get_grip_lap_time_multiplier()
@@ -466,7 +466,7 @@ func process_lap() -> Dictionary:
 
 		var compound = str(d.get("tire_compound", "Medium"))
 		var tire_durability_before_lap := clampf(float(d.get("tire_wear", 100.0)), 0.0, 100.0)
-		var wear_rate = 3.5 if compound in ["Soft", "Macio"] else (2.2 if compound in ["Medium", "Médio", "Inter", "Wet"] else 1.5)
+		var wear_rate = 3.3 if compound in ["Soft", "Macio"] else (2.0 if compound in ["Medium", "Médio"] else (1.8 if compound in ["Inter", "Wet"] else 1.2))
 		if safety_car_status in ["SC", "VSC"]:
 			wear_rate *= 0.35
 		elif safety_car_status == "YELLOW":
@@ -787,6 +787,7 @@ func process_quali_tick(delta: float) -> void:
 			d["timer_state"] = float(d.get("timer_state", 0.0)) - delta
 			if float(d["timer_state"]) <= 0.0:
 				d["quali_state"] = "Em pista"
+				d["tire_compound"] = _get_ideal_compound_for_water(water_level)
 				d["is_in_pit"] = false
 				d["progress"] = 0.0
 				d["quali_retry_allowed"] = false

@@ -1067,7 +1067,7 @@ func _get_compound_color(compound: String) -> Color:
 		"MEDIUM", "M": return Color("#facc15")
 		"HARD", "H": return Color("#ffffff")
 		"INTER", "I": return Color("#22c55e")
-		"WET", "W": return Color("#38bdf8")
+		"WET", "W": return Color("0e63c3ff")
 		_: return Color("#94a3b8")
 
 func _finish_race_and_advance() -> void:

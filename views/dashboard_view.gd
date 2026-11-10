@@ -157,7 +157,14 @@ func build_ui() -> void:
 
 	var final_panel_title := "Finanças" if str(Database.game_mode) == "manager" else Database.tr_text("PANEL_FAST_SIM")
 	var final_panel := _create_resizable_window("fast_sim_panel", final_panel_title, canvas)
-	if str(Database.game_mode) != "manager":
+	if str(Database.game_mode).to_lower() == "manager":
+		var finances_content := final_panel.get_content_node()
+		_build_dashboard_finances(finances_content)
+		final_panel.visibility_changed.connect(func():
+			if final_panel.is_visible_in_tree():
+				_build_dashboard_finances(finances_content)
+		)
+	else:
 		_build_fast_sim_content(final_panel.get_content_node())
 	_apply_fixed_transform(final_panel, Vector2(col4_x, margin_y + col4_h1 + col4_h2 + (gap_y * 2.0)), Vector2(col_w, col4_h3))
 
@@ -830,50 +837,90 @@ func _build_calendar_content(parent: Control, current_track_idx: int) -> void:
 
 func _build_track_info_content(parent: Control, track: Dictionary) -> void:
 	if parent == null: return
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("separation", 6)
 	
+	# 1. Container principal VERTICAL para empilhar textos e imagem
+	var vbox_main = VBoxContainer.new()
+	vbox_main.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox_main.add_theme_constant_override("separation", 6)
+	vbox_main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox_main.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	# --- PARTE SUPERIOR: TEXTOS E DETALHES DA PISTA ---
+	var vbox_details = VBoxContainer.new()
+	vbox_details.add_theme_constant_override("separation", 4)
+
 	var track_lbl = Label.new()
 	track_lbl.text = "📍 " + str(track.get("Nome", "")) + " (" + str(track.get("Voltas", 58)) + " Voltas)"
 	track_lbl.add_theme_font_size_override("font_size", 13)
 	track_lbl.add_theme_color_override("font_color", Color("#ffffff"))
-	vbox.add_child(track_lbl)
-	
+	vbox_details.add_child(track_lbl)
+
 	var chance_rain = int(float(track.get("ChanceChuva", 0.20)) * 100)
 	var rain_lbl = Label.new()
 	rain_lbl.text = "🌧️ Probabilidade de Chuva: " + str(chance_rain) + "%"
 	rain_lbl.add_theme_font_size_override("font_size", 12)
 	rain_lbl.add_theme_color_override("font_color", Color("#38bdf8") if chance_rain > 30 else Color("#94a3b8"))
-	vbox.add_child(rain_lbl)
-	
+	vbox_details.add_child(rain_lbl)
+
 	var wear_lbl = Label.new()
 	wear_lbl.text = "🏎️ Desgaste de Pneus estimado: Média / Alta"
 	wear_lbl.add_theme_font_size_override("font_size", 12)
 	wear_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
-	vbox.add_child(wear_lbl)
-	
+	vbox_details.add_child(wear_lbl)
+
 	var zones_count = str(track.get("ZonasDRS", track.get("drs_zones", 2)))
 	var ultrapassagem_lbl = Label.new()
 	ultrapassagem_lbl.text = "⚡ Zonas de Ultrapassagem: " + zones_count + " Zonas"
 	ultrapassagem_lbl.add_theme_font_size_override("font_size", 12)
 	ultrapassagem_lbl.add_theme_color_override("font_color", Color("#22c55e"))
-	vbox.add_child(ultrapassagem_lbl)
-	
+	vbox_details.add_child(ultrapassagem_lbl)
+
 	var last_winner_driver = str(track.get("UltimoVencedorPiloto", track.get("last_winner_driver", "Nenhum")))
 	var last_winner_team = str(track.get("UltimoVencedorEquipe", track.get("last_winner_team", "")))
 	var winner_text = last_winner_driver
 	if last_winner_team != "":
 		winner_text += " (" + last_winner_team + ")"
-		
+
 	var winner_lbl = Label.new()
 	winner_lbl.text = "🏆 Última Vitória: " + winner_text
 	winner_lbl.add_theme_font_size_override("font_size", 12)
 	winner_lbl.add_theme_color_override("font_color", Color("#38bdf8"))
-	vbox.add_child(winner_lbl)
-	
-	parent.add_child(vbox)
+	vbox_details.add_child(winner_lbl)
 
+	vbox_main.add_child(vbox_details)
+
+	# --- PARTE INFERIOR: IMAGEM DA PISTA COM MARGEM (OPÇÃO B) ---
+	# Criamos o MarginContainer para envolver a imagem e dar o respiro visual
+	var margin_img = MarginContainer.new()
+	margin_img.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin_img.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# Espaçamento interno em pixels (Ajuste esses números se quiser mais ou menos respiro)
+	margin_img.add_theme_constant_override("margin_left", 20)
+	margin_img.add_theme_constant_override("margin_right", 20)
+	margin_img.add_theme_constant_override("margin_top", 12)
+	margin_img.add_theme_constant_override("margin_bottom", 12)
+
+	# Nó da Imagem do Traçado
+	var track_texture = TextureRect.new()
+	track_texture.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	track_texture.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	track_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	track_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+
+	# Carrega o arquivo da imagem
+	var img_path: String = str(track.get("imagem", track.get("image", "")))
+	if img_path != "" and ResourceLoader.exists(img_path):
+		track_texture.texture = load(img_path)
+
+	# Coloca a imagem dentro do container de margem
+	margin_img.add_child(track_texture)
+	
+	# Coloca o container com a imagem dentro do layout principal
+	vbox_main.add_child(margin_img)
+
+	parent.add_child(vbox_main)
+	
 func _build_tech_power_content(parent: Control) -> void:
 	if parent == null: return
 	for child in parent.get_children(): child.queue_free()
@@ -1158,17 +1205,6 @@ func _build_fast_sim_content(parent: Control) -> void:
 
 	parent.add_child(vbox)
 
-	# EXIBE A BOX DE FINANÇAS APENAS SE O MODO FOR MANAGER
-	if str(Database.game_mode).to_lower() == "manager":
-		var team_view_script = load("res://views/team_view.gd")
-		var temp_team_view = team_view_script.new()
-		
-		# Instancia o painel de finanças sem o botão de injeção de capital
-		var finances_panel: PanelContainer = temp_team_view._build_finances_panel(false)
-		finances_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		finances_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		
-		parent.add_child(finances_panel)
 # --- MODAL ESTILIZADO E LÓGICA DE SIMULAÇÃO ---
 
 func _confirm_and_run_fast_simulation(by_season: bool, amount: int) -> void:
@@ -1285,25 +1321,15 @@ func _run_fast_simulation(by_season: bool, amount: int) -> void:
 			while Database.current_gp <= Database.tracks.size():
 				Database.simulate_current_gp_fast()
 				await get_tree().process_frame
-			await _show_season_summary_and_wait()
+			Database.end_season_and_advance_year()
 	else:
 		for g in range(amount):
 			Database.simulate_current_gp_fast()
 			if Database.current_gp > Database.tracks.size():
-				await _show_season_summary_and_wait()
+				Database.end_season_and_advance_year()
 			await get_tree().process_frame
 
 	build_ui()
-
-func _show_season_summary_and_wait() -> void:
-	var summary_view = preload("res://views/season_summary_view.gd").new()
-	var continued := false
-	summary_view.open_summary(self, Database.get_season_summary(), func():
-		Database.end_season_and_advance_year()
-		continued = true
-	)
-	while not continued:
-		await get_tree().process_frame
 
 # --- UTILITÁRIOS DA UI ---
 
@@ -1628,3 +1654,45 @@ func _build_drivers_evolution_content(parent: Control) -> void:
 
 	scroll.add_child(chart)
 	parent.add_child(scroll)
+
+# Função dedicada para desenhar as finanças diretamente no Dashboard
+func _build_dashboard_finances(parent: Control) -> void:
+	if parent == null: return
+
+	for c in parent.get_children():
+		c.queue_free()
+
+	var vbox = VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 10)
+
+	var fin_data: Dictionary = Database.get_user_finances_history()
+	var total_income := maxf(0.0, float(fin_data.get("patrocinios_acumulados", 0.0)))
+	var total_expenses := 0.0
+	for category in ["gastos_pd", "gastos_dnf", "gastos_salarios", "multas_patrocinio"]:
+		total_expenses += maxf(0.0, float(fin_data.get(category, 0.0)))
+
+	var add_entry = func(label_txt: String, val_txt: String, color: Color):
+		var hbox = HBoxContainer.new()
+		var lbl = Label.new()
+		lbl.text = label_txt
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.add_theme_color_override("font_color", Color("#cbd5e1"))
+		hbox.add_child(lbl)
+
+		var val = Label.new()
+		val.text = val_txt
+		val.add_theme_font_size_override("font_size", 13)
+		val.add_theme_color_override("font_color", color)
+		hbox.add_child(val)
+		vbox.add_child(hbox)
+
+	add_entry.call("GANHOS NA TEMPORADA", "+$%.1fM" % total_income, Color("#34d399"))
+	add_entry.call("GASTOS NA TEMPORADA", "-$%.1fM" % total_expenses, Color("#ef4444"))
+
+	var current_cash = float(Database.user_team.get("orcamento", Database.user_team.get("budget", 0.0)))
+	add_entry.call("CAIXA RESTANTE", "$%.1fM" % current_cash, Color("#38bdf8"))
+
+	parent.add_child(vbox)

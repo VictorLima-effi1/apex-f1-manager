@@ -2009,7 +2009,7 @@ func _build_winter_testing_step() -> void:
 	var total_salarios := 0.0
 	for drv in Database.user_team.get("pilotos", []):
 		total_salarios += float(drv.get("salario", 0.0))
-		Database.register_financial_transaction("gastos_salarios", total_salarios)
+	Database.register_financial_transaction("gastos_salarios", total_salarios)
 
 	# -------------------------------------------------------------
 	# NOVO: BOTÃO PARA PULAR O DIA DE TESTES IMEDIATAMENTE
@@ -2176,7 +2176,7 @@ func _init_test_grid() -> void:
 		if i < driver_configs.size():
 			driver_configs[i]["on_track"] = false
 			
-		var initial_prep_time = randf_range(300.0, 720.0)
+		var initial_prep_time = randf_range(300.0, 1200.0)
 		
 		test_grid_data.append({
 			"nome": d.get("Nome", d.get("nome", "Piloto %d" % (i+1))),
@@ -2782,21 +2782,26 @@ func _open_sponsor_negotiation_dialog(sponsor: Dictionary, parent_modal: Window)
 		sp_copy["contrato_anos"] = chosen_years
 		sp_copy["anos_restantes"] = chosen_years
 		
-		# Adiciona o patrocinador na lista local da tela de criação (selected_sponsors)
-		var já_assinado = false
+		var ja_assinado = false
 		for sel in selected_sponsors:
 			if sel.get("id") == sp_copy.get("id"):
-				já_assinado = true
+				ja_assinado = true
 				break
 				
-		if not já_assinado and selected_sponsors.size() < 3:
+		if not ja_assinado and selected_sponsors.size() < 3:
 			selected_sponsors.append(sp_copy)
-			print("✅ Patrocínio %s assinado por %d temporada(s)!" % [sp_copy["nome"], chosen_years])
+			
+			# Extrai o valor adiantado diretamente do dicionário do patrocinador
+			var valor_adiantado: float = float(sp_copy.get("valor_temporada", 0.0))
+			
+			# Registra o ganho no histórico financeiro da equipe no banco de dados
+			Database.register_financial_transaction("patrocinios_acumulados", valor_adiantado)
+			
+			print("✅ Patrocínio %s assinado por %d temporada(s)! Adiantamento: $%.1fM" % [sp_copy["nome"], chosen_years, valor_adiantado])
 			
 		neg_dialog.queue_free()
 		parent_modal.queue_free()
 		_open_sponsors_selection_modal()
-		Database.register_financial_transaction("patrocinios_acumulados", valor_adiantado)
 	)
 	vbox.add_child(btn_sign)
 	
@@ -2917,8 +2922,8 @@ func _simulate_automatic_lap_tick(delta_simulated: float) -> void:
 		elif current_status == "Volta de Entrada":
 			item["lap_progress"] = float(item.get("lap_progress", 0.0)) + delta_simulated
 			if float(item["lap_progress"]) >= float(item.get("current_target_lap", 100.0)):
-				# Tempo de parada nos boxes entre 5 e 12 minutos (300s a 720s)
-				var stop_duration = randf_range(300.0, 720.0)
+				# Tempo de parada nos boxes entre 5 e 20 minutos (300s a 1200s)
+				var stop_duration = randf_range(300.0, 1200.0)
 				item["status"] = "Nos Boxes"
 				item["pit_time_left"] = stop_duration
 				item["pit_max_time"] = stop_duration
@@ -2950,8 +2955,8 @@ func _simulate_automatic_lap_tick(delta_simulated: float) -> void:
 							
 					total_player_laps_completed += 1
 					laps_since_last_upgrade += 1
-					if laps_since_last_upgrade >= 10:
-						laps_since_last_upgrade -= 10
+					if laps_since_last_upgrade >= 15:
+						laps_since_last_upgrade -= 15
 						_apply_random_testing_upgrade(team_name)
 				else:
 					if randf() < 0.15:
@@ -3008,18 +3013,16 @@ func _on_day_session_finished() -> void:
 		# Avança para o próximo dia
 		testing_day += 1
 		session_time_left = 14400.0 # Reseta para 4 horas
-		is_time_paused = false
+		# 1ª MUDANÇA: Mude para 'true' para o novo dia começar pausado (melhor para o jogador)
+		is_time_paused = true 
 		day_session_finish_handled = false
 		timing_refresh_elapsed = 0.0
 		_reset_test_grid_for_new_day()
+		_close_active_modal_window()
+		# Isso garante que a UI velha seja destruída (queue_free) antes da nova ser criada!
+		_render_current_step() 
 		
-		var dialog = AcceptDialog.new()
-		dialog.title = "🏁 Fim do Dia %d" % (testing_day - 1)
-		dialog.dialog_text = "Dia %d encerrado! Prepare seus carros para o Dia %d de testes." % [(testing_day - 1), testing_day]
-		add_child(dialog)
-		active_modal_window = dialog
-		dialog.popup_centered()
-		_build_winter_testing_step()
+		_update_timer_label_display()
 	else:
 		# Chegou ao Fim do 3º Dia -> EXIBE O RELATÓRIO DE EVOLUÇÃO
 		_open_testing_results_modal()

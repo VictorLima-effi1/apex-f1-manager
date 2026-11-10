@@ -719,6 +719,63 @@ func record_completed_race(results: Array, track_name: String = "") -> void:
 	})
 	race_finished = true
 
+# =============================================================
+# VARIÁVEIS DE CONTROLE DE SIMULAÇÃO EM LOTE
+# =============================================================
+var is_batch_simulating: bool = false
+var remaining_seasons_to_simulate: int = 0
+
+# =============================================================
+# SIMULAÇÃO EM LOTE DE TEMPORADAS (SEM RECURSÃO / SEM STACK OVERFLOW)
+# =============================================================
+
+func run_season_batch_simulation(seasons_count: int) -> void:
+	if seasons_count <= 0:
+		return
+		
+	is_batch_simulating = true
+	remaining_seasons_to_simulate = seasons_count
+	
+	# Laço iterativo seguro que roda sem estourar a pilha de memória (Stack Overflow)
+	while remaining_seasons_to_simulate > 0 and is_batch_simulating:
+		remaining_seasons_to_simulate -= 1
+		
+		# 1. Simula todos os GPs da temporada atual até o fim do calendário
+		while current_gp <= tracks.size():
+			simulate_current_gp_fast()
+			
+		# 2. Processa os fechamentos financeiros e contratos de fim de ano
+		var standings_array: Array = teams if "teams" in self else []
+		process_end_of_season_finances(standings_array)
+		
+		# 3. Se ainda restam temporadas a serem simuladas no lote, reseta o ano para a corrida 1
+		if remaining_seasons_to_simulate > 0:
+			current_gp = 1
+			current_year += 1
+			race_finished = false
+			print("⏩ Avançando para a temporada %d da simulação em lote..." % current_year)
+	
+	# Finalizou o lote inteiro de temporadas
+	is_batch_simulating = false
+	print("🏁 Simulação em lote concluída com sucesso! Ano atual: %d" % current_year)
+	
+	# Atualiza a interface do jogo para o ano atual
+	if current_view == "dashboard":
+		var main_tree = get_tree()
+		if main_tree and main_tree.current_scene:
+			if main_tree.current_scene.has_method("build_ui"):
+				main_tree.current_scene.call("build_ui")
+
+# 3. Função para exibir aviso/resumo quando o lote terminar
+func _show_batch_simulation_completed() -> void:
+	print("🏁 Simulação em lote concluída! Ano atual: %d" % current_year)
+	# Se existir a função de exibir modal/resumo no seu projeto, chame-a aqui:
+	if has_method("open_season_summary_dialog"):
+		call("open_season_summary_dialog")
+
+# =============================================================
+# SIMULAÇÃO RÁPIDA DE UM ÚNICO GP (CÓDIGO ORIGINAL MANTIDO)
+# =============================================================
 func simulate_current_gp_fast() -> void:
 	ensure_full_grid()
 	if current_gp > tracks.size():
@@ -955,6 +1012,10 @@ func log_transfer_event(detail: String, type_str: String = "Transferência", dri
 	add_news("[%d - GP %d] %s" % [current_year, current_gp, detail])
 
 func get_season_summary() -> Dictionary:
+	# Se estiver em simulação rápida em lote, não abre a interface e retorna um Dicionário vazio
+	if is_batch_simulating:
+		return {}
+
 	var season_drivers := get_season_drivers().duplicate(true)
 	season_drivers.sort_custom(func(a, b):
 		var points_a := int(a.get("Pontos", 0))
@@ -1011,7 +1072,7 @@ func get_season_summary() -> Dictionary:
 		for driver in season_drivers:
 			if str(driver.get("Equipe", "")).strip_edges().to_lower() == manager_team.strip_edges().to_lower():
 				manager_drivers.append(driver)
-
+	
 	var wins_leader: Dictionary = {}
 	var dnfs_leader: Dictionary = {}
 	var positions_leader: Dictionary = {}
@@ -1159,9 +1220,9 @@ func _process_driver_evolution() -> void:
 		
 		var retirement_chance: float = 0.02
 		if age > 30:
-			retirement_chance += (age - 30) * 0.05
+			retirement_chance += (age - 31) * 0.05
 			
-		if team_name == "Free Agent" and age >= 34:
+		if team_name == "Free Agent" and age >= 35:
 			retirement_chance += 0.20
 			
 		if (randf() < retirement_chance and age >= 30) or age >= 45:
@@ -2035,8 +2096,10 @@ func end_preseason() -> void:
 
 # Retorna ou inicializa a estrutura de finanças da temporada da equipe do jogador
 func get_user_finances_history() -> Dictionary:
-	if not user_team.has("financas_detalhadas"):
+	var finances: Dictionary = user_team.get("financas_detalhadas", {})
+	if int(finances.get("ano", -1)) != current_year:
 		user_team["financas_detalhadas"] = {
+			"ano": current_year,
 			"patrocinios_acumulados": 0.0,
 			"gastos_pd": 0.0,
 			"gastos_dnf": 0.0,
