@@ -3,6 +3,8 @@ extends Control
 var engine: RaceEngine
 var player_race_strategies: Dictionary = {}
 var manager_panel_container: VBoxContainer
+var manager_controls_race_session: bool = false
+var manager_controls_pre_race_session: bool = false
 
 @onready var top_title: Label
 @onready var weather_lbl: Label
@@ -291,6 +293,8 @@ func _build_manager_qualifying_controls(parent_container: Control) -> void:
 	
 	for c in parent_container.get_children():
 		c.queue_free()
+	manager_controls_race_session = engine != null and engine.is_quali_done()
+	manager_controls_pre_race_session = manager_controls_race_session and engine.current_lap == 0 and not engine.is_race_running
 		
 	var user_drivers = _get_user_drivers()
 	if user_drivers.is_empty():
@@ -377,6 +381,7 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	cv.add_child(position_label)
 
 	var is_race_session := engine != null and engine.is_quali_done()
+	var is_pre_race_session := is_race_session and engine.current_lap == 0 and not engine.is_race_running
 	
 	var ch = HBoxContainer.new()
 	ch.add_theme_constant_override("separation", 8)
@@ -391,14 +396,20 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	
 	var tire_options := ["Soft", "Medium", "Hard", "Inter", "Wet"]
 	var current_tire := str(driver_data.get("tire_compound", ""))
-	if is_race_session:
-		current_tire = str(driver_data.get("pit_requested_tire", driver_data.get("planned_pit_tire", current_tire)))
+	if is_pre_race_session:
+		current_tire = str(driver_data.get("tire_compound", current_tire))
+	elif is_race_session:
+		current_tire = str(driver_data.get("pit_requested_tire", ""))
+		if current_tire.is_empty():
+			current_tire = str(driver_data.get("planned_pit_tire", driver_data.get("tire_compound", "")))
 	var current_tire_index := tire_options.find(current_tire)
 	if current_tire_index < 0:
 		current_tire_index = 3 if engine != null and engine.water_level > 10.0 else 0
 	opt_tire.select(current_tire_index)
 	opt_tire.item_selected.connect(func(selected_index: int):
 		if selected_index < tire_options.size():
+			if is_pre_race_session:
+				return
 			if is_race_session:
 				driver_data["planned_pit_tire"] = tire_options[selected_index]
 			else:
@@ -414,6 +425,8 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	var current_style := str(driver_data.get("estilo", "Normal"))
 	opt_pace.select(0 if current_style == "Conservador" else (2 if current_style in ["Agressivo", "Ataque Máximo"] else 1))
 	opt_pace.item_selected.connect(func(selected_index: int):
+		if is_pre_race_session:
+			return
 		var paces := ["Conservador", "Normal", "Agressivo"]
 		if selected_index < paces.size():
 			driver_data["estilo"] = paces[selected_index]
@@ -426,8 +439,12 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	var pit_requested := bool(driver_data.get("pit_requested", false))
 	var eliminated := str(driver_data.get("QualiStatus", "")).begins_with("ELIMINADO")
 	if is_race_session:
-		btn_action.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
-		btn_action.disabled = not is_on_track or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
+		if is_pre_race_session:
+			btn_action.text = "✅ CONFIRMAR"
+			btn_action.disabled = false
+		else:
+			btn_action.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
+			btn_action.disabled = not is_on_track or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
 	else:
 		btn_action.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
 		var waiting_for_quali_release := not is_on_track and (
@@ -465,18 +482,19 @@ func _on_manager_quali_action_pressed(driver_idx: int, tire_sel_idx: int, pace_s
 	var chosen_pace = paces[pace_sel_idx] if pace_sel_idx < paces.size() else "Normal"
 	
 	if engine != null and engine.is_quali_done():
-		var used_compounds: Array = target_driver.get("used_compounds", [])
-		if used_compounds.size() < 2 and used_compounds.has(chosen_tire):
-			var legal_compound := engine._get_ideal_compound_for_water(engine.water_level)
-			if used_compounds.has(legal_compound):
-				for candidate in tires:
-					if not used_compounds.has(candidate):
-						legal_compound = candidate
-						break
-			chosen_tire = legal_compound
+		if engine.current_lap == 0 and not engine.is_race_running:
+			target_driver["tire_compound"] = chosen_tire
+			target_driver["used_compounds"] = [chosen_tire]
+			target_driver["tire_wear"] = 100.0
+			target_driver["stint_lap"] = 0
+			target_driver["planned_pit_tire"] = ""
+			target_driver["estilo"] = chosen_pace
+			_update_ui()
+			return
 		if engine.request_manager_pit_stop(target_name, chosen_tire, chosen_pace):
-			simulation_running = true
-			_update_simulation_button()
+			_update_manager_quali_ui_state()
+		else:
+			_update_ui()
 	elif engine != null and engine.active_quali_drivers != null:
 		for d in engine.active_quali_drivers:
 			var d_n = str(d.get("Nome", d.get("nome", "")))
@@ -575,9 +593,27 @@ func _update_manager_quali_ui_state() -> void:
 		var btn = find_child("BtnAction_%d" % i, true, false)
 		var lbl = find_child("LblStatus_%d" % i, true, false)
 		var is_on_track = ("Pista" in st or "Em pista" in st or "Hot Lap" in st or "Entrada" in st)
+		var driver: Dictionary = user_drivers[i]
 		
 		if is_instance_valid(btn):
-			btn.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
+			if engine != null and engine.is_quali_done():
+				var pre_race := engine.current_lap == 0 and not engine.is_race_running
+				var pit_requested := bool(driver.get("pit_requested", false))
+				if pre_race:
+					btn.text = "✅ CONFIRMAR"
+					btn.disabled = false
+				else:
+					btn.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
+					btn.disabled = not is_on_track or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
+			else:
+				btn.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
+				var eliminated := str(driver.get("QualiStatus", "")).begins_with("ELIMINADO")
+				var waiting_for_quali_release := not is_on_track and engine != null and (
+					engine.quali_checker_flag
+					or not bool(driver.get("quali_retry_allowed", true))
+					or float(driver.get("timer_state", 0.0)) > 0.0
+				)
+				btn.disabled = eliminated or waiting_for_quali_release
 		if is_instance_valid(lbl):
 			lbl.text = "Status: " + st
 			lbl.add_theme_color_override("font_color", Color("#34d399") if is_on_track else Color("#f87171"))
@@ -707,6 +743,8 @@ func _on_btn_start_pressed() -> void:
 		race_lap_elapsed = 0.0
 
 	simulation_running = not simulation_running
+	if simulation_running and engine != null and engine.is_quali_done():
+		engine.is_race_running = true
 	_update_simulation_button()
 
 func _update_simulation_button() -> void:
@@ -821,7 +859,13 @@ func _update_ui() -> void:
 		is_mgr = is_mgr or bool(Database.is_manager_mode)
 
 	if is_mgr and is_instance_valid(manager_panel_container):
-		_build_manager_qualifying_controls(manager_panel_container)
+		var race_session := engine.is_quali_done()
+		var pre_race_session := race_session and engine.current_lap == 0 and not engine.is_race_running
+		if manager_panel_container.get_child_count() == 0 \
+		or manager_controls_race_session != race_session \
+		or manager_controls_pre_race_session != pre_race_session:
+			_build_manager_qualifying_controls(manager_panel_container)
+		_update_manager_quali_ui_state()
 
 func _update_safety_banner() -> void:
 	if not is_instance_valid(banner_container) or not is_instance_valid(banner_label) or engine == null:
@@ -911,7 +955,7 @@ func _render_quali_grid() -> void:
 	var active_sorted: Array = current_actives.duplicate()
 	var elimination_zone_names: Dictionary = {}
 	if engine.quali_phase in ["Q1", "Q2"]:
-		for i in range(maxi(0, active_sorted.size() - 6), active_sorted.size()):
+		for i in range(maxi(0, active_sorted.size() - 7), active_sorted.size()):
 			elimination_zone_names[str(active_sorted[i].get("Nome", ""))] = true
 
 	for d in list:
@@ -1097,6 +1141,13 @@ func _finish_race_and_advance() -> void:
 
 func _continue_to_next_season() -> void:
 	Database.active_engine = null
+	if Database.game_mode == "manager" and Database.current_session == "manager_offseason":
+		Database.current_view = "preseason"
+		var scene_error := get_tree().change_scene_to_file("res://views/pre_season_view.tscn")
+		if scene_error != OK:
+			push_error("Não foi possível abrir a criação da equipe para a nova temporada. Erro: %d" % scene_error)
+		return
+
 	Database.current_view = "dashboard"
 	var main_scene := get_tree().current_scene
 	if is_instance_valid(main_scene) and main_scene.has_method("switch_view"):
@@ -1146,6 +1197,8 @@ func _process(delta: float) -> void:
 			if engine.is_quali_done():
 				race_lap_elapsed = 0.0
 				race_lap_duration = engine._get_base_track_lap_time()
+				simulation_running = false
+				refresh_ui_immediately = true
 		else:
 			engine.race_elapsed_time += 1.0
 			race_lap_elapsed += 1.0

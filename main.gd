@@ -197,6 +197,12 @@ func update_sidebar_active_tab(active_view: String) -> void:
 			btn.add_theme_color_override("font_color", Color("#94a3b8"))
 
 func switch_view(view_name: String) -> void:
+	if view_name == "dashboard" and Database.game_mode == "manager" \
+	and Database.has_completed_season and Database.current_session == "manager_offseason":
+		Database.current_view = "preseason"
+		call_deferred("_open_manager_offseason")
+		return
+
 	if not views.has(view_name):
 		push_error("Tela desconhecida: %s" % view_name)
 		return
@@ -240,6 +246,11 @@ func switch_view(view_name: String) -> void:
 			}))
 			fa.close()
 	# #endregion
+
+func _open_manager_offseason() -> void:
+	var scene_error := get_tree().change_scene_to_file("res://views/pre_season_view.tscn")
+	if scene_error != OK:
+		push_error("Não foi possível abrir a criação da equipe para a nova temporada. Erro: %d" % scene_error)
 
 func _advance_gp() -> void:
 	Database.process_ai_team_upgrades()

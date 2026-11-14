@@ -1329,6 +1329,16 @@ func _run_fast_simulation(by_season: bool, amount: int) -> void:
 				Database.end_season_and_advance_year()
 			await get_tree().process_frame
 
+	if Database.game_mode == "manager" and Database.current_session == "manager_offseason":
+		var main_scene := get_tree().current_scene
+		if is_instance_valid(main_scene) and main_scene.has_method("switch_view"):
+			main_scene.call_deferred("switch_view", "dashboard")
+		else:
+			var scene_error := get_tree().change_scene_to_file("res://views/pre_season_view.tscn")
+			if scene_error != OK:
+				push_error("Não foi possível abrir a criação da equipe para a nova temporada. Erro: %d" % scene_error)
+		return
+
 	build_ui()
 
 # --- UTILITÁRIOS DA UI ---

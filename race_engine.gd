@@ -279,7 +279,7 @@ func _advance_quali_session() -> void:
 				str(b.get("Nome", ""))
 			)
 		)
-		var cutoff = max(0, active_quali_drivers.size() - 6)
+		var cutoff = max(0, active_quali_drivers.size() - 7)
 		var next_drivers: Array = []
 		var q1_elim_this_phase: Array = []
 		
@@ -310,7 +310,7 @@ func _advance_quali_session() -> void:
 		active_quali_drivers = next_drivers
 		active_quali_drivers.sort_custom(func(a, b): return a["Nome"] < b["Nome"])
 		quali_phase = "Q2"
-		race_logs.append("🏁 FIM DO Q1: 6 pilotos eliminados.")
+		race_logs.append("🏁 FIM DO Q1: 7 pilotos eliminados.")
 		
 	elif quali_phase == "Q2":
 		active_quali_drivers.sort_custom(func(a, b):
@@ -321,7 +321,7 @@ func _advance_quali_session() -> void:
 				str(b.get("Nome", ""))
 			)
 		)
-		var cutoff = min(10, max(0, active_quali_drivers.size() - 6))
+		var cutoff = max(0, active_quali_drivers.size() - 7)
 		var next_drivers: Array = []
 		var q2_elim_this_phase: Array = []
 		
@@ -357,7 +357,7 @@ func _advance_quali_session() -> void:
 		active_quali_drivers = next_drivers
 		active_quali_drivers.sort_custom(func(a, b): return a["Nome"] < b["Nome"])
 		quali_phase = "Q3"
-		race_logs.append("🏁 FIM DO Q2: 6 pilotos eliminados.")
+		race_logs.append("🏁 FIM DO Q2: 7 pilotos eliminados.")
 		
 	elif quali_phase == "Q3":
 		full_grid.clear()
@@ -411,11 +411,13 @@ func _initialize_driver_race_strategy(driver: Dictionary, start_pos: int) -> voi
 func process_lap() -> Dictionary:
 	if current_lap >= total_laps:
 		is_race_finished = true
+		is_race_running = false
 		return {"finished": true}
 		
 	if pending_red_flag_modal:
 		return {"finished": false, "red_flag": true}
 
+	is_race_running = true
 	if current_lap == total_laps - 2:
 		var missing_manager_compound := false
 		for driver in race_drivers:
@@ -554,10 +556,23 @@ func process_lap() -> Dictionary:
 				base_stop_duration += extra_time
 				pit_error_msg = " ⚠️ ERRO NO PIT STOP (+%ss)" % str(snapped(extra_time, 0.1))
 				
-			var total_pit_time_loss = track_pit_lane_loss + base_stop_duration
+			var pit_lap_neutralization_multiplier := 1.0
+			var pit_lane_loss_multiplier := 1.0
+			match safety_car_status:
+				"SC":
+					pit_lap_neutralization_multiplier = 1.45
+					pit_lane_loss_multiplier = 0.4
+				"VSC":
+					pit_lap_neutralization_multiplier = 1.25
+					pit_lane_loss_multiplier = 0.7
+				"YELLOW":
+					pit_lap_neutralization_multiplier = 1.15
+					pit_lane_loss_multiplier = 0.85
+			var effective_pit_lane_loss := track_pit_lane_loss * pit_lane_loss_multiplier
+			var total_pit_time_loss = effective_pit_lane_loss + base_stop_duration
 			
 			# Penalidades de aderência e chuva aplicadas no pit lap base
-			var pit_lap_base = (base_track_lap + _calculate_tire_lap_delta(target_compound, 1)) * get_track_condition_lap_time_multiplier()
+			var pit_lap_base = (base_track_lap + _calculate_tire_lap_delta(target_compound, 1)) * get_track_condition_lap_time_multiplier() * pit_lap_neutralization_multiplier
 			var lap_time = pit_lap_base + total_pit_time_loss + randf_range(-0.2, 0.2)
 			
 			d["TempoTotal"] += lap_time

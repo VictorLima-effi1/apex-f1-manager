@@ -57,8 +57,20 @@ var grid_container_vbox: VBoxContainer
 var driver_cards_container: HBoxContainer
 var title_label: Label
 var budget_label: Label
+var is_manager_offseason: bool = false
+var offseason_original_team_name: String = ""
 
 func _ready() -> void:
+	is_manager_offseason = Database.game_mode == "manager" and Database.current_session == "manager_offseason"
+	if is_manager_offseason:
+		current_step = 0
+		offseason_original_team_name = str(Database.user_team.get("nome", Database.user_team.get("Nome", team_name)))
+		team_name = offseason_original_team_name
+		boss_name = str(Database.user_team.get("chefe", boss_name))
+		var saved_team_color: Variant = Database.user_team.get("cor", team_color)
+		if saved_team_color is Color:
+			team_color = saved_team_color
+
 	# Força o elemento a ocupar 100% da janela e ficar exatamente no centro
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	anchor_right = 1.0
@@ -715,7 +727,7 @@ func _update_card_border_color() -> void:
 			style.border_color = team_color
 
 func _recalculate_budget() -> void:
-	var base_starting_budget = 100.0 # $100M orçamento base de criação
+	var base_starting_budget := float(Database.user_team.get("orcamento", 100.0)) if is_manager_offseason else 100.0
 	
 	# 1. Soma os patrocínios de temporada contratados
 	var sponsor_bonus = 0.0
@@ -1214,6 +1226,9 @@ func _open_negotiation_dialog(driver: Dictionary) -> void:
 			lbl_feedback.add_theme_color_override("font_color", Color("#10b981"))
 			
 			driver["salario"] = offered_salary
+			driver["AnosContrato"] = offered_years
+			driver["contrato_anos"] = offered_years
+			driver["anos_contratados"] = offered_years
 			if not selected_drivers.has(driver):
 				if selected_drivers.size() < 2:
 					selected_drivers.append(driver)
@@ -1896,7 +1911,8 @@ func _open_custom_chassis_builder_modal() -> void:
 	dialog.popup_centered()
 
 func _save_team_to_database() -> void:
-	Database.user_team = {
+	var updated_team: Dictionary = Database.user_team.duplicate(true) if is_manager_offseason else {}
+	updated_team.merge({
 		"nome": team_name,
 		"chefe": boss_name,
 		"cor": team_color,
@@ -1911,7 +1927,8 @@ func _save_team_to_database() -> void:
 		"orcamento": remaining_budget, # Caixa Real acumulado
 		"gastos_temporada": 0.0,      # Inicia zerado para o Teto de $135M
 		"teto_gastos": 135.0          # Regulamento Fixo de $135M
-	}
+	}, true)
+	Database.user_team = updated_team
 
 # =============================================================
 # ETAPA 3: TESTES DE INVERNO
@@ -3213,7 +3230,7 @@ func _apply_final_testing_upgrades_to_database() -> void:
 			for idx in range(Database.teams.size()):
 				var t_item = Database.teams[idx]
 				var curr_name = t_item.get("nome", t_item.get("Nome", ""))
-				if curr_name == user_team_name:
+				if curr_name == user_team_name or (is_manager_offseason and curr_name == offseason_original_team_name):
 					found = true
 					Database.teams[idx] = Database.user_team.duplicate(true)
 					break
@@ -3240,6 +3257,7 @@ func _apply_final_testing_upgrades_to_database() -> void:
 				if u_name == t_name:
 					_apply_upgrades_to_team_dict(Database.user_team, upg)
 
+	Database.end_preseason()
 
 # Aplica os bônus em um dicionário de equipe tratando os tipos com segurança
 func _apply_upgrades_to_team_dict(team_dict: Dictionary, upg: Dictionary) -> void:
@@ -3296,14 +3314,28 @@ func _sync_hired_drivers_to_global_database() -> void:
 	var hired_names: Array[String] = []
 	for d in selected_drivers:
 		hired_names.append(str(d.get("Nome", d.get("nome", ""))))
+	if is_manager_offseason:
+		for driver_dict in Database.drivers:
+			var current_team := str(driver_dict.get("Equipe", driver_dict.get("equipe", ""))).strip_edges()
+			var driver_name := str(driver_dict.get("Nome", driver_dict.get("nome", "")))
+			if current_team == offseason_original_team_name and not hired_names.has(driver_name):
+				driver_dict["Equipe"] = "Free Agent"
+				driver_dict["equipe"] = "Free Agent"
+				driver_dict["AnosContrato"] = 0
+				driver_dict["contrato_anos"] = 0
+
 	var teams_to_replenish: Dictionary = {}
 	for driver_dict in Database.drivers:
 		var d_name = str(driver_dict.get("Nome", driver_dict.get("nome", "")))
 		if d_name in hired_names:
 			var previous_team := str(driver_dict.get("Equipe", driver_dict.get("equipe", ""))).strip_edges()
-			if not previous_team.is_empty() and previous_team != "Free Agent" and previous_team != team_name:
+			if not previous_team.is_empty() and previous_team != "Free Agent" \
+			and previous_team != team_name and previous_team != offseason_original_team_name:
 				teams_to_replenish[previous_team] = true
 			driver_dict["Equipe"] = team_name
 			driver_dict["equipe"] = team_name
+			var contract_years := int(driver_dict.get("AnosContrato", driver_dict.get("anos_contratados", driver_dict.get("anos_pedidos", 1))))
+			driver_dict["AnosContrato"] = maxi(1, contract_years)
+			driver_dict["contrato_anos"] = driver_dict["AnosContrato"]
 	for previous_team in teams_to_replenish.keys():
 		Database._auto_fill_team_seat(str(previous_team))

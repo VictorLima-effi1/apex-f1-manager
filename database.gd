@@ -6,6 +6,7 @@ var current_view: String = "dashboard"
 var race_finished: bool = false
 var game_mode: String = "manager"
 var active_engine: RaceEngine = null
+var has_completed_season: bool = false
 var constructors_points_history: Array = [] # Estrutura: [{"gp": 1, "points": {"McLaren": 25, "Ferrari": 18, ...}}]
 # Armazena os interesses/sondagens ativas das equipes sobre pilotos
 var driver_market_interests: Array = []
@@ -246,6 +247,10 @@ func process_ai_team_upgrades() -> void:
 			continue
 		
 		var team_name = str(t.get("Nome", ""))
+		if game_mode == "manager" and not user_team.is_empty():
+			var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+			if team_name.strip_edges().to_lower() == player_team_name.to_lower():
+				continue
 		var current_expense = team_season_expenses.get(team_name, 0.0)
 		var max_cap = get_team_budget_cap(team_name)
 		var remaining = max_cap - current_expense
@@ -459,10 +464,18 @@ func sanitize_unique_drivers() -> void:
 func ensure_full_grid() -> void:
 	for t in teams:
 		var t_name = str(t.get("Nome", ""))
+		if _is_manager_offseason_team(t_name):
+			continue
 		var t_drivers = get_team_drivers(t_name)
 		while t_drivers.size() < 2:
 			_auto_fill_team_seat(t_name)
 			t_drivers = get_team_drivers(t_name)
+
+func _is_manager_offseason_team(team_name: String) -> bool:
+	if game_mode != "manager" or current_session != "manager_offseason":
+		return false
+	var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+	return not player_team_name.is_empty() and team_name.strip_edges().to_lower() == player_team_name.to_lower()
 
 # Calcula o Power Index garantindo a escala 0-100 para todas as equipes
 func get_team_power_index(team_input) -> Dictionary:
@@ -695,6 +708,7 @@ func record_completed_race(results: Array, track_name: String = "") -> void:
 			if team_name != "Free Agent" and team_name != "Aposentado" and not team_name.is_empty():
 				db_driver["races_with_team"] = int(db_driver.get("races_with_team", 0)) + 1
 
+	_process_race_sponsor_payments(results)
 	apply_race_points(results)
 	record_standings_history_after_gp()
 	record_gp_constructors_snapshot()
@@ -718,6 +732,36 @@ func record_completed_race(results: Array, track_name: String = "") -> void:
 		"podium_teams": podium_teams.duplicate()
 	})
 	race_finished = true
+
+func _process_race_sponsor_payments(results: Array) -> void:
+	if game_mode != "manager" or user_team.is_empty():
+		return
+
+	var team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+	if team_name.is_empty():
+		return
+
+	var team_points := 0
+	for index in range(mini(F1_POINTS.size(), results.size())):
+		var result: Dictionary = results[index]
+		var result_team := str(result.get("Equipe", result.get("equipe", ""))).strip_edges()
+		if result_team.to_lower() == team_name.to_lower() and not _check_is_dnf(result):
+			team_points += F1_POINTS[index]
+
+	var race_income := 0.0
+	for sponsor_value in user_team.get("patrocinadores", []):
+		if not sponsor_value is Dictionary:
+			continue
+		var sponsor: Dictionary = sponsor_value
+		race_income += maxf(0.0, float(sponsor.get("valor_corrida", 0.0)))
+		race_income += maxf(0.0, float(sponsor.get("valor_ponto", 0.0))) * team_points
+
+	if race_income <= 0.0:
+		return
+
+	var current_cash := float(user_team.get("orcamento", user_team.get("budget", 0.0)))
+	user_team["orcamento"] = current_cash + race_income
+	register_financial_transaction("patrocinios_acumulados", race_income)
 
 # =============================================================
 # VARIÁVEIS DE CONTROLE DE SIMULAÇÃO EM LOTE
@@ -917,6 +961,8 @@ func driver_resigns(driver_name: String) -> void:
 			_auto_fill_team_seat(team_name)
 
 func _auto_fill_team_seat(team_name: String) -> void:
+	if _is_manager_offseason_team(team_name):
+		return
 	var current_drivers = get_team_drivers(team_name)
 	if current_drivers.size() >= 2:
 		return
@@ -1163,6 +1209,8 @@ func end_season_and_advance_year() -> void:
 	
 	current_year += 1
 	current_gp = 1
+	has_completed_season = true
+	current_session = "manager_offseason" if game_mode == "manager" and not is_batch_simulating else "regular_season"
 	race_finished = false
 	race_history.clear()
 	constructors_points_history.clear()
@@ -1251,6 +1299,8 @@ func _process_ai_transfer_market() -> void:
 	for d in drivers:
 		var team_name = str(d.get("Equipe", ""))
 		if team_name != "Free Agent" and team_name != "Aposentado" and not team_name.is_empty():
+			if _is_manager_offseason_team(team_name):
+				continue
 			if int(d.get("AnosContrato", 0)) <= 0:
 				d["Equipe"] = "Free Agent"
 				var fired_by: Array = d.get("demitido_por_equipes", [])
@@ -1266,6 +1316,8 @@ func _process_ai_transfer_market() -> void:
 
 	for buyer in sorted_teams:
 		var buyer_name = str(buyer.get("Nome", ""))
+		if _is_manager_offseason_team(buyer_name):
+			continue
 		var buyer_drivers = get_team_drivers(buyer_name)
 		
 		# Se a equipe de topo tem vaga ou quer trocar um piloto fraco
@@ -1275,6 +1327,8 @@ func _process_ai_transfer_market() -> void:
 	# 3. DANÇA DAS CADEIRAS (Preenche vagas restantes com Free Agents ou Promovidos)
 	for t in sorted_teams:
 		var team_name = str(t.get("Nome", ""))
+		if _is_manager_offseason_team(team_name):
+			continue
 		var active_team_drivers = get_team_drivers(team_name)
 		
 		while active_team_drivers.size() < 2:
@@ -1323,6 +1377,8 @@ func _try_poach_driver_from_rival(buyer_team_name: String) -> bool:
 	for d in drivers:
 		var current_team_name = str(d.get("Equipe", ""))
 		if current_team_name == "Free Agent" or current_team_name == "Aposentado" or current_team_name == buyer_team_name or current_team_name.is_empty():
+			continue
+		if _is_manager_offseason_team(current_team_name):
 			continue
 			
 		var seller_power = get_team_power_index(current_team_name)["overall"]
@@ -1478,6 +1534,7 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"save_date": formatted_date,
 		"game_mode": save_mode,
 		"current_year": current_year,
+		"has_completed_season": has_completed_season,
 		"current_gp": current_gp,
 		"user_team": user_team,
 		"drivers": drivers,
@@ -1564,6 +1621,7 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 			current_slot = slot_index
 			game_mode = requested_mode
 			current_year = data.get("current_year", 2026)
+			has_completed_season = bool(data.get("has_completed_season", int(current_year) > 2026))
 			current_gp = data.get("current_gp", 1)
 			user_team = data.get("user_team", {})
 			drivers = data.get("drivers", drivers)
@@ -1604,6 +1662,7 @@ func reset_database(mode: String = "") -> void:
 		game_mode = _normalize_game_mode(mode)
 	current_year = 2026
 	current_gp = 1
+	has_completed_season = false
 	current_view = "dashboard"
 	current_session = "preseason"
 	race_finished = false
@@ -1772,9 +1831,22 @@ func run_automated_test_season_and_export_telemetry(file_name: String = "telemet
 		print("📊 AUDITORIA DE 10 TEMPORADAS EXPORTADA COM SUCESSO EM: user://", file_name)
 
 func _apply_dnf_financial_penalty(team_name: String) -> void:
-	if team_season_expenses.has(team_name):
-		var repair_cost: int = randi_range(1000000, 3000000)
-		team_season_expenses[team_name] += repair_cost
+	if team_name.strip_edges().is_empty():
+		return
+
+	var repair_cost: int = randi_range(1000000, 10000000)
+	team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + repair_cost
+
+	if game_mode != "manager":
+		return
+	var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+	if player_team_name.to_lower() != team_name.strip_edges().to_lower():
+		return
+
+	var repair_cost_millions := float(repair_cost) / 1_000_000.0
+	var available_cash := float(user_team.get("orcamento", user_team.get("budget", 0.0)))
+	user_team["orcamento"] = maxf(0.0, available_cash - repair_cost_millions)
+	register_financial_transaction("gastos_dnf", repair_cost_millions)
 
 func reset_incorrect_history() -> void:
 	for d in drivers:
@@ -2093,6 +2165,13 @@ func end_preseason() -> void:
 		user_team["peso"] = max(768.0, float(user_team.get("peso", 778.0)) - float(dev.get("peso_reduction", 0.0)))
 	
 	current_session = "regular_season"
+	var team_name := str(user_team.get("nome", user_team.get("Nome", "")))
+	if not team_name.is_empty():
+		for i in range(teams.size()):
+			if str(teams[i].get("Nome", teams[i].get("nome", ""))) == team_name:
+				teams[i] = user_team.duplicate(true)
+				break
+	ensure_full_grid()
 
 # Retorna ou inicializa a estrutura de finanças da temporada da equipe do jogador
 func get_user_finances_history() -> Dictionary:

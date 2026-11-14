@@ -124,11 +124,12 @@ func _build_driver_card(title: String, driver_data: Dictionary, index: int) -> P
 	
 	if not driver_data.is_empty():
 		var p_name = str(driver_data.get("Nome", "Piloto"))
+		var season_driver: Dictionary = Database._get_driver_by_name(p_name)
 		var ovr = int(driver_data.get("OVR", driver_data.get("Overall", 75)))
 		var pace = int(driver_data.get("Ritmo", 75))
-		var pts = int(driver_data.get("pontos", 0))
-		var wins = int(driver_data.get("vitorias", 0))
-		var podiums = int(driver_data.get("podios", 0))
+		var pts = int(season_driver.get("Pontos", driver_data.get("pontos", 0)))
+		var wins = int(season_driver.get("VitoriasAno", driver_data.get("vitorias", 0)))
+		var podiums = int(season_driver.get("PodiosAno", driver_data.get("podios", 0)))
 		var contract = int(driver_data.get("contrato_anos", driver_data.get("AnosContrato", 1)))
 		
 		var l_name = Label.new()
