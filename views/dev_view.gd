@@ -76,8 +76,10 @@ func build_ui() -> void:
 		var weight_val = float(stats.get("Peso", t.get("peso", 778.0)))
 		
 		# TETO DE GASTOS FIXO UNIVERSAL DO REGULAMENTO ($135.0M)
-		var max_cap = Database.COST_CAP_LIMIT if "COST_CAP_LIMIT" in Database else 135_000_000.0
+		var max_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else 135_000_000.0
 		var remaining = max(0.0, max_cap - spent)
+		var excess = max(0.0, spent - max_cap)
+		var penalty_points = Database.get_team_cost_cap_penalty(team_name) if Database.has_method("get_team_cost_cap_penalty") else 0
 		
 		var spent_m = snapped(spent / 1_000_000.0, 0.1)
 		var remaining_m = snapped(remaining / 1_000_000.0, 0.1)
@@ -141,7 +143,10 @@ func build_ui() -> void:
 		
 		# INDICADOR COMPLETO: GASTOS + VERBA RESTANTE + TETO
 		var budget_lbl = Label.new()
-		if remaining <= 0:
+		if excess > 0.0:
+			budget_lbl.text = "💰 Gastou: $%sM | Excesso: $%.1fM | Penalidade: -%d pts" % [str(spent_m), excess / 1_000_000.0, penalty_points]
+			budget_lbl.add_theme_color_override("font_color", Color("#ef4444"))
+		elif remaining <= 0.0:
 			budget_lbl.text = "💰 Gastou: $%sM | Teto Atingido ($0M Restantes)" % str(spent_m)
 			budget_lbl.add_theme_color_override("font_color", Color("#ef4444"))
 		else:
@@ -194,20 +199,19 @@ func _render_grid_budget_cap_summary(parent: VBoxContainer) -> void:
 	
 	var total_spent = 0.0
 	var teams_at_cap = 0
-	var fixed_cap = Database.COST_CAP_LIMIT if "COST_CAP_LIMIT" in Database else 135_000_000.0
-	
 	for t in Database.teams:
 		var team_name = str(t.get("Nome", ""))
 		var spent = Database.team_season_expenses.get(team_name, 0.0)
+		var team_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else 135_000_000.0
 		
 		total_spent += spent
-		if spent >= fixed_cap:
+		if spent >= team_cap:
 			teams_at_cap += 1
 			
 	var avg_spent_m = snapped((total_spent / max(1, Database.teams.size())) / 1_000_000.0, 0.1)
 	
 	var lbl_cap_title = Label.new()
-	lbl_cap_title.text = "📊 TETO DE GASTOS ANUAL FIXO REGULAMENTAR: $135.0M"
+	lbl_cap_title.text = "📊 TETO DE GASTOS REGULAMENTAR POR EQUIPE"
 	lbl_cap_title.add_theme_font_size_override("font_size", 13)
 	lbl_cap_title.add_theme_color_override("font_color", Color("#94a3b8"))
 	hbox.add_child(lbl_cap_title)

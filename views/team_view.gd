@@ -123,14 +123,15 @@ func _build_driver_card(title: String, driver_data: Dictionary, index: int) -> P
 	stats_vbox.add_theme_constant_override("separation", 4)
 	
 	if not driver_data.is_empty():
-		var p_name = str(driver_data.get("Nome", "Piloto"))
+		var p_name = str(driver_data.get("Nome", driver_data.get("nome", "Piloto")))
 		var season_driver: Dictionary = Database._get_driver_by_name(p_name)
 		var ovr = int(driver_data.get("OVR", driver_data.get("Overall", 75)))
 		var pace = int(driver_data.get("Ritmo", 75))
-		var pts = int(season_driver.get("Pontos", driver_data.get("pontos", 0)))
-		var wins = int(season_driver.get("VitoriasAno", driver_data.get("vitorias", 0)))
-		var podiums = int(season_driver.get("PodiosAno", driver_data.get("podios", 0)))
+		var pts = int(season_driver.get("Pontos", driver_data.get("Pontos", driver_data.get("pontos", 0))))
+		var wins = int(season_driver.get("VitoriasAno", driver_data.get("VitoriasAno", driver_data.get("vitorias", 0))))
+		var podiums = int(season_driver.get("PodiosAno", driver_data.get("PodiosAno", driver_data.get("podios", 0))))
 		var contract = int(driver_data.get("contrato_anos", driver_data.get("AnosContrato", 1)))
+		var dnfs = int(season_driver.get("DNFsAno", driver_data.get("DNFsAno", driver_data.get("DNFs", 0))))
 		
 		var l_name = Label.new()
 		l_name.text = p_name
@@ -154,7 +155,7 @@ func _build_driver_card(title: String, driver_data: Dictionary, index: int) -> P
 		stats_vbox.add_child(l_stats_title)
 		
 		var l_stats = Label.new()
-		l_stats.text = "Pontos: %d pts\nVitórias: %d\nPódios: %d\nContrato: %d ano(s)" % [pts, wins, podiums, contract]
+		l_stats.text = "Pontos: %d pts\nVitórias: %d\nPódios: %d\nDNFs: %d\nContrato: %d ano(s)" % [pts, wins, podiums, dnfs, contract]
 		l_stats.add_theme_font_size_override("font_size", 13)
 		l_stats.add_theme_color_override("font_color", Color("#34d399"))
 		stats_vbox.add_child(l_stats)
@@ -356,7 +357,7 @@ func _build_rd_panel() -> PanelContainer:
 	vbox.add_theme_constant_override("separation", 8)
 	
 	var lbl_title = Label.new()
-	lbl_title.text = "P. E D. (DESENVOLVIMENTO)"
+	lbl_title.text = "P&D"
 	lbl_title.add_theme_font_size_override("font_size", 15)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
@@ -653,7 +654,7 @@ func _build_finances_panel(show_capital_button: bool = true) -> PanelContainer:
 	if show_capital_button:
 		var capital_button := Button.new()
 		if Database.can_inject_team_capital():
-			capital_button.text = "💰 INJEÇÃO DE CAPITAL ($10M–$50M)"
+			capital_button.text = "💰 INJEÇÃO DE CAPITAL (EMERGÊNCIA)"
 			capital_button.pressed.connect(_open_capital_injection)
 		else:
 			var available_year := int(Database.user_team.get("injecao_capital_ano", Database.current_year)) + 3

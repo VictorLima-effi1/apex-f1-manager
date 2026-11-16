@@ -170,13 +170,16 @@ func setup_race(selected_track: Dictionary) -> void:
 			entry["estilo"] = str(entry.get("estilo", "Normal"))
 			entry["manager_controlled"] = _is_manager_controlled_team(eq_name)
 			entry["pit_requested"] = false
+			entry["pit_requested_tire"] = ""
+			entry["red_flag_strategy_confirmed"] = false
 			
 			entry["last_sectors"] = {"s1": 0.0, "s2": 0.0, "s3": 0.0}
 			entry["best_personal_sectors"] = {"s1": 999.0, "s2": 999.0, "s3": 999.0}
 			entry["sector_colors"] = {"s1": "⬜", "s2": "⬜", "s3": "⬜"}
 			
 			entry["tire_compound"] = _get_ideal_compound_for_water(water_level)
-			entry["used_compounds"] = [entry["tire_compound"]]
+			entry["used_compounds"] = []
+			_record_used_compound(entry, str(entry["tire_compound"]))
 			entry["tire_wear"] = 100.0
 			entry["tire_degradation_per_5pct"] = randf_range(0.01, 0.07)
 			entry["stint_lap"] = 0
@@ -201,11 +204,49 @@ func _reset_session_sectors_for_race() -> void:
 
 # --- ORDEM CORRETA DE PNEUS CONFORME A UMIDADE ---
 func _get_ideal_compound_for_water(w_level: float) -> String:
-	if w_level >= 50.0:
-		return "Wet"     # >= 50%: Wet é o melhor pneu
+	var wet_threshold := 50.0
+	if rain_intensity >= 2.0:
+		wet_threshold = 48.0
+	elif rain_intensity > 0.0:
+		wet_threshold = 53.0
+	if w_level >= wet_threshold:
+		return "Wet"
 	elif w_level >= 16.0:
-		return "Inter"   # 16 - 49%: Intermediário é o melhor pneu
-	return "Soft"        # 0 - 15%: Slicks são os melhores pneus
+		return "Inter"
+	return "Soft"
+
+func _canonical_tire_compound(compound: String) -> String:
+	match compound.strip_edges().to_lower():
+		"soft", "macio":
+			return "Soft"
+		"medium", "médio", "medio":
+			return "Medium"
+		"hard", "duro":
+			return "Hard"
+		"inter", "intermediário", "intermediario":
+			return "Inter"
+		"wet", "chuva":
+			return "Wet"
+		_:
+			return compound
+
+func _is_dry_tire_compound(compound: String) -> bool:
+	return _canonical_tire_compound(compound) in ["Soft", "Medium", "Hard"]
+
+func _get_used_dry_compounds(driver: Dictionary) -> Array:
+	var used_dry_compounds: Array = []
+	for used_compound in driver.get("used_compounds", []):
+		var compound := _canonical_tire_compound(str(used_compound))
+		if _is_dry_tire_compound(compound) and not used_dry_compounds.has(compound):
+			used_dry_compounds.append(compound)
+	return used_dry_compounds
+
+func _record_used_compound(driver: Dictionary, compound: String) -> void:
+	var used_dry_compounds := _get_used_dry_compounds(driver)
+	var canonical_compound := _canonical_tire_compound(compound)
+	if _is_dry_tire_compound(canonical_compound) and not used_dry_compounds.has(canonical_compound):
+		used_dry_compounds.append(canonical_compound)
+	driver["used_compounds"] = used_dry_compounds
 
 func _calculate_tire_lap_delta(compound: String, stint_lap: int) -> float:
 	var lap = float(clamp(stint_lap, 1, 60))
@@ -403,7 +444,8 @@ func _initialize_driver_race_strategy(driver: Dictionary, start_pos: int) -> voi
 			first_compound = "Medium" if start_pos <= 10 else ("Hard" if strategy_roll < 0.70 else "Soft")
 			
 	driver["tire_compound"] = first_compound
-	driver["used_compounds"] = [first_compound]
+	driver["used_compounds"] = []
+	_record_used_compound(driver, first_compound)
 	driver["stint_lap"] = 0
 	driver["pit_window_offset"] = randi_range(-2, 2)
 	driver["tire_degradation_per_5pct"] = randf_range(0.01, 0.07)
@@ -423,7 +465,8 @@ func process_lap() -> Dictionary:
 		for driver in race_drivers:
 			if str(driver.get("Status", "")) == "Na Pista" \
 			and bool(driver.get("manager_controlled", false)) \
-			and driver.get("used_compounds", []).size() < 2 \
+			and _get_ideal_compound_for_water(water_level) not in ["Wet", "Inter"] \
+			and _get_used_dry_compounds(driver).size() < 2 \
 			and not bool(driver.get("pit_requested", false)):
 				missing_manager_compound = true
 				break
@@ -434,14 +477,19 @@ func process_lap() -> Dictionary:
 			return {"finished": false, "awaiting_manager_pit": true}
 		manager_tire_rule_warning_logged = false
 
+	var starting_positions: Dictionary = {}
+	var starting_position := 0
+	for driver in race_drivers:
+		if str(driver.get("Status", "")) == "Na Pista":
+			starting_positions[str(driver.get("Nome", ""))] = starting_position
+			starting_position += 1
+
 	current_lap += 1
 	var lap_events: Array = []
 	var lap_pit_events: Array = []
 	var flag_at_lap_start := safety_car_status
-	var was_raining := rain_intensity > 0.0
 	
 	_process_weather_and_water_accumulation(lap_events)
-	var weather_changed_this_lap := was_raining != (rain_intensity > 0.0)
 
 	var accident_this_lap = false
 	var accident_sector = 0
@@ -499,17 +547,10 @@ func process_lap() -> Dictionary:
 			var manager_requested_pit := bool(d.get("pit_requested", false))
 			needs_pit = remaining_laps > 0 and manager_requested_pit
 			if needs_pit:
-				target_compound = str(d.get("pit_requested_tire", compound))
+				var requested_compound := str(d.get("pit_requested_tire", ""))
+				target_compound = requested_compound if not requested_compound.is_empty() else compound
 				d["pit_requested"] = false
 				d["pit_requested_tire"] = ""
-		elif remaining_laps > 0 and weather_changed_this_lap:
-			needs_pit = true
-			if rain_intensity > 0.0:
-				target_compound = "Wet" if water_level >= 50.0 or rain_intensity >= 2.0 else "Inter"
-			else:
-				target_compound = _get_ideal_compound_for_water(water_level)
-				if target_compound in ["Wet", "Inter"] and water_level < 16.0:
-					target_compound = _select_next_dry_compound(d, remaining_laps)
 		elif remaining_laps > 0:
 			if ideal_compound in ["Wet", "Inter"] and compound != ideal_compound:
 				needs_pit = true
@@ -519,14 +560,13 @@ func process_lap() -> Dictionary:
 				target_compound = _select_next_dry_compound(d, remaining_laps)
 			elif pit_count == 0 and remaining_laps <= max(2, 6 + offset):
 				needs_pit = true
-				target_compound = _select_next_dry_compound(d, remaining_laps)
+				target_compound = ideal_compound if ideal_compound in ["Wet", "Inter"] else _select_next_dry_compound(d, remaining_laps)
 			elif pit_for_wear:
 				needs_pit = true
 				target_compound = ideal_compound if ideal_compound in ["Wet", "Inter"] else _select_next_dry_compound(d, remaining_laps)
 
-			if needs_pit and not weather_changed_this_lap and target_compound == compound:
-				target_compound = _select_next_dry_compound(d, remaining_laps)
-			if needs_pit and not weather_changed_this_lap and pit_count == 0 and d.get("used_compounds", []).size() < 2 and target_compound == compound:
+			if needs_pit and _is_dry_tire_compound(target_compound) and target_compound == compound \
+			and pit_count == 0 and _get_used_dry_compounds(d).size() < 2:
 				target_compound = _select_next_dry_compound(d, remaining_laps)
 			
 		if needs_pit:
@@ -535,10 +575,9 @@ func process_lap() -> Dictionary:
 			d["tire_wear"] = 100.0
 			d["stint_lap"] = 1
 			d["tire_compound"] = target_compound
-			if not d["used_compounds"].has(target_compound):
-				d["used_compounds"].append(target_compound)
+			_record_used_compound(d, target_compound)
 				
-			var track_pit_lane_loss = float(track.get("pit_loss_time", randf_range(20.0, 25.0)))
+			var track_pit_lane_loss: float = float(track.get("pit_loss_time", randf_range(20.0, 25.0)))
 			var team_name = str(d.get("Equipe", ""))
 			var team = Database._get_team_by_name(team_name)
 			
@@ -556,8 +595,8 @@ func process_lap() -> Dictionary:
 				base_stop_duration += extra_time
 				pit_error_msg = " ⚠️ ERRO NO PIT STOP (+%ss)" % str(snapped(extra_time, 0.1))
 				
-			var pit_lap_neutralization_multiplier := 1.0
-			var pit_lane_loss_multiplier := 1.0
+			var pit_lap_neutralization_multiplier: float = 1.0
+			var pit_lane_loss_multiplier: float = 1.0
 			match safety_car_status:
 				"SC":
 					pit_lap_neutralization_multiplier = 1.45
@@ -568,12 +607,12 @@ func process_lap() -> Dictionary:
 				"YELLOW":
 					pit_lap_neutralization_multiplier = 1.15
 					pit_lane_loss_multiplier = 0.85
-			var effective_pit_lane_loss := track_pit_lane_loss * pit_lane_loss_multiplier
-			var total_pit_time_loss = effective_pit_lane_loss + base_stop_duration
+			var effective_pit_lane_loss: float = track_pit_lane_loss * pit_lane_loss_multiplier
+			var total_pit_time_loss: float = effective_pit_lane_loss + base_stop_duration
 			
 			# Penalidades de aderência e chuva aplicadas no pit lap base
-			var pit_lap_base = (base_track_lap + _calculate_tire_lap_delta(target_compound, 1)) * get_track_condition_lap_time_multiplier() * pit_lap_neutralization_multiplier
-			var lap_time = pit_lap_base + total_pit_time_loss + randf_range(-0.2, 0.2)
+			var pit_lap_base: float = (base_track_lap + _calculate_tire_lap_delta(target_compound, 1)) * get_track_condition_lap_time_multiplier() * pit_lap_neutralization_multiplier
+			var lap_time: float = pit_lap_base + total_pit_time_loss + randf_range(-0.2, 0.2)
 			
 			d["TempoTotal"] += lap_time
 			d["LastLapTime"] = lap_time
@@ -676,6 +715,10 @@ func process_lap() -> Dictionary:
 			safety_car_status = "RED_FLAG"
 			red_flag_active = true
 			pending_red_flag_modal = true
+			for driver in race_drivers:
+				if bool(driver.get("manager_controlled", false)) and str(driver.get("Status", "")) == "Na Pista":
+					driver["red_flag_strategy_confirmed"] = false
+					driver["red_flag_tire_compound"] = str(driver.get("tire_compound", "Medium"))
 			lap_events.append("🔴 BANDEIRA VERMELHA! Corrida paralisada devido ao acidente no Setor " + str(incident_sector) + ".")
 
 	race_drivers.sort_custom(func(a, b):
@@ -688,6 +731,26 @@ func process_lap() -> Dictionary:
 	)
 
 	if safety_car_status == "SC":
+		var active_order: Array = []
+		var retired_order: Array = []
+		for driver in race_drivers:
+			if str(driver.get("Status", "")) == "Na Pista":
+				active_order.append(driver)
+			else:
+				retired_order.append(driver)
+
+		for driver in active_order.duplicate():
+			if not bool(driver.get("is_in_pit", false)):
+				continue
+			var driver_name := str(driver.get("Nome", ""))
+			var old_position := int(starting_positions.get(driver_name, active_order.find(driver)))
+			var current_position := active_order.find(driver)
+			var minimum_position := mini(old_position + 1, active_order.size() - 1)
+			if current_position < minimum_position:
+				active_order.erase(driver)
+				active_order.insert(minimum_position, driver)
+
+		race_drivers = active_order + retired_order
 		var current_accumulated_gap = 0.0
 		for i in range(race_drivers.size()):
 			if race_drivers[i]["Status"] == "Na Pista":
@@ -945,7 +1008,18 @@ func _process_weather_and_water_accumulation(lap_events: Array, elapsed_time_fac
 				weather_forecast = "☀️ Tempo Limpo"
 				lap_events.append("☀️ A PISTA SECOU COMPLETAMENTE!")
 
-func resolve_red_flag_restart(_ignored_user_choice: String = "") -> void:
+func are_manager_red_flag_strategies_confirmed() -> bool:
+	for driver in race_drivers:
+		if str(driver.get("Status", "")) == "Na Pista" \
+		and bool(driver.get("manager_controlled", false)) \
+		and not bool(driver.get("red_flag_strategy_confirmed", false)):
+			return false
+	return true
+
+func resolve_red_flag_restart() -> bool:
+	if not pending_red_flag_modal or not are_manager_red_flag_strategies_confirmed():
+		return false
+
 	pending_red_flag_modal = false
 	red_flag_active = false
 	safety_car_status = "NONE"
@@ -953,14 +1027,18 @@ func resolve_red_flag_restart(_ignored_user_choice: String = "") -> void:
 	
 	for d in race_drivers:
 		if d["Status"] == "Na Pista":
-			var choice = _get_ideal_compound_for_water(water_level)
-			if choice not in ["Wet", "Inter"]:
-				choice = _select_next_dry_compound(d, total_laps - current_lap)
+			var choice: String
+			if bool(d.get("manager_controlled", false)):
+				choice = _canonical_tire_compound(str(d.get("red_flag_tire_compound", d.get("tire_compound", "Medium"))))
+			else:
+				choice = _get_ideal_compound_for_water(water_level)
+				if choice not in ["Wet", "Inter"]:
+					choice = _select_next_dry_compound(d, total_laps - current_lap)
 			d["tire_compound"] = choice
 			d["tire_wear"] = 100.0
 			d["stint_lap"] = 1
-			if not d["used_compounds"].has(choice):
-				d["used_compounds"].append(choice)
+			_record_used_compound(d, choice)
+			d["red_flag_strategy_confirmed"] = false
 
 	var accumulated_start_gap = 0.0
 	for i in range(race_drivers.size()):
@@ -969,9 +1047,10 @@ func resolve_red_flag_restart(_ignored_user_choice: String = "") -> void:
 			accumulated_start_gap += 0.200
 
 	race_logs.append("🟢 RELARGADA EM GRID DE LARGADA REALIZADA NA VOLTA " + str(current_lap) + ".")
+	return true
 
 func _select_next_dry_compound(driver: Dictionary, remaining_laps: int) -> String:
-	var used = driver.get("used_compounds", [])
+	var used := _get_used_dry_compounds(driver)
 	var candidates: Array = []
 	
 	if remaining_laps <= 14: candidates = ["Soft", "Medium", "Hard"]
@@ -1003,16 +1082,61 @@ func request_manager_pit_stop(driver_name: String, tire_compound: String = "", d
 		if str(driver.get("Nome", "")).strip_edges().to_lower() != driver_name.strip_edges().to_lower():
 			continue
 		if not bool(driver.get("manager_controlled", false)) or str(driver.get("Status", "")) != "Na Pista":
+			pit_logs.append("⚠️ %s não está disponível para receber uma ordem de box." % driver_name)
+			return false
+		if current_lap == 0:
+			return confirm_manager_pre_race_strategy(driver_name, tire_compound, driving_style)
+		if pending_red_flag_modal:
+			return confirm_manager_pre_race_strategy(driver_name, tire_compound, driving_style)
+		if bool(driver.get("is_in_pit", false)):
+			pit_logs.append("⚠️ %s já está nos boxes nesta volta." % driver_name)
 			return false
 		if current_lap >= total_laps - 1:
 			pit_logs.append("⚠️ %s não pode parar na última volta." % driver_name)
 			return false
-		var used_compounds: Array = driver.get("used_compounds", [])
-		if used_compounds.size() < 2 and not tire_compound.is_empty() and used_compounds.has(tire_compound):
+		var requested_compound := _canonical_tire_compound(tire_compound) if not tire_compound.is_empty() else str(driver.get("tire_compound", "Medium"))
+		if not ["Soft", "Medium", "Hard", "Inter", "Wet"].has(requested_compound):
+			pit_logs.append("⚠️ Composto de pneu inválido para %s." % driver_name)
+			return false
+		var used_dry_compounds := _get_used_dry_compounds(driver)
+		if _is_dry_tire_compound(requested_compound) \
+		and used_dry_compounds.size() < 2 and used_dry_compounds.has(requested_compound):
 			pit_logs.append("⚠️ Selecione um composto diferente para cumprir a regra dos dois tipos de pneus.")
 			return false
 		driver["pit_requested"] = true
-		driver["pit_requested_tire"] = tire_compound
+		driver["pit_requested_tire"] = requested_compound
+		driver["planned_pit_tire"] = driver["pit_requested_tire"]
+		if not driving_style.is_empty():
+			driver["estilo"] = driving_style
+		return true
+	pit_logs.append("⚠️ Não foi possível localizar %s na corrida." % driver_name)
+	return false
+
+func confirm_manager_pre_race_strategy(driver_name: String, tire_compound: String, driving_style: String) -> bool:
+	if current_lap != 0 and not pending_red_flag_modal:
+		return false
+	var selected_compound := _canonical_tire_compound(tire_compound)
+	if not ["Soft", "Medium", "Hard", "Inter", "Wet"].has(selected_compound):
+		return false
+
+	for driver in race_drivers:
+		if str(driver.get("Nome", "")).strip_edges().to_lower() != driver_name.strip_edges().to_lower():
+			continue
+		if not bool(driver.get("manager_controlled", false)) or str(driver.get("Status", "")) != "Na Pista":
+			return false
+
+		if pending_red_flag_modal:
+			driver["red_flag_tire_compound"] = selected_compound
+			driver["red_flag_strategy_confirmed"] = true
+		else:
+			driver["tire_compound"] = selected_compound
+			driver["used_compounds"] = []
+			_record_used_compound(driver, selected_compound)
+			driver["tire_wear"] = 100.0
+			driver["stint_lap"] = 0
+			driver["planned_pit_tire"] = ""
+			driver["pit_requested"] = false
+			driver["pit_requested_tire"] = ""
 		if not driving_style.is_empty():
 			driver["estilo"] = driving_style
 		return true

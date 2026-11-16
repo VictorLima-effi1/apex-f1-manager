@@ -34,6 +34,7 @@ var race_lap_elapsed: float = 0.0
 var race_lap_duration: float = 0.0
 var ui_refresh_elapsed: float = 0.0
 var race_finish_handled: bool = false
+var red_flag_window: Window
 var _dbg_process_logged: bool = false
 
 func _agent_dbg(hypothesis_id: String, location: String, message: String, data: Dictionary) -> void:
@@ -292,9 +293,11 @@ func _build_manager_qualifying_controls(parent_container: Control) -> void:
 		return
 	
 	for c in parent_container.get_children():
-		c.queue_free()
+		if c.name == "ManagerQualiPanel":
+			parent_container.remove_child(c)
+			c.queue_free()
 	manager_controls_race_session = engine != null and engine.is_quali_done()
-	manager_controls_pre_race_session = manager_controls_race_session and engine.current_lap == 0 and not engine.is_race_running
+	manager_controls_pre_race_session = manager_controls_race_session and engine.current_lap == 0
 		
 	var user_drivers = _get_user_drivers()
 	if user_drivers.is_empty():
@@ -381,7 +384,8 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	cv.add_child(position_label)
 
 	var is_race_session := engine != null and engine.is_quali_done()
-	var is_pre_race_session := is_race_session and engine.current_lap == 0 and not engine.is_race_running
+	var is_pre_race_session := is_race_session and engine.current_lap == 0
+	var is_red_flag_strategy := engine != null and engine.pending_red_flag_modal
 	
 	var ch = HBoxContainer.new()
 	ch.add_theme_constant_override("separation", 8)
@@ -396,7 +400,9 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	
 	var tire_options := ["Soft", "Medium", "Hard", "Inter", "Wet"]
 	var current_tire := str(driver_data.get("tire_compound", ""))
-	if is_pre_race_session:
+	if is_red_flag_strategy:
+		current_tire = str(driver_data.get("red_flag_tire_compound", current_tire))
+	elif is_pre_race_session:
 		current_tire = str(driver_data.get("tire_compound", current_tire))
 	elif is_race_session:
 		current_tire = str(driver_data.get("pit_requested_tire", ""))
@@ -408,9 +414,11 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	opt_tire.select(current_tire_index)
 	opt_tire.item_selected.connect(func(selected_index: int):
 		if selected_index < tire_options.size():
-			if is_pre_race_session:
-				return
-			if is_race_session:
+			if is_red_flag_strategy:
+				driver_data["red_flag_tire_compound"] = tire_options[selected_index]
+			elif is_pre_race_session:
+				driver_data["tire_compound"] = tire_options[selected_index]
+			elif is_race_session:
 				driver_data["planned_pit_tire"] = tire_options[selected_index]
 			else:
 				driver_data["tire_compound"] = tire_options[selected_index]
@@ -425,8 +433,6 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	var current_style := str(driver_data.get("estilo", "Normal"))
 	opt_pace.select(0 if current_style == "Conservador" else (2 if current_style in ["Agressivo", "Ataque Máximo"] else 1))
 	opt_pace.item_selected.connect(func(selected_index: int):
-		if is_pre_race_session:
-			return
 		var paces := ["Conservador", "Normal", "Agressivo"]
 		if selected_index < paces.size():
 			driver_data["estilo"] = paces[selected_index]
@@ -437,14 +443,19 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	btn_action.name = "BtnAction_%d" % driver_index
 	var is_on_track = ("Pista" in current_status or "Em pista" in current_status or "Hot Lap" in current_status or "Entrada" in current_status)
 	var pit_requested := bool(driver_data.get("pit_requested", false))
+	var driver_in_pit := bool(driver_data.get("is_in_pit", false))
 	var eliminated := str(driver_data.get("QualiStatus", "")).begins_with("ELIMINADO")
 	if is_race_session:
-		if is_pre_race_session:
+		if is_red_flag_strategy:
+			var strategy_confirmed := bool(driver_data.get("red_flag_strategy_confirmed", false))
+			btn_action.text = "✅ ESTRATÉGIA CONFIRMADA" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+			btn_action.disabled = strategy_confirmed or not is_on_track
+		elif is_pre_race_session:
 			btn_action.text = "✅ CONFIRMAR"
 			btn_action.disabled = false
 		else:
 			btn_action.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
-			btn_action.disabled = not is_on_track or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
+			btn_action.disabled = not is_on_track or driver_in_pit or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
 	else:
 		btn_action.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
 		var waiting_for_quali_release := not is_on_track and (
@@ -481,18 +492,15 @@ func _on_manager_quali_action_pressed(driver_idx: int, tire_sel_idx: int, pace_s
 	var chosen_tire = tires[tire_sel_idx] if tire_sel_idx < tires.size() else "Soft"
 	var chosen_pace = paces[pace_sel_idx] if pace_sel_idx < paces.size() else "Normal"
 	
-	if engine != null and engine.is_quali_done():
-		if engine.current_lap == 0 and not engine.is_race_running:
-			target_driver["tire_compound"] = chosen_tire
-			target_driver["used_compounds"] = [chosen_tire]
-			target_driver["tire_wear"] = 100.0
-			target_driver["stint_lap"] = 0
-			target_driver["planned_pit_tire"] = ""
-			target_driver["estilo"] = chosen_pace
-			_update_ui()
-			return
+	if engine != null and engine.pending_red_flag_modal:
+		engine.confirm_manager_pre_race_strategy(target_name, chosen_tire, chosen_pace)
+		_update_manager_quali_ui_state()
+		_update_red_flag_modal_state()
+		_update_ui()
+	elif engine != null and engine.is_quali_done():
 		if engine.request_manager_pit_stop(target_name, chosen_tire, chosen_pace):
 			_update_manager_quali_ui_state()
+			_update_ui()
 		else:
 			_update_ui()
 	elif engine != null and engine.active_quali_drivers != null:
@@ -597,14 +605,20 @@ func _update_manager_quali_ui_state() -> void:
 		
 		if is_instance_valid(btn):
 			if engine != null and engine.is_quali_done():
-				var pre_race := engine.current_lap == 0 and not engine.is_race_running
+				var red_flag_strategy := engine.pending_red_flag_modal
+				var pre_race := engine.current_lap == 0
 				var pit_requested := bool(driver.get("pit_requested", false))
-				if pre_race:
+				var driver_in_pit := bool(driver.get("is_in_pit", false))
+				if red_flag_strategy:
+					var strategy_confirmed := bool(driver.get("red_flag_strategy_confirmed", false))
+					btn.text = "✅ ESTRATÉGIA CONFIRMADA" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+					btn.disabled = strategy_confirmed or not is_on_track
+				elif pre_race:
 					btn.text = "✅ CONFIRMAR"
 					btn.disabled = false
 				else:
 					btn.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
-					btn.disabled = not is_on_track or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
+					btn.disabled = not is_on_track or driver_in_pit or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
 			else:
 				btn.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
 				var eliminated := str(driver.get("QualiStatus", "")).begins_with("ELIMINADO")
@@ -664,15 +678,41 @@ func _get_user_drivers() -> Array:
 		user_team = str(Database.player_team)
 	if user_team.is_empty():
 		user_team = "Ferrari"
-	var drivers = []
-	if engine != null:
-		var session_drivers: Array = engine.race_drivers if engine.is_quali_done() else engine.active_quali_drivers.duplicate()
-		if not engine.is_quali_done():
-			session_drivers.append_array(engine.eliminated_drivers)
-		for d in session_drivers:
-			if str(d.get("Equipe", "")) == user_team and not drivers.any(func(existing): return str(existing.get("Nome", "")) == str(d.get("Nome", ""))):
-				drivers.append(d)
-	return drivers
+	if engine == null:
+		return []
+
+	var session_drivers: Array = engine.race_drivers if engine.is_quali_done() else engine.active_quali_drivers.duplicate()
+	if not engine.is_quali_done():
+		session_drivers.append_array(engine.eliminated_drivers)
+
+	var drivers_by_name: Dictionary = {}
+	for driver in session_drivers:
+		if str(driver.get("Equipe", "")).strip_edges().to_lower() != user_team.strip_edges().to_lower():
+			continue
+		var driver_name := str(driver.get("Nome", driver.get("nome", ""))).strip_edges().to_lower()
+		if not driver_name.is_empty():
+			drivers_by_name[driver_name] = driver
+
+	var ordered_drivers: Array = []
+	var roster: Array = Database.user_team.get("pilotos", [])
+	for roster_driver in roster:
+		if not roster_driver is Dictionary:
+			continue
+		var driver_name := str(roster_driver.get("Nome", roster_driver.get("nome", ""))).strip_edges().to_lower()
+		if drivers_by_name.has(driver_name):
+			ordered_drivers.append(drivers_by_name[driver_name])
+			drivers_by_name.erase(driver_name)
+
+	if ordered_drivers.is_empty():
+		for driver in session_drivers:
+			if str(driver.get("Equipe", "")).strip_edges().to_lower() == user_team.strip_edges().to_lower():
+				ordered_drivers.append(driver)
+	else:
+		var remaining_names: Array = drivers_by_name.keys()
+		remaining_names.sort()
+		for driver_name in remaining_names:
+			ordered_drivers.append(drivers_by_name[driver_name])
+	return ordered_drivers
 
 func _get_manager_team_color() -> Color:
 	var raw_color: Variant = Database.user_team.get("cor", Database.user_team.get("Cor", null))
@@ -739,8 +779,8 @@ func _on_btn_start_pressed() -> void:
 		return
 
 	if engine != null and engine.pending_red_flag_modal:
-		engine.resolve_red_flag_restart()
-		race_lap_elapsed = 0.0
+		_show_red_flag_modal()
+		return
 
 	simulation_running = not simulation_running
 	if simulation_running and engine != null and engine.is_quali_done():
@@ -752,11 +792,75 @@ func _update_simulation_button() -> void:
 		return
 	if engine.is_finished():
 		btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
+	elif engine.pending_red_flag_modal:
+		btn_start.text = "🔴 ESTRATÉGIA DE RELARGADA"
 	else:
 		btn_start.text = "⏸️ PAUSAR" if simulation_running else "▶ CONTINUAR"
 
 func _show_red_flag_modal() -> void:
-	pass
+	if engine == null or not engine.pending_red_flag_modal:
+		return
+	if is_instance_valid(red_flag_window):
+		return
+
+	simulation_running = false
+	_update_simulation_button()
+
+	red_flag_window = Window.new()
+	red_flag_window.name = "RedFlagStrategyWindow"
+	red_flag_window.title = "🔴 Bandeira vermelha"
+	red_flag_window.size = Vector2i(760, 560)
+	red_flag_window.exclusive = true
+	red_flag_window.close_requested.connect(func():
+		red_flag_window.hide()
+		red_flag_window.queue_free()
+		red_flag_window = null
+	)
+	add_child(red_flag_window)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_bottom", 14)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 12)
+
+	var title := Label.new()
+	title.text = "Corrida paralisada. Confirme a estratégia dos seus pilotos para a relargada."
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.add_theme_font_size_override("font_size", 16)
+	content.add_child(title)
+	_build_manager_qualifying_controls(content)
+
+	var restart_button := Button.new()
+	restart_button.name = "BtnRedFlagRestart"
+	restart_button.text = "CONFIRMAR E RELARGAR"
+	restart_button.custom_minimum_size.y = 42
+	restart_button.pressed.connect(func():
+		if not engine.resolve_red_flag_restart():
+			return
+		red_flag_window.hide()
+		red_flag_window.queue_free()
+		red_flag_window = null
+		race_lap_elapsed = 0.0
+		_update_simulation_button()
+		_update_ui()
+	)
+	content.add_child(restart_button)
+
+	margin.add_child(content)
+	red_flag_window.add_child(margin)
+	red_flag_window.popup_centered()
+	_update_red_flag_modal_state()
+
+func _update_red_flag_modal_state() -> void:
+	if not is_instance_valid(red_flag_window) or engine == null:
+		return
+	var restart_button := red_flag_window.find_child("BtnRedFlagRestart", true, false) as Button
+	if is_instance_valid(restart_button):
+		restart_button.disabled = not engine.are_manager_red_flag_strategies_confirmed()
 
 func _update_ui() -> void:
 	# #region agent log
@@ -860,7 +964,7 @@ func _update_ui() -> void:
 
 	if is_mgr and is_instance_valid(manager_panel_container):
 		var race_session := engine.is_quali_done()
-		var pre_race_session := race_session and engine.current_lap == 0 and not engine.is_race_running
+		var pre_race_session := race_session and engine.current_lap == 0
 		if manager_panel_container.get_child_count() == 0 \
 		or manager_controls_race_session != race_session \
 		or manager_controls_pre_race_session != pre_race_session:

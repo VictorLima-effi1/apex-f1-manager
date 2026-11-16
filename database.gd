@@ -147,6 +147,7 @@ func update_team_weight(weight_delta: float) -> void:
 
 var team_season_expenses: Dictionary = {}
 var team_budget_caps: Dictionary = {}
+var last_financial_settlement_year: int = -1
 
 # --- SISTEMA DE MÚLTIPLOS SLOTS DE SAVE (1, 2 e 3) ---
 const MAX_SAVE_SLOTS: int = 3
@@ -379,6 +380,9 @@ func _recalculate_team_handicaps_and_reset_caps() -> void:
 		var real_team = _get_team_by_name(team_name)
 		if not real_team.is_empty():
 			real_team["LastSeasonRank"] = rank
+			var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+			if not player_team_name.is_empty() and player_team_name.to_lower() == team_name.strip_edges().to_lower():
+				user_team["LastSeasonRank"] = rank
 		
 		var bonus_ratio = float(i) / float(max(1, total_teams - 1))
 		var bonus_amount = 20_000_000.0 * bonus_ratio
@@ -389,16 +393,32 @@ func _recalculate_team_handicaps_and_reset_caps() -> void:
 	for t in teams:
 		team_season_expenses[t["Nome"]] = 0.0
 
-# --- REGRA DE OSCILAÇÃO ANUAL DE DESEMPENHO (-5% a +2%) ---
-func _apply_annual_team_performance_shift() -> void:
-	for t in teams:
-		for param in ["Motor", "Aero", "Chassi", "Confiabilidade"]:
-			var current_val = int(t.get(param, 75))
-			var shift = randi_range(-5, 2)
-			var new_val = clamp(current_val + shift, 50, 99)
-			t[param] = new_val
-			
-	add_news_event("🏎️ DESENVOLVIMENTO DE INVERNO: As equipes reajustaram seus carros para o novo ano (-5% a +2%).")
+func record_gp_salary_expenses(results: Array) -> void:
+	var race_count := maxi(1, tracks.size())
+	for result_value in results:
+		if not result_value is Dictionary:
+			continue
+		var result: Dictionary = result_value
+		var team_name := str(result.get("Equipe", result.get("equipe", ""))).strip_edges()
+		if team_name.is_empty():
+			continue
+		var salary_millions := float(result.get("salario", 0.0))
+		if salary_millions <= 0.0:
+			var driver := _get_driver_by_name(str(result.get("Nome", result.get("nome", ""))))
+			salary_millions = float(driver.get("salario", 0.0))
+		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) \
+			+ maxf(0.0, salary_millions) * 1_000_000.0 / float(race_count)
+
+func get_team_cost_cap_penalty(team_name: String) -> int:
+	var cap := get_team_budget_cap(team_name)
+	if cap <= 0.0:
+		return 0
+	var excess := float(team_season_expenses.get(team_name, 0.0)) - cap
+	if excess <= 0.0:
+		return 0
+	var excess_percent := int(floor((excess / cap) * 100.0 + 0.000001))
+	var available_points := maxi(0, int(_get_team_by_name(team_name).get("Pontos", 0)))
+	return mini(available_points, excess_percent * 2)
 
 func apply_race_points(standings: Array) -> void:
 	for i in range(min(10, standings.size())):
@@ -418,6 +438,9 @@ func apply_race_points(standings: Array) -> void:
 		for t in teams:
 			if str(t.get("Nome", "")).strip_edges().to_lower() == team_name.strip_edges().to_lower():
 				t["Pontos"] = int(t.get("Pontos", 0)) + pts
+				var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+				if not player_team_name.is_empty() and player_team_name.to_lower() == team_name.strip_edges().to_lower():
+					user_team["Pontos"] = int(t["Pontos"])
 				break
 
 func load_drivers_from_json() -> void:
@@ -581,7 +604,10 @@ func process_post_race_morale_and_respect(standings: Array) -> void:
 	for d in standings:
 		var driver_name = str(d.get("Nome", d.get("nome", "")))
 		var pos = int(d.get("pos", 22))
-		var is_dnf = bool(d.get("dnf", false)) or bool(d.get("abandonou", false))
+		var is_dnf := _check_is_dnf(d)
+		var result_team_name := str(d.get("Equipe", d.get("equipe", ""))).strip_edges()
+		if is_dnf:
+			_apply_dnf_financial_penalty(result_team_name)
 		
 		var real_driver = _get_driver_by_name(driver_name)
 		if real_driver.is_empty():
@@ -595,7 +621,6 @@ func process_post_race_morale_and_respect(standings: Array) -> void:
 			morale_change -= 3.0
 			real_driver["corridas_sem_dnf_ajuda"] = 0
 			real_driver["corridas_sem_abandonar"] = 0
-			_apply_dnf_financial_penalty(team_name)
 		else:
 			var streak_ajuda = int(real_driver.get("corridas_sem_dnf_ajuda", 0)) + 1
 			real_driver["corridas_sem_dnf_ajuda"] = streak_ajuda
@@ -676,6 +701,7 @@ func record_completed_race(results: Array, track_name: String = "") -> void:
 	if race_finished or results.is_empty():
 		return
 
+	record_gp_salary_expenses(results)
 	var podium: Array = []
 	var podium_teams: Array = []
 	var winner_team := ""
@@ -708,8 +734,9 @@ func record_completed_race(results: Array, track_name: String = "") -> void:
 			if team_name != "Free Agent" and team_name != "Aposentado" and not team_name.is_empty():
 				db_driver["races_with_team"] = int(db_driver.get("races_with_team", 0)) + 1
 
-	_process_race_sponsor_payments(results)
 	apply_race_points(results)
+	_process_race_sponsor_payments(results)
+	_sync_user_team_driver_season_stats()
 	record_standings_history_after_gp()
 	record_gp_constructors_snapshot()
 
@@ -762,6 +789,28 @@ func _process_race_sponsor_payments(results: Array) -> void:
 	var current_cash := float(user_team.get("orcamento", user_team.get("budget", 0.0)))
 	user_team["orcamento"] = current_cash + race_income
 	register_financial_transaction("patrocinios_acumulados", race_income)
+
+func _sync_user_team_driver_season_stats() -> void:
+	if user_team.is_empty():
+		return
+
+	var roster: Array = user_team.get("pilotos", [])
+	for roster_value in roster:
+		if not roster_value is Dictionary:
+			continue
+		var roster_driver: Dictionary = roster_value
+		var driver_name := str(roster_driver.get("Nome", roster_driver.get("nome", "")))
+		var season_driver := _get_driver_by_name(driver_name)
+		if season_driver.is_empty():
+			continue
+
+		for stat in ["Pontos", "VitoriasAno", "PodiosAno", "DNFsAno", "PosicoesGanhaAno", "PosicoesPerdidasAno"]:
+			roster_driver[stat] = int(season_driver.get(stat, 0))
+		roster_driver["pontos"] = int(season_driver.get("Pontos", 0))
+		roster_driver["vitorias"] = int(season_driver.get("VitoriasAno", 0))
+		roster_driver["podios"] = int(season_driver.get("PodiosAno", 0))
+		roster_driver["AnosContrato"] = int(season_driver.get("AnosContrato", 0))
+		roster_driver["contrato_anos"] = int(season_driver.get("AnosContrato", 0))
 
 # =============================================================
 # VARIÁVEIS DE CONTROLE DE SIMULAÇÃO EM LOTE
@@ -883,15 +932,6 @@ func _is_engine_done(engine) -> bool:
 	if engine == null: return true
 	if engine.has_method("is_finished"): return engine.is_finished()
 	return str(engine.get("race_state")).to_upper() == "FINISHED" or str(engine.get("race_state")).to_upper() == "RED_FLAG"
-
-func _reset_team_development_cycle() -> void:
-	for t in teams:
-		t["Motor"] = randi_range(70, 88)
-		t["Aero"] = randi_range(70, 88)
-		t["Chassi"] = randi_range(70, 88)
-		t["Confiabilidade"] = randi_range(70, 88)
-		
-	add_news_event("⚙️ NOVO REGULAMENTO TÉCNICO! O desenvolvimento das equipes foi resetado para o novo ciclo!")
 
 func can_team_sign_driver(team_name: String, driver_power_index: float) -> bool:
 	var team = _get_team_by_name(team_name)
@@ -1176,6 +1216,7 @@ func process_mid_season_renewals() -> void:
 					log_transfer_event(msg, "Renovação")
 
 func end_season_and_advance_year() -> void:
+	process_end_of_season_finances(teams)
 	full_season_archive[current_year] = race_history.duplicate(true)
 	sanitize_unique_drivers()
 	
@@ -1220,12 +1261,6 @@ func end_season_and_advance_year() -> void:
 	
 	_recalculate_team_handicaps_and_reset_caps()
 	
-	# Aplica a oscilação anual (-5% a +2%) ou reset por regulamento
-	if (current_year - 2026) % 4 == 0:
-		_reset_team_development_cycle()
-	else:
-		_apply_annual_team_performance_shift()
-	
 	_process_driver_evolution()
 	
 	for d in drivers:
@@ -1247,6 +1282,13 @@ func end_season_and_advance_year() -> void:
 		
 	for t in teams:
 		t["Pontos"] = 0
+		var team_name := str(t.get("Nome", t.get("nome", ""))).strip_edges()
+		var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+		if not player_team_name.is_empty() and team_name.to_lower() == player_team_name.to_lower():
+			user_team["Pontos"] = 0
+			user_team["pts"] = 0
+
+	_sync_user_team_driver_season_stats()
 		
 	_process_ai_transfer_market()
 	ensure_full_grid()
@@ -1556,6 +1598,7 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"transfer_history": transfer_history,
 		"dashboard_layout": dashboard_layout,
 		"team_season_expenses": team_season_expenses,
+		"last_financial_settlement_year": last_financial_settlement_year,
 		"full_season_archive": full_season_archive
 	}
 	
@@ -1643,6 +1686,7 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 			transfer_history = data.get("transfer_history", transfer_history)
 			dashboard_layout = data.get("dashboard_layout", dashboard_layout)
 			team_season_expenses = data.get("team_season_expenses", team_season_expenses)
+			last_financial_settlement_year = int(data.get("last_financial_settlement_year", -1))
 			full_season_archive = data.get("full_season_archive", full_season_archive)
 			active_engine = null
 			sanitize_unique_drivers()
@@ -1690,6 +1734,7 @@ func reset_database(mode: String = "") -> void:
 	}
 	team_budget_caps.clear()
 	team_season_expenses.clear()
+	last_financial_settlement_year = -1
 	init_season_budget_cap()
 	load_drivers_from_json()
 	ensure_full_grid()
@@ -2039,6 +2084,9 @@ func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races
 	var year_offset := current_year * tracks_per_season + current_gp
 
 	user_team["orcamento"] = balance - cost_m
+	var team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+	if not team_name.is_empty():
+		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + PLAYER_RD_COST
 	slots[free_slot] = {
 		"atributo": attribute,
 		"valor": amount,
@@ -2121,14 +2169,33 @@ func inject_team_capital(amount_millions: float) -> bool:
 
 # Função para calcular a premiação de fim de temporada com base no ranking dos Construtores
 func calculate_season_prize_money(rank_position: int) -> float:
-	# 1º Lugar = $100M | 12º Lugar = $45M (Reduz $5M por posição)
-	var pos = clamp(rank_position, 1, 12)
-	return 100.0 - ((pos - 1) * 5.0)
+	var pos := clampi(rank_position, 1, 12)
+	return 140.0 - ((pos - 1) * 9.0)
 
 # Processa os lucros e reinicia os gastos no Fim da Temporada
 func process_end_of_season_finances(constructors_standings: Array) -> void:
-	for idx in range(constructors_standings.size()):
-		var team = constructors_standings[idx]
+	if last_financial_settlement_year == current_year:
+		return
+
+	var standings := constructors_standings.duplicate()
+	if standings.is_empty():
+		standings = teams.duplicate()
+
+	for team_value in standings:
+		if not team_value is Dictionary:
+			continue
+		var team: Dictionary = team_value
+		var team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
+		team["Pontos"] = maxi(0, int(team.get("Pontos", 0)) - get_team_cost_cap_penalty(team_name))
+
+	standings.sort_custom(func(a, b):
+		return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0))
+	)
+
+	for idx in range(standings.size()):
+		if not standings[idx] is Dictionary:
+			continue
+		var team: Dictionary = standings[idx]
 		var pos = idx + 1
 		
 		# 1. Calcula a Premiação de Construtores ($100M a $45M)
@@ -2142,33 +2209,53 @@ func process_end_of_season_finances(constructors_standings: Array) -> void:
 			sponsor_income = 70.0  # Midfield
 		
 		# Se for a equipe do jogador, adiciona a receita de patrocínios contratados
-		if team.get("Nome") == user_team.get("nome"):
+		var team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
+		var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+		var is_player_team := not player_team_name.is_empty() and team_name.to_lower() == player_team_name.to_lower()
+		if is_player_team:
 			sponsor_income = 0.0
-			for sp in user_team.get("patrocinadores", []):
-				sponsor_income += sp.get("valor_temporada", 0.0)
+			for sponsor in user_team.get("patrocinadores", []):
+				if sponsor is Dictionary:
+					sponsor_income += float(sponsor.get("valor_temporada", 0.0))
 		
 		# Adiciona o dinheiro novo ao Caixa Fixo da Equipe
-		var total_income = prize_money + sponsor_income
-		team["orcamento"] = team.get("orcamento", 50.0) + total_income
+		var current_cash := float(user_team.get("orcamento", 50.0)) if is_player_team else float(team.get("orcamento", team.get("Orcamento", 50.0)))
+		team["orcamento"] = current_cash + prize_money + sponsor_income
+		if is_player_team:
+			user_team["orcamento"] = team["orcamento"]
 		
 		# Zera os gastos da temporada passada para o novo Teto de Gastos de $135M
-		team_season_expenses[str(team.get("Nome"))] = 0.0
+		team_season_expenses[team_name] = 0.0
+
+	last_financial_settlement_year = current_year
 
 # Salva as melhorias desenvolvidas na pré-temporada e avança para a temporada regular
 func end_preseason() -> void:
 	if not user_team.is_empty() and user_team.has("preseason_developments"):
 		var dev = user_team["preseason_developments"]
-		user_team["potencia"] = float(user_team.get("potencia", 75.0)) + float(dev.get("potencia", 0.0))
-		user_team["aero"] = float(user_team.get("aero", 75.0)) + float(dev.get("aero", 0.0))
-		user_team["chassi"] = float(user_team.get("chassi", 75.0)) + float(dev.get("chassi", 0.0))
-		user_team["confiabilidade"] = float(user_team.get("confiabilidade", 75.0)) + float(dev.get("confiabilidade", 0.0))
+		var current_power := float(user_team.get("Motor", user_team.get("potencia", 75.0)))
+		var current_aero := float(user_team.get("Aero", user_team.get("aero", 75.0)))
+		var current_chassis := float(user_team.get("Chassi", 75.0))
+		var chassis_data: Variant = user_team.get("chassi", {})
+		if chassis_data is Dictionary:
+			current_chassis = maxf(current_chassis, float(chassis_data.get("chassi", chassis_data.get("qualidade", current_chassis))))
+		var current_reliability := float(user_team.get("Confiabilidade", user_team.get("confiabilidade", 75.0)))
+		user_team["Motor"] = maxf(current_power, current_power + float(dev.get("potencia", 0.0)))
+		user_team["Aero"] = maxf(current_aero, current_aero + float(dev.get("aero", 0.0)))
+		user_team["Chassi"] = maxf(current_chassis, current_chassis + float(dev.get("chassi", 0.0)))
+		user_team["Confiabilidade"] = maxf(current_reliability, current_reliability + float(dev.get("confiabilidade", 0.0)))
+		user_team["potencia"] = user_team["Motor"]
+		user_team["aero"] = user_team["Aero"]
+		user_team["confiabilidade"] = user_team["Confiabilidade"]
 		user_team["peso"] = max(768.0, float(user_team.get("peso", 778.0)) - float(dev.get("peso_reduction", 0.0)))
 	
 	current_session = "regular_season"
+	current_view = "dashboard"
 	var team_name := str(user_team.get("nome", user_team.get("Nome", "")))
 	if not team_name.is_empty():
 		for i in range(teams.size()):
-			if str(teams[i].get("Nome", teams[i].get("nome", ""))) == team_name:
+			var stored_team_name := str(teams[i].get("Nome", teams[i].get("nome", ""))).strip_edges()
+			if stored_team_name.to_lower() == team_name.strip_edges().to_lower():
 				teams[i] = user_team.duplicate(true)
 				break
 	ensure_full_grid()

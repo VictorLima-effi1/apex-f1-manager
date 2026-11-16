@@ -59,6 +59,9 @@ var title_label: Label
 var budget_label: Label
 var is_manager_offseason: bool = false
 var offseason_original_team_name: String = ""
+var offseason_original_engine: Dictionary = {}
+var offseason_original_chassis: Dictionary = {}
+var team_build_cost_recorded: bool = false
 
 func _ready() -> void:
 	is_manager_offseason = Database.game_mode == "manager" and Database.current_session == "manager_offseason"
@@ -70,6 +73,43 @@ func _ready() -> void:
 		var saved_team_color: Variant = Database.user_team.get("cor", team_color)
 		if saved_team_color is Color:
 			team_color = saved_team_color
+
+		var saved_engine: Variant = Database.user_team.get("motor", {})
+		if saved_engine is Dictionary:
+			selected_engine = saved_engine.duplicate(true)
+		elif saved_engine is String and Database.ENGINE_DATA.has(saved_engine):
+			selected_engine = Database.ENGINE_DATA[saved_engine].duplicate(true)
+			selected_engine["nome"] = saved_engine
+		offseason_original_engine = selected_engine.duplicate(true)
+
+		var saved_chassis: Variant = Database.user_team.get("chassi", {})
+		if saved_chassis is Dictionary:
+			selected_chassis = saved_chassis.duplicate(true)
+		elif saved_chassis is String and Database.CHASSIS_DATA.has(saved_chassis):
+			selected_chassis = Database.CHASSIS_DATA[saved_chassis].duplicate(true)
+			selected_chassis["nome"] = saved_chassis
+		offseason_original_chassis = selected_chassis.duplicate(true)
+		var saved_sponsors: Variant = Database.user_team.get("patrocinadores", [])
+		if saved_sponsors is Array:
+			selected_sponsors = saved_sponsors.duplicate(true)
+
+		selected_drivers.clear()
+		var existing_roster: Array = Database.user_team.get("pilotos", [])
+		for roster_value in existing_roster:
+			if not roster_value is Dictionary or selected_drivers.size() >= 2:
+				continue
+			var driver_name := str(roster_value.get("Nome", roster_value.get("nome", "")))
+			var contracted_driver := Database._get_driver_by_name(driver_name)
+			if contracted_driver.is_empty():
+				continue
+			var current_team := str(contracted_driver.get("Equipe", contracted_driver.get("equipe", ""))).strip_edges()
+			var contract_years := int(contracted_driver.get("AnosContrato", contracted_driver.get("contrato_anos", 0)))
+			if current_team.to_lower() != offseason_original_team_name.strip_edges().to_lower() or contract_years <= 0:
+				continue
+			var selection := contracted_driver.duplicate(true)
+			selection["anos_contratados"] = contract_years
+			selection["anos_pedidos"] = contract_years
+			selected_drivers.append(selection)
 
 	# Força o elemento a ocupar 100% da janela e ficar exatamente no centro
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -734,17 +774,26 @@ func _recalculate_budget() -> void:
 	for sp in selected_sponsors:
 		sponsor_bonus += sp.get("valor_temporada", 0.0)
 		
-	var total_initial_funds = base_starting_budget + sponsor_bonus
+	var total_initial_funds = base_starting_budget + (0.0 if is_manager_offseason else sponsor_bonus)
 	
 	# 2. Subtrai os custos de contratação (Pilotos, Motor e Chassi)
 	var drivers_cost = 0.0
 	for d in selected_drivers:
 		drivers_cost += d.get("salario", 0.0)
 		
-	var engine_cost = selected_engine.get("preco", 0.0)
-	var chassis_cost = selected_chassis.get("preco", 0.0)
+	var engine_cost := float(selected_engine.get("preco", 0.0))
+	var chassis_cost := float(selected_chassis.get("preco", 0.0))
+	if is_manager_offseason and not _component_selection_changed(selected_engine, offseason_original_engine):
+		engine_cost = 0.0
+	if is_manager_offseason and not _component_selection_changed(selected_chassis, offseason_original_chassis):
+		chassis_cost = 0.0
 	
 	remaining_budget = total_initial_funds - (drivers_cost + engine_cost + chassis_cost)
+
+func _component_selection_changed(selected: Dictionary, original: Dictionary) -> bool:
+	if original.is_empty():
+		return not selected.is_empty()
+	return str(selected.get("nome", "")).strip_edges().to_lower() != str(original.get("nome", "")).strip_edges().to_lower()
 
 ## Atualiza os textos de orçamento e a mensagem dos patrocinadores contratados
 func atualizar_interface_criacao() -> void:
@@ -1912,6 +1961,19 @@ func _open_custom_chassis_builder_modal() -> void:
 
 func _save_team_to_database() -> void:
 	var updated_team: Dictionary = Database.user_team.duplicate(true) if is_manager_offseason else {}
+	if not is_manager_offseason and Database.user_team.get("financas_detalhadas", {}) is Dictionary:
+		updated_team["financas_detalhadas"] = Database.user_team.get("financas_detalhadas", {}).duplicate(true)
+	var engine_power := float(selected_engine.get("potencia", 88.0))
+	var chassis_rating := float(selected_chassis.get("chassi", selected_chassis.get("qualidade", updated_team.get("Chassi", 85.0))))
+	var car_aero := float(selected_chassis.get("aero", 85.0))
+	var car_reliability := float((float(selected_engine.get("confiabilidade", 85.0)) + float(selected_chassis.get("confiabilidade", 85.0))) / 2.0)
+	var car_weight := float(selected_chassis.get("peso", 778.0))
+	if is_manager_offseason:
+		engine_power = maxf(engine_power, float(updated_team.get("Motor", updated_team.get("potencia", engine_power))))
+		chassis_rating = maxf(chassis_rating, float(updated_team.get("Chassi", chassis_rating)))
+		car_aero = maxf(car_aero, float(updated_team.get("Aero", updated_team.get("aero", car_aero))))
+		car_reliability = maxf(car_reliability, float(updated_team.get("Confiabilidade", updated_team.get("confiabilidade", car_reliability))))
+		car_weight = maxf(768.0, minf(car_weight, float(updated_team.get("peso", car_weight))))
 	updated_team.merge({
 		"nome": team_name,
 		"chefe": boss_name,
@@ -1920,15 +1982,29 @@ func _save_team_to_database() -> void:
 		"motor": selected_engine,
 		"chassi": selected_chassis,
 		"patrocinadores": selected_sponsors, # Salva os 3 patrocinadores
-		"aero": selected_chassis.get("aero", 85),
-		"potencia": selected_engine.get("potencia", 88),
-		"confiabilidade": int((selected_engine.get("confiabilidade", 85) + selected_chassis.get("confiabilidade", 85)) / 2.0),
-		"peso": selected_chassis.get("peso", 778.0),
+		"Motor": engine_power,
+		"Aero": car_aero,
+		"Chassi": chassis_rating,
+		"Confiabilidade": car_reliability,
+		"aero": car_aero,
+		"potencia": engine_power,
+		"confiabilidade": car_reliability,
+		"peso": car_weight,
 		"orcamento": remaining_budget, # Caixa Real acumulado
 		"gastos_temporada": 0.0,      # Inicia zerado para o Teto de $135M
 		"teto_gastos": 135.0          # Regulamento Fixo de $135M
 	}, true)
 	Database.user_team = updated_team
+	if not team_build_cost_recorded:
+		var build_cost_millions := 0.0
+		if not is_manager_offseason or _component_selection_changed(selected_engine, offseason_original_engine):
+			build_cost_millions += float(selected_engine.get("preco", 0.0))
+		if not is_manager_offseason or _component_selection_changed(selected_chassis, offseason_original_chassis):
+			build_cost_millions += float(selected_chassis.get("preco", 0.0))
+		var team_name_key := str(Database.user_team.get("nome", Database.user_team.get("Nome", ""))).strip_edges()
+		if not team_name_key.is_empty():
+			Database.team_season_expenses[team_name_key] = float(Database.team_season_expenses.get(team_name_key, 0.0)) + build_cost_millions * 1_000_000.0
+		team_build_cost_recorded = true
 
 # =============================================================
 # ETAPA 3: TESTES DE INVERNO
@@ -2637,7 +2713,7 @@ func _open_sponsors_selection_modal() -> void:
 	list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_vbox.add_theme_constant_override("separation", 10)
 	
-	var user_sponsors: Array = Database.user_team.get("patrocinadores", selected_sponsors)
+	var user_sponsors: Array = selected_sponsors
 	
 	for sp in Database.available_sponsors:
 		var item_card = PanelContainer.new()
@@ -2972,8 +3048,8 @@ func _simulate_automatic_lap_tick(delta_simulated: float) -> void:
 							
 					total_player_laps_completed += 1
 					laps_since_last_upgrade += 1
-					if laps_since_last_upgrade >= 15:
-						laps_since_last_upgrade -= 15
+					if laps_since_last_upgrade >= 80:
+						laps_since_last_upgrade -= 80
 						_apply_random_testing_upgrade(team_name)
 				else:
 					if randf() < 0.15:
@@ -3059,6 +3135,9 @@ func _reset_test_grid_for_new_day() -> void:
 
 # Sorteia um parâmetro para evoluir a equipe durante os testes.
 func _apply_random_testing_upgrade(target_team_name: String) -> void:
+	if Database.game_mode == "manager" and target_team_name.strip_edges().to_lower() == team_name.strip_edges().to_lower():
+		return
+
 	if not team_testing_upgrades.has(target_team_name):
 		team_testing_upgrades[target_team_name] = {"Motor": 0.0, "Aero": 0.0, "Chassi": 0.0, "Confiabilidade": 0.0, "Peso": 0.0}
 		
