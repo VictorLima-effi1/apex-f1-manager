@@ -104,7 +104,8 @@ func _ready() -> void:
 				continue
 			var current_team := str(contracted_driver.get("Equipe", contracted_driver.get("equipe", ""))).strip_edges()
 			var contract_years := int(contracted_driver.get("AnosContrato", contracted_driver.get("contrato_anos", 0)))
-			if current_team.to_lower() != offseason_original_team_name.strip_edges().to_lower() or contract_years <= 0:
+			if current_team.to_lower() != offseason_original_team_name.strip_edges().to_lower() \
+			or contract_years <= 0 or bool(contracted_driver.get("Aposentado", false)):
 				continue
 			var selection := contracted_driver.duplicate(true)
 			selection["anos_contratados"] = contract_years
@@ -911,6 +912,9 @@ func _open_driver_modal() -> void:
 	)
 	
 	for d in all_drivers:
+		if bool(d.get("Aposentado", false)) \
+		or str(d.get("Equipe", d.get("equipe", ""))).strip_edges() == "Aposentado":
+			continue
 		var d_name = d.get("Nome", d.get("nome", "Piloto"))
 		var d_age = int(d.get("Idade", d.get("idade", 25)))
 		var d_ovr = int(d.get("Habilidade", d.get("Overall", 75)))
@@ -2296,7 +2300,7 @@ func _init_test_grid() -> void:
 	var all_db = Database.drivers if "drivers" in Database else []
 	for d in all_db:
 		var d_name = d.get("Nome", d.get("nome", ""))
-		var d_team = d.get("Equipe", d.get("equipe", "Free Agent"))
+		var d_team := str(d.get("Equipe", d.get("equipe", "Free Agent"))).strip_edges()
 		
 		var already = false
 		for p in test_grid_data:
@@ -2304,7 +2308,9 @@ func _init_test_grid() -> void:
 				already = true
 				break
 				
-		if not already and d_team != team_name and d_team != "" and d_team != "Free Agent":
+		if not already and d_team != team_name and not d_team.is_empty() \
+		and d_team != "Free Agent" and d_team != "Aposentado" \
+		and not bool(d.get("Aposentado", false)):
 			# Busca o peso registrado para a equipe da IA no banco de dados
 			var ai_team_weight = 780.0
 			if "teams" in Database:
@@ -3340,51 +3346,41 @@ func _apply_final_testing_upgrades_to_database() -> void:
 
 # Aplica os bônus em um dicionário de equipe tratando os tipos com segurança
 func _apply_upgrades_to_team_dict(team_dict: Dictionary, upg: Dictionary) -> void:
-	_safe_add_team_attribute(team_dict, "potencia", float(upg.get("Motor", 0.0)))
-	_safe_add_team_attribute(team_dict, "aero", float(upg.get("Aero", 0.0)))
-	_safe_add_team_attribute(team_dict, "chassi", float(upg.get("Chassi", 0.0)))
-	_safe_add_team_attribute(team_dict, "confiabilidade", float(upg.get("Confiabilidade", 0.0)))
-	# Para o peso, a evolução de P&D reduz o peso do carro
-	_safe_add_team_attribute(team_dict, "peso", -float(upg.get("Peso", 0.0)), true)
+	var motor_gain := float(upg.get("Motor", 0.0))
+	if motor_gain > 0.0:
+		var motor_value := minf(99.0, float(team_dict.get("Motor", team_dict.get("potencia", 80.0))) + motor_gain)
+		team_dict["Motor"] = motor_value
+		team_dict["potencia"] = motor_value
 
+	var aero_gain := float(upg.get("Aero", 0.0))
+	if aero_gain > 0.0:
+		var aero_value := minf(99.0, float(team_dict.get("Aero", team_dict.get("aero", 80.0))) + aero_gain)
+		team_dict["Aero"] = aero_value
+		team_dict["aero"] = aero_value
 
-# Função auxiliar que evita o erro "Invalid operands 'Dictionary' and 'float'"
-func _safe_add_team_attribute(team_dict: Dictionary, attr_name: String, amount: float, is_weight: bool = false) -> void:
-	if is_zero_approx(amount): return
-	
-	if team_dict.has(attr_name):
-		var current_val = team_dict[attr_name]
-		
-		# Se for número (float ou int), soma diretamente
-		if typeof(current_val) == TYPE_FLOAT or typeof(current_val) == TYPE_INT:
-			if is_weight:
-				team_dict[attr_name] = max(768.0, float(current_val) + amount)
-			else:
-				team_dict[attr_name] = float(current_val) + amount
-				
-		# Se for Dicionário (como o objeto do Chassi projetado)
-		elif typeof(current_val) == TYPE_DICTIONARY:
-			var sub_dict = current_val as Dictionary
-			if sub_dict.has(attr_name):
-				if is_weight:
-					sub_dict[attr_name] = max(768.0, float(sub_dict[attr_name]) + amount)
-				else:
-					sub_dict[attr_name] = float(sub_dict[attr_name]) + amount
-			elif sub_dict.has("qualidade"):
-				sub_dict["qualidade"] = float(sub_dict["qualidade"]) + amount
-			elif sub_dict.has("desempenho"):
-				sub_dict["desempenho"] = float(sub_dict["desempenho"]) + amount
-				
-			# Salva um valor numérico direto na raiz para rápida consulta dos sistemas de corrida
-			var flat_key = attr_name + "_val"
-			var current_flat = float(team_dict.get(flat_key, 85.0))
-			team_dict[flat_key] = max(768.0, current_flat + amount) if is_weight else current_flat + amount
-	else:
-		# Se a chave não existir no dicionário, inicializa com o valor base
-		if is_weight:
-			team_dict[attr_name] = max(768.0, 778.0 + amount)
-		else:
-			team_dict[attr_name] = 85.0 + amount
+	var chassis_gain := float(upg.get("Chassi", 0.0))
+	if chassis_gain > 0.0:
+		var chassis_data: Variant = team_dict.get("chassi", {})
+		var chassis_base := float(team_dict.get("Chassi", 80.0))
+		if chassis_data is Dictionary:
+			chassis_base = float(team_dict.get("Chassi", chassis_data.get("chassi", chassis_data.get("qualidade", chassis_base))))
+		var chassis_value := minf(99.0, chassis_base + chassis_gain)
+		team_dict["Chassi"] = chassis_value
+		if chassis_data is Dictionary:
+			if chassis_data.has("chassi"):
+				chassis_data["chassi"] = chassis_value
+			elif chassis_data.has("qualidade"):
+				chassis_data["qualidade"] = chassis_value
+
+	var reliability_gain := float(upg.get("Confiabilidade", 0.0))
+	if reliability_gain > 0.0:
+		var reliability_value := minf(99.0, float(team_dict.get("Confiabilidade", team_dict.get("confiabilidade", 80.0))) + reliability_gain)
+		team_dict["Confiabilidade"] = reliability_value
+		team_dict["confiabilidade"] = reliability_value
+
+	var weight_reduction := float(upg.get("Peso", 0.0))
+	if weight_reduction > 0.0:
+		team_dict["peso"] = maxf(768.0, float(team_dict.get("peso", team_dict.get("Peso", 778.0))) - weight_reduction)
 
 
 # Vincula a nova equipe aos pilotos contratados na lista global de pilotos

@@ -416,6 +416,7 @@ func _advance_quali_session() -> void:
 		var pos_idx = 1
 		for d in full_grid:
 			d["grid_start_pos"] = pos_idx
+			d["TempoTotal"] = float(pos_idx - 1) * 0.1
 			_initialize_driver_race_strategy(d, pos_idx)
 			pos_idx += 1
 			
@@ -660,7 +661,7 @@ func process_lap() -> Dictionary:
 			var lap_time = base_track_lap - car_time_bonus - driver_time_bonus + tire_delta + tire_degradation + compound_weather_penalty + morale_time_modifier + pace_time_modifier + randf_range(-0.10, 0.10)
 			
 			if current_lap == 1:
-				lap_time = base_track_lap + randf_range(-0.20, 0.20)
+				lap_time = base_track_lap
 			lap_time *= get_track_condition_lap_time_multiplier()
 			
 			if safety_car_status == "SC":
@@ -694,7 +695,8 @@ func process_lap() -> Dictionary:
 			lap_events.append("💥 ABANDONO: " + d["Nome"] + " (" + d["Equipe"] + ") fora no SETOR " + str(accident_sector) + " na volta " + str(current_lap) + ".")
 
 	# Executa os duelos roda a roda em carros com gap < 0.3s
-	_process_wheel_to_wheel_battles()
+	if current_lap > 1:
+		_process_wheel_to_wheel_battles()
 
 	if accident_this_lap and safety_car_status == "NONE":
 		incident_sector = accident_sector

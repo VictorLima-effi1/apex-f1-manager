@@ -43,7 +43,10 @@ func build_ui() -> void:
 	
 	# 1. Identifica a posição das equipes no Construtores
 	var teams_by_points = Database.teams.duplicate()
-	teams_by_points.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+	teams_by_points.sort_custom(func(a, b):
+		return Database.get_team_championship_points(str(a.get("Nome", ""))) \
+			> Database.get_team_championship_points(str(b.get("Nome", "")))
+	)
 	
 	var team_points_rank: Dictionary = {}
 	for idx in range(teams_by_points.size()):

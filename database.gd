@@ -128,6 +128,8 @@ var custom_team_data: Dictionary = {
 const COST_CAP_LIMIT: float = 135_000_000.0 # $135 Milhões base por temporada
 const UPGRADE_COST: float = 8_500_000.0       # Custo por pacote de evolução (+1 Power Index)
 const PLAYER_RD_COST: float = 8_500_000.0
+const MIN_UPGRADE_RESERVE: float = 3_000_000.0
+const MAX_UPGRADE_RESERVE: float = 15_000_000.0
 
 # Estrutura da equipe do usuário
 var user_team = {
@@ -147,6 +149,7 @@ func update_team_weight(weight_delta: float) -> void:
 
 var team_season_expenses: Dictionary = {}
 var team_budget_caps: Dictionary = {}
+var team_upgrade_reserves: Dictionary = {}
 var last_financial_settlement_year: int = -1
 
 # --- SISTEMA DE MÚLTIPLOS SLOTS DE SAVE (1, 2 e 3) ---
@@ -205,6 +208,7 @@ func init_season_budget_cap() -> void:
 	for team in teams:
 		var team_name = str(team.get("Nome", team.get("nome", "")))
 		team_season_expenses[team_name] = 0.0
+		team_upgrade_reserves.erase(team_name)
 		if not team_budget_caps.has(team_name):
 			var last_rank = int(team.get("LastSeasonRank", 5))
 			var bonus_ratio = float(last_rank - 1) / float(max(1, teams.size() - 1))
@@ -214,11 +218,17 @@ func init_season_budget_cap() -> void:
 func get_team_budget_cap(team_name: String) -> float:
 	return team_budget_caps.get(team_name, COST_CAP_LIMIT)
 
+func get_team_upgrade_reserve(team_name: String) -> float:
+	if not team_upgrade_reserves.has(team_name):
+		team_upgrade_reserves[team_name] = randf_range(MIN_UPGRADE_RESERVE, MAX_UPGRADE_RESERVE)
+	return float(team_upgrade_reserves[team_name])
+
 func purchase_team_upgrade(team_name: String) -> bool:
-	var current_expense = team_season_expenses.get(team_name, 0.0)
-	var max_cap = get_team_budget_cap(team_name)
+	var current_expense: float = float(team_season_expenses.get(team_name, 0.0))
+	var max_cap: float = get_team_budget_cap(team_name)
+	var remaining: float = max_cap - current_expense
 	
-	if current_expense + UPGRADE_COST > max_cap:
+	if remaining < UPGRADE_COST or remaining - UPGRADE_COST < get_team_upgrade_reserve(team_name):
 		return false
 		
 	team_season_expenses[team_name] = current_expense + UPGRADE_COST
@@ -256,8 +266,8 @@ func process_ai_team_upgrades() -> void:
 		var max_cap = get_team_budget_cap(team_name)
 		var remaining = max_cap - current_expense
 		
-		# Bloqueia se a equipe já estourou o teto de gastos
-		if max_cap <= 0.0 or remaining < UPGRADE_COST:
+		if max_cap <= 0.0 or remaining < UPGRADE_COST \
+		or remaining - UPGRADE_COST < get_team_upgrade_reserve(team_name):
 			continue
 			
 		# Chance dinâmica de compra por GP
@@ -338,10 +348,6 @@ func process_ai_team_upgrades() -> void:
 				# Formata o trecho individual (ex: "Audi (+0.90)")
 				var entry_str := "%s (-%.2f kg)" % [team_name, weight_reduction] if component_name == "Peso" else "%s (+%.2f)" % [team_name, gain]
 				gp_upgrades_by_type[component_name].append(entry_str)
-		else:
-			if remaining >= UPGRADE_COST:
-				team_season_expenses[team_name] = current_expense + UPGRADE_COST
-
 	# MONTA E EXIBE A MENSAGEM AGRUPADA APENAS SE HOUVER UPGRADES NO GP
 	if total_upgrades_in_gp > 0:
 		var summary_parts: Array = []
@@ -390,6 +396,7 @@ func _recalculate_team_handicaps_and_reset_caps() -> void:
 		team_budget_caps[team_name] = COST_CAP_LIMIT + bonus_amount
 		
 	team_season_expenses.clear()
+	team_upgrade_reserves.clear()
 	for t in teams:
 		team_season_expenses[t["Nome"]] = 0.0
 
@@ -419,6 +426,12 @@ func get_team_cost_cap_penalty(team_name: String) -> int:
 	var excess_percent := int(floor((excess / cap) * 100.0 + 0.000001))
 	var available_points := maxi(0, int(_get_team_by_name(team_name).get("Pontos", 0)))
 	return mini(available_points, excess_percent * 2)
+
+func get_team_championship_points(team_name: String) -> int:
+	var team := _get_team_by_name(team_name)
+	if team.is_empty():
+		return 0
+	return maxi(0, int(team.get("Pontos", 0)) - get_team_cost_cap_penalty(team_name))
 
 func apply_race_points(standings: Array) -> void:
 	for i in range(min(10, standings.size())):
@@ -921,7 +934,8 @@ func simulate_current_gp_fast() -> void:
 func record_gp_constructors_snapshot() -> void:
 	var snapshot: Dictionary = {}
 	for t in teams:
-		snapshot[str(t.get("Nome", ""))] = int(t.get("Pontos", 0))
+		var team_name := str(t.get("Nome", t.get("nome", "")))
+		snapshot[team_name] = get_team_championship_points(team_name)
 		
 	constructors_points_history.append({
 		"gp": current_gp,
@@ -1135,6 +1149,9 @@ func get_season_summary() -> Dictionary:
 			team_stats[stat_key] = int(team_stats.get(stat_key, 0)) + 1
 
 	var constructor_standings := teams.duplicate(true)
+	for team in constructor_standings:
+		var team_name := str(team.get("Nome", team.get("nome", "")))
+		team["Pontos"] = get_team_championship_points(team_name)
 	constructor_standings.sort_custom(func(a, b):
 		var points_a := int(a.get("Pontos", 0))
 		var points_b := int(b.get("Pontos", 0))
@@ -1591,6 +1608,7 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"custom_team_data": custom_team_data,
 		"player_finances": player_finances,
 		"team_budget_caps": team_budget_caps,
+		"team_upgrade_reserves": team_upgrade_reserves,
 		"current_session": current_session,
 		"race_finished": race_finished,
 		"driver_market_interests": driver_market_interests,
@@ -1679,6 +1697,7 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 			custom_team_data = data.get("custom_team_data", custom_team_data)
 			player_finances = data.get("player_finances", player_finances)
 			team_budget_caps = data.get("team_budget_caps", team_budget_caps)
+			team_upgrade_reserves = data.get("team_upgrade_reserves", {})
 			current_session = str(data.get("current_session", "preseason"))
 			race_finished = bool(data.get("race_finished", false))
 			driver_market_interests = data.get("driver_market_interests", driver_market_interests)
@@ -1734,6 +1753,7 @@ func reset_database(mode: String = "") -> void:
 	}
 	team_budget_caps.clear()
 	team_season_expenses.clear()
+	team_upgrade_reserves.clear()
 	last_financial_settlement_year = -1
 	init_season_budget_cap()
 	load_drivers_from_json()
@@ -1957,7 +1977,6 @@ func set_language(new_lang: String) -> void:
 static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 	var engine_name = team.get("motor", "Próprio")
 	var chassis_name = team.get("chassi", "Próprio")
-	var team_name = str(team.get("Nome", ""))
 	
 	# Obtém os dados base do motor e do chassi
 	var e_info: Dictionary
@@ -1978,49 +1997,21 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 			"confiabilidade": 80
 		})
 	var upgrades: Dictionary = team.get("development_upgrades", {})
-	
-	var team_hash = abs(hash(team_name))
-	
-	var motor_base := float(e_info.get("potencia", team.get("potencia", team.get("Motor", 80))))
-	if engine_name is Dictionary and team.has("potencia"):
-		motor_base = float(team.get("potencia", motor_base))
-	var calculated_motor = int(clampi(int(motor_base) + int(upgrades.get("Motor", 0)), 50, 99))
-	var calculated_chassis: int = 80
-	var calculated_aero: int = 80
-	var calculated_rel: int = 80
-	
-	# Se a equipe utilizar Chassi Próprio, aplica variação individual de ±3 para cada parâmetro
-	if typeof(chassis_name) == TYPE_DICTIONARY or (typeof(chassis_name) == TYPE_STRING and chassis_name == "Próprio"):
-		var var_chassis = ((team_hash % 7) - 3)
-		var var_aero = (((team_hash / 10) % 7) - 3)
-		var var_conf = (((team_hash / 100) % 7) - 3)
-		
-		# Leitura segura dos valores de chassi se for Dicionário ou String
-		var c_chassi = 88.0
-		var c_aero = 87.0
-		var c_conf = 88.0
-		
-		if typeof(chassis_name) == TYPE_DICTIONARY:
-			var c_dict = chassis_name as Dictionary
-			var chassi_value: Variant = team.get("Chassi", c_dict.get("chassi", c_dict.get("qualidade", 88.0)))
-			if chassi_value is Dictionary:
-				chassi_value = chassi_value.get("chassi", chassi_value.get("qualidade", 88.0))
-			c_chassi = float(chassi_value)
-			c_aero = float(team.get("aero", c_dict.get("aero", c_dict.get("desempenho", 87.0))))
-			c_conf = float(c_dict.get("confiabilidade", 88.0))
-		elif typeof(c_info) == TYPE_DICTIONARY:
-			c_chassi = float(c_info.get("chassi", 88.0))
-			c_aero = float(c_info.get("aero", 87.0))
-			c_conf = float(c_info.get("confiabilidade", 88.0))
 
-		calculated_chassis = int(clampi(int(c_chassi + var_chassis) + int(upgrades.get("Chassi", 0)), 50, 99))
-		calculated_aero = int(clampi(int(c_aero + var_aero) + int(upgrades.get("Aero", 0)), 50, 99))
-		
-		var base_chassis_rel = c_conf + var_conf
-		var base_rel = (float(e_info.get("confiabilidade", 80.0)) + float(base_chassis_rel)) / 2.0
-		if team.has("confiabilidade"):
-			base_rel = float(team.get("confiabilidade", base_rel))
-		calculated_rel = int(clampi(int(base_rel) + int(upgrades.get("Confiabilidade", 0)), 50, 99))
+	var motor_base := float(team.get("Motor", team.get("potencia", e_info.get("potencia", 80.0))))
+	var calculated_motor = int(clampi(int(motor_base) + int(upgrades.get("Motor", 0)), 50, 99))
+
+	var chassis_data: Dictionary = chassis_name if chassis_name is Dictionary else c_info
+	var chassis_base_value: Variant = team.get("Chassi", chassis_data.get("chassi", chassis_data.get("qualidade", 80.0)))
+	if chassis_base_value is Dictionary:
+		chassis_base_value = chassis_base_value.get("chassi", chassis_base_value.get("qualidade", 80.0))
+	var aero_base_value: Variant = team.get("Aero", team.get("aero", chassis_data.get("aero", chassis_data.get("desempenho", 80.0))))
+	var reliability_default := (float(e_info.get("confiabilidade", 80.0)) + float(chassis_data.get("confiabilidade", 80.0))) / 2.0
+	var reliability_base := float(team.get("Confiabilidade", team.get("confiabilidade", reliability_default)))
+
+	var calculated_chassis := int(clampi(int(float(chassis_base_value)) + int(upgrades.get("Chassi", 0)), 50, 99))
+	var calculated_aero := int(clampi(int(float(aero_base_value)) + int(upgrades.get("Aero", 0)), 50, 99))
+	var calculated_rel := int(clampi(int(reliability_base) + int(upgrades.get("Confiabilidade", 0)), 50, 99))
 	
 	# -------------------------------------------------------------
 	# NOVO: LEITURA DO PESO INDIVIDUAL DA EQUIPE (KG)
@@ -2074,6 +2065,14 @@ func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races
 	var balance := float(user_team.get("orcamento", 0.0))
 	var cost_m := PLAYER_RD_COST / 1_000_000.0
 	if balance < cost_m:
+		return false
+	var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+	if player_team_name.is_empty():
+		return false
+	var team_cap := get_team_budget_cap(player_team_name)
+	var spent := float(team_season_expenses.get(player_team_name, 0.0))
+	if team_cap - spent < PLAYER_RD_COST \
+	or team_cap - spent - PLAYER_RD_COST < get_team_upgrade_reserve(player_team_name):
 		return false
 
 	var tracks_per_season := maxi(1, tracks.size())
@@ -2186,7 +2185,7 @@ func process_end_of_season_finances(constructors_standings: Array) -> void:
 			continue
 		var team: Dictionary = team_value
 		var team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
-		team["Pontos"] = maxi(0, int(team.get("Pontos", 0)) - get_team_cost_cap_penalty(team_name))
+		team["Pontos"] = get_team_championship_points(team_name)
 
 	standings.sort_custom(func(a, b):
 		return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0))

@@ -61,6 +61,7 @@ static var dict: Dictionary = {
 		"FIELD_MAIN_COLOR": "Cor Principal da Equipe:",
 		"CREATE_TEAM_NOTE": "💡 Após criar sua equipe, você iniciará com os parâmetros padrão da categoria e um orçamento inicial básico para desenvolvimento.",
 		"BTN_CONFIRM_CREATION": "CONFIRMAR CRIAÇÃO",
+		"STATUS_FREE_AGENT_FULL": "Sem Equipe",
 		
 		# NAV & SIDEBAR
 		"NAV_DASHBOARD": "📊 Dashboard",
@@ -256,6 +257,7 @@ static var dict: Dictionary = {
 		"FIELD_MAIN_COLOR": "Main Team Color:",
 		"CREATE_TEAM_NOTE": "💡 After creating your team, you will start with standard category parameters and a basic starting budget for development.",
 		"BTN_CONFIRM_CREATION": "CONFIRM CREATION",
+		"STATUS_FREE_AGENT_FULL": "Without Team",
 		
 		# NAV & SIDEBAR
 		"NAV_DASHBOARD": "📊 Dashboard",
@@ -451,6 +453,7 @@ static var dict: Dictionary = {
 		"FIELD_MAIN_COLOR": "Color Principal del Equipo:",
 		"CREATE_TEAM_NOTE": "💡 Tras crear tu equipo, comenzarás con los parámetros estándar de la categoría y un presupuesto inicial básico para desarrollo.",
 		"BTN_CONFIRM_CREATION": "CONFIRMAR CREACIÓN",
+		"STATUS_FREE_AGENT_FULL": "Sin un equipo",
 		
 		# NAV & SIDEBAR
 		"NAV_DASHBOARD": "📊 Panel Principal",

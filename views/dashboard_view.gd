@@ -266,11 +266,16 @@ func _build_rivalry_tab(parent: Control) -> void:
 
 	# Duelo entre Construtores (P1 vs P2 Construtores)
 	var sorted_teams = Database.teams.duplicate()
-	sorted_teams.sort_custom(func(a, b): return int(a.get("Pontos", 0)) > int(b.get("Pontos", 0)))
+	sorted_teams.sort_custom(func(a, b):
+		return Database.get_team_championship_points(str(a.get("Nome", a.get("nome", "")))) \
+			> Database.get_team_championship_points(str(b.get("Nome", b.get("nome", ""))))
+	)
 	if sorted_teams.size() >= 2:
 		var t1 = sorted_teams[0]
 		var t2 = sorted_teams[1]
-		var t_gap = int(t1.get("Pontos", 0)) - int(t2.get("Pontos", 0))
+		var t1_points := Database.get_team_championship_points(str(t1.get("Nome", t1.get("nome", ""))))
+		var t2_points := Database.get_team_championship_points(str(t2.get("Nome", t2.get("nome", ""))))
+		var t_gap = t1_points - t2_points
 
 		var const_title = Label.new()
 		const_title.text = "🏎️ Disputa de Construtores"
@@ -280,8 +285,8 @@ func _build_rivalry_tab(parent: Control) -> void:
 
 		var const_lbl = Label.new()
 		const_lbl.text = "• %s (%dP) vs %s (%dP)\n  ➔ Diferença: %d pts" % [
-			t1.get("Nome", "-"), t1.get("Pontos", 0),
-			t2.get("Nome", "-"), t2.get("Pontos", 0),
+			t1.get("Nome", "-"), t1_points,
+			t2.get("Nome", "-"), t2_points,
 			t_gap
 		]
 		const_lbl.add_theme_font_size_override("font_size", 11)
@@ -342,7 +347,7 @@ func _build_team_stats_tab(parent: Control) -> void:
 	for t in Database.teams:
 		var t_name = str(t.get("Nome", ""))
 		team_stats[t_name] = {
-			"Nome": t_name, "Pontos": 0, "VitoriasAno": 0,
+			"Nome": t_name, "Pontos": Database.get_team_championship_points(t_name), "VitoriasAno": 0,
 			"DNFsAno": 0, "SequenciaPontos": 0,
 			"PosicoesGanhaAno": 0, "PosicoesPerdidasAno": 0
 		}
@@ -350,7 +355,6 @@ func _build_team_stats_tab(parent: Control) -> void:
 	for d in Database.drivers:
 		var eq = str(d.get("Equipe", ""))
 		if team_stats.has(eq):
-			team_stats[eq]["Pontos"] += int(d.get("Pontos", 0))
 			team_stats[eq]["VitoriasAno"] += int(d.get("VitoriasAno", 0))
 			team_stats[eq]["DNFsAno"] += int(d.get("DNFsAno", 0))
 			team_stats[eq]["PosicoesGanhaAno"] += int(d.get("PosicoesGanhaAno", 0))
@@ -502,7 +506,7 @@ func _build_drivers_content(parent: Control, active_drivers: Array) -> void:
 		var team_color = Color("#94a3b8")
 		if team_display == "Free Agent":
 			team_display = Database.tr_text("STATUS_FREE_AGENT_FULL")
-			team_color = Color("#f59e0b")
+			team_color = Color("006df6ff")
 		elif team_display == "Aposentado":
 			team_display = Database.tr_text("STATUS_RETIRED")
 			team_color = Color("#64748b")
@@ -549,7 +553,13 @@ func _build_teams_content(parent: Control, active_drivers: Array) -> void:
 	var team_stats: Dictionary = {}
 	for t in Database.teams:
 		var t_name = str(t.get("Nome", ""))
-		team_stats[t_name] = {"Nome": t_name, "Pontos": 0, "Vitorias": 0, "Podios": 0, "DNFs": 0}
+		team_stats[t_name] = {
+			"Nome": t_name,
+			"Pontos": Database.get_team_championship_points(t_name),
+			"Vitorias": 0,
+			"Podios": 0,
+			"DNFs": 0
+		}
 		
 	# TRAVA ANTI-DUPLICAÇÃO: Mantém apenas 1 instância por nome de piloto
 	var unique_drivers: Array = []
@@ -563,7 +573,6 @@ func _build_teams_content(parent: Control, active_drivers: Array) -> void:
 	for d in unique_drivers:
 		var eq = str(d.get("Equipe", ""))
 		if team_stats.has(eq):
-			team_stats[eq]["Pontos"] += int(d.get("Pontos", 0))
 			team_stats[eq]["Vitorias"] += int(d.get("VitoriasAno", 0))
 			team_stats[eq]["Podios"] += int(d.get("PodiosAno", 0))
 			team_stats[eq]["DNFs"] += int(d.get("DNFsAno", 0))
