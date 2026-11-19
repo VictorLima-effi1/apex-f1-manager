@@ -17,10 +17,10 @@ var race_elapsed_time: float = 0.0
 var track_grip: float = 0.0 
 var quali_total_elapsed_time: float = 0.0 
 var track_condition_time_accumulator: float = 0.0
-const WATER_GAIN_PER_LAP: float = 3.0
-const WATER_DRYING_PER_LAP: float = 7.0
-const GRIP_LOSS_PER_WET_LAP: float = 5.0
-const GRIP_GAIN_PER_DRY_LAP: float = 2.0
+var WATER_GAIN_PER_LAP: float = randf_range(2.0, 4.0)
+var WATER_DRYING_PER_LAP: float = randf_range(5.0, 8.0)
+var GRIP_LOSS_PER_WET_LAP: float = randf_range(4.0, 6.0)
+var GRIP_GAIN_PER_DRY_LAP: float = randf_range(1.0, 4.0)
 
 # --- SISTEMA DE CLIMA DINÂMICO E GRADUAL ---
 var is_wet_race: bool = false
@@ -112,7 +112,7 @@ func setup_race(selected_track: Dictionary) -> void:
 	quali_time_elapsed = 0.0
 	quali_total_elapsed_time = 0.0
 	track_condition_time_accumulator = 0.0
-	track_grip = 0.0
+	track_grip = randf_range(0, 30)
 	quali_checker_flag = false
 	safety_car_status = "NONE"
 	safety_car_laps_left = 0
@@ -425,7 +425,7 @@ func _advance_quali_session() -> void:
 		race_elapsed_time = 0.0
 		_reset_session_sectors_for_race()
 		# --- ZERA A ADERÊNCIA PARA O INÍCIO DA CORRIDA ---
-		track_grip = 0.0
+		track_grip = randf_range(0,40)
 		race_logs.append("🏁 QUALIFICAÇÃO CONCLUÍDA! Grid de largada pronto.")
 
 func _compare_lap_times(time_a: float, time_b: float, name_a: String, name_b: String) -> bool:
@@ -649,12 +649,30 @@ func process_lap() -> Dictionary:
 			var tire_degradation: float = floorf(tire_wear_percent / 5.0) * degradation_step
 			
 			var compound_weather_penalty = 0.0
-			if water_level >= 50.0 and compound != "Wet":
-				compound_weather_penalty += 12.0
-			elif water_level >= 16.0 and water_level < 50.0 and compound != "Inter":
-				compound_weather_penalty += 6.0
-			elif water_level < 16.0 and compound in ["Wet", "Inter"]:
-				compound_weather_penalty += 8.0
+			#Muita chuva
+			if water_level >= 50.0:
+				if compound == "Wet":
+					compound_weather_penalty = 0.0
+				elif compound == "Inter":
+					compound_weather_penalty = 3.0
+				else:
+					compound_weather_penalty = 15.0
+			#Chuva fraca
+			elif water_level >= 16.0 and water_level < 50.0:
+				if compound == "inter":
+					compound_weather_penalty = 0.0
+				elif compound == "Wet":
+					compound_weather_penalty = 3.0
+				else:
+					compound_weather_penalty = 7.0
+			#Pista seca
+			else:
+				if compound == "Inter":
+					compound_weather_penalty = 6.0
+				elif compound == "Wet":
+					compound_weather_penalty = 8.5
+				else:
+					compound_weather_penalty = 0.0
 				
 			var morale_time_modifier = (50.0 - float(d.get("Moral", 75))) * 0.003
 			
