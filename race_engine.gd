@@ -102,6 +102,8 @@ func _calculate_lap_sectors(total_lap_time: float) -> Dictionary:
 
 func setup_race(selected_track: Dictionary) -> void:
 	track = selected_track
+	if Database.has_method("record_season_car_construction_expenses"):
+		Database.record_season_car_construction_expenses()
 	Database.race_finished = false
 	total_laps = track.get("Voltas", 58)
 	current_lap = 0
@@ -112,7 +114,7 @@ func setup_race(selected_track: Dictionary) -> void:
 	quali_time_elapsed = 0.0
 	quali_total_elapsed_time = 0.0
 	track_condition_time_accumulator = 0.0
-	track_grip = randf_range(0.0, 40.0)
+	track_grip = 0.0
 	quali_checker_flag = false
 	safety_car_status = "NONE"
 	safety_car_laps_left = 0
@@ -143,6 +145,8 @@ func setup_race(selected_track: Dictionary) -> void:
 		weather_state = "☀️ Ensolarado"
 		weather_forecast = "☀️ Tempo Limpo"
 		race_logs.append("☀️ CLIMA: Pista seca e tempo limpo para a largada.")
+	if water_level <= 0.0:
+		track_grip = randf_range(0.0, 40.0)
 
 	race_drivers.clear()
 	active_quali_drivers.clear()
@@ -427,7 +431,8 @@ func _advance_quali_session() -> void:
 		race_elapsed_time = 0.0
 		_reset_session_sectors_for_race()
 		# --- ZERA A ADERÊNCIA PARA O INÍCIO DA CORRIDA ---
-		track_grip = randf_range(0.0, 40.0)
+		if water_level <= 0.0:
+			track_grip = randf_range(0.0, 40.0)
 		race_logs.append("🏁 QUALIFICAÇÃO CONCLUÍDA! Grid de largada pronto.")
 
 func _compare_lap_times(time_a: float, time_b: float, name_a: String, name_b: String) -> bool:
@@ -464,15 +469,19 @@ func process_lap() -> Dictionary:
 		return {"finished": false, "red_flag": true}
 
 	is_race_running = true
-	if current_lap == total_laps - 2:
+	if current_lap >= total_laps - 2:
 		var missing_manager_compound := false
 		for driver in race_drivers:
+			var requested_compound := _canonical_tire_compound(str(driver.get("pit_requested_tire", "")))
+			var has_valid_compound_stop := bool(driver.get("pit_requested", false)) \
+				and _is_dry_tire_compound(requested_compound) \
+				and not _get_used_dry_compounds(driver).has(requested_compound)
 			if str(driver.get("Status", "")) == "Na Pista" \
 			and bool(driver.get("manager_controlled", false)) \
 			and _get_ideal_compound_for_water(water_level) not in ["Wet", "Inter"] \
 			and not bool(driver.get("used_rain_tire", false)) \
 			and _get_used_dry_compounds(driver).size() < 2 \
-			and not bool(driver.get("pit_requested", false)):
+			and not has_valid_compound_stop:
 				missing_manager_compound = true
 				break
 		if missing_manager_compound:
@@ -1042,7 +1051,9 @@ func are_manager_red_flag_strategies_confirmed() -> bool:
 	return true
 
 func resolve_red_flag_restart() -> bool:
-	if not pending_red_flag_modal or not are_manager_red_flag_strategies_confirmed():
+	if not pending_red_flag_modal:
+		return false
+	if str(Database.game_mode) == "manager" and not are_manager_red_flag_strategies_confirmed():
 		return false
 
 	pending_red_flag_modal = false
@@ -1124,10 +1135,12 @@ func request_manager_pit_stop(driver_name: String, tire_compound: String = "", d
 			pit_logs.append("⚠️ Composto de pneu inválido para %s." % driver_name)
 			return false
 		var used_dry_compounds := _get_used_dry_compounds(driver)
-		if _is_dry_tire_compound(requested_compound) \
+		if current_lap >= total_laps - 2 \
+		and _get_ideal_compound_for_water(water_level) not in ["Wet", "Inter"] \
 		and not bool(driver.get("used_rain_tire", false)) \
-		and used_dry_compounds.size() < 2 and used_dry_compounds.has(requested_compound):
-			pit_logs.append("⚠️ Selecione um composto diferente para cumprir a regra dos dois tipos de pneus.")
+		and used_dry_compounds.size() < 2 \
+		and (not _is_dry_tire_compound(requested_compound) or used_dry_compounds.has(requested_compound)):
+			pit_logs.append("⚠️ Na penúltima volta, escolha um composto slick diferente para cumprir a regra dos dois tipos de pneus.")
 			return false
 		driver["pit_requested"] = true
 		driver["pit_requested_tire"] = requested_compound

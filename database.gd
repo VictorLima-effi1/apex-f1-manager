@@ -150,6 +150,7 @@ func update_team_weight(weight_delta: float) -> void:
 var team_season_expenses: Dictionary = {}
 var team_budget_caps: Dictionary = {}
 var team_upgrade_reserves: Dictionary = {}
+var team_car_construction_years: Dictionary = {}
 var last_financial_settlement_year: int = -1
 
 # --- SISTEMA DE MÚLTIPLOS SLOTS DE SAVE (1, 2 e 3) ---
@@ -213,6 +214,25 @@ func init_season_budget_cap() -> void:
 
 func get_team_budget_cap(team_name: String) -> float:
 	return COST_CAP_LIMIT
+
+func record_season_car_construction_expenses() -> void:
+	var player_team_name := ""
+	if game_mode == "manager":
+		player_team_name = str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+		if player_team_name.is_empty():
+			player_team_name = str(selected_manager_team.get("Nome", selected_manager_team.get("nome", ""))).strip_edges()
+
+	for team in teams:
+		var team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
+		if team_name.is_empty() or team_name.to_lower() == player_team_name.to_lower():
+			continue
+		if int(team_car_construction_years.get(team_name, -1)) == current_year:
+			continue
+
+		var power_index := clampf(float(get_team_power_index(team)["overall"]), 75.0, 99.0)
+		var construction_cost := lerpf(12_000_000.0, 32_000_000.0, (power_index - 75.0) / 24.0)
+		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + construction_cost
+		team_car_construction_years[team_name] = current_year
 
 func get_team_upgrade_reserve(team_name: String) -> float:
 	if not team_upgrade_reserves.has(team_name):
@@ -901,7 +921,13 @@ func simulate_current_gp_fast() -> void:
 	
 	while not _is_engine_done(engine) and safety_counter < max_iterations:
 		if engine.has_method("process_lap"):
-			engine.process_lap()
+			var lap_result: Dictionary = engine.process_lap()
+			if lap_result.get("red_flag", false):
+				for driver in engine.race_drivers:
+					if bool(driver.get("manager_controlled", false)) and str(driver.get("Status", "")) == "Na Pista":
+						driver["red_flag_tire_compound"] = str(driver.get("tire_compound", "Medium"))
+						driver["red_flag_strategy_confirmed"] = true
+				engine.resolve_red_flag_restart()
 		safety_counter += 1
 		
 	var results: Array = engine.race_drivers if engine.get("race_drivers") != null else []
@@ -1608,6 +1634,7 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"transfer_history": transfer_history,
 		"dashboard_layout": dashboard_layout,
 		"team_season_expenses": team_season_expenses,
+		"team_car_construction_years": team_car_construction_years,
 		"last_financial_settlement_year": last_financial_settlement_year,
 		"full_season_archive": full_season_archive
 	}
@@ -1697,6 +1724,7 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 			transfer_history = data.get("transfer_history", transfer_history)
 			dashboard_layout = data.get("dashboard_layout", dashboard_layout)
 			team_season_expenses = data.get("team_season_expenses", team_season_expenses)
+			team_car_construction_years = data.get("team_car_construction_years", {})
 			last_financial_settlement_year = int(data.get("last_financial_settlement_year", -1))
 			full_season_archive = data.get("full_season_archive", full_season_archive)
 			for team in teams:
@@ -1752,6 +1780,7 @@ func reset_database(mode: String = "") -> void:
 	team_budget_caps.clear()
 	team_season_expenses.clear()
 	team_upgrade_reserves.clear()
+	team_car_construction_years.clear()
 	last_financial_settlement_year = -1
 	init_season_budget_cap()
 	load_drivers_from_json()
@@ -2256,6 +2285,7 @@ func end_preseason() -> void:
 			if stored_team_name.to_lower() == team_name.strip_edges().to_lower():
 				teams[i] = user_team.duplicate(true)
 				break
+	record_season_car_construction_expenses()
 	ensure_full_grid()
 
 # Retorna ou inicializa a estrutura de finanças da temporada da equipe do jogador

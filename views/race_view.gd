@@ -760,8 +760,11 @@ func _skip_to_end_of_session() -> void:
 			var lap_before := engine.current_lap
 			var res = engine.process_lap()
 			if res.get("red_flag", false):
-				_show_red_flag_modal()
-				break
+				if Database.game_mode == "manager":
+					_show_red_flag_modal()
+					break
+				if not engine.resolve_red_flag_restart():
+					break
 			if res.get("awaiting_manager_pit", false) or engine.current_lap == lap_before:
 				break
 			processed_laps += 1
@@ -779,8 +782,11 @@ func _on_btn_start_pressed() -> void:
 		return
 
 	if engine != null and engine.pending_red_flag_modal:
-		_show_red_flag_modal()
-		return
+		if Database.game_mode == "manager":
+			_show_red_flag_modal()
+			return
+		if not engine.resolve_red_flag_restart():
+			return
 
 	simulation_running = not simulation_running
 	if simulation_running and engine != null and engine.is_quali_done():
@@ -798,7 +804,7 @@ func _update_simulation_button() -> void:
 		btn_start.text = "⏸️ PAUSAR" if simulation_running else "▶ CONTINUAR"
 
 func _show_red_flag_modal() -> void:
-	if engine == null or not engine.pending_red_flag_modal:
+	if Database.game_mode != "manager" or engine == null or not engine.pending_red_flag_modal:
 		return
 	if is_instance_valid(red_flag_window):
 		return
@@ -1319,9 +1325,12 @@ func _process(delta: float) -> void:
 				if leader_lap_time > 0.0:
 					race_lap_duration = leader_lap_time
 				if result.get("red_flag", false):
-					simulation_running = false
-					_show_red_flag_modal()
-					refresh_ui_immediately = true
+					if Database.game_mode == "manager":
+						simulation_running = false
+						_show_red_flag_modal()
+						refresh_ui_immediately = true
+					else:
+						engine.resolve_red_flag_restart()
 				elif result.get("awaiting_manager_pit", false):
 					simulation_running = false
 					refresh_ui_immediately = true

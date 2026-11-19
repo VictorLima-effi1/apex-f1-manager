@@ -3141,9 +3141,6 @@ func _reset_test_grid_for_new_day() -> void:
 
 # Sorteia um parâmetro para evoluir a equipe durante os testes.
 func _apply_random_testing_upgrade(target_team_name: String) -> void:
-	if Database.game_mode == "manager" and target_team_name.strip_edges().to_lower() == team_name.strip_edges().to_lower():
-		return
-
 	if not team_testing_upgrades.has(target_team_name):
 		team_testing_upgrades[target_team_name] = {"Motor": 0.0, "Aero": 0.0, "Chassi": 0.0, "Confiabilidade": 0.0, "Peso": 0.0}
 		
@@ -3174,6 +3171,9 @@ func _apply_random_testing_upgrade(target_team_name: String) -> void:
 # =============================================================
 func _open_testing_results_modal() -> void:
 	_close_active_modal_window()
+	if Database.game_mode == "manager" and not team_name.strip_edges().is_empty() \
+	and not team_testing_upgrades.has(team_name):
+		team_testing_upgrades[team_name] = {"Motor": 0.0, "Aero": 0.0, "Chassi": 0.0, "Confiabilidade": 0.0, "Peso": 0.0}
 	var dialog = Window.new()
 	dialog.title = "📊 RELATÓRIO DE EVOLUÇÃO TÉCNICA - TESTES DE INVERNO"
 	dialog.size = Vector2i(850, 620)
