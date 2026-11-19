@@ -59,8 +59,8 @@ func build_ui() -> void:
 	sorted_teams.sort_custom(func(a, b):
 		var stats_a = Database.calculate_team_dev_stats(a) if Database.has_method("calculate_team_dev_stats") else a
 		var stats_b = Database.calculate_team_dev_stats(b) if Database.has_method("calculate_team_dev_stats") else b
-		var p_a = int(stats_a.get("Motor", 80)) + int(stats_a.get("Aero", 80)) + int(stats_a.get("Chassi", 80))
-		var p_b = int(stats_b.get("Motor", 80)) + int(stats_b.get("Aero", 80)) + int(stats_b.get("Chassi", 80))
+		var p_a = float(stats_a.get("Motor", 80.0)) + float(stats_a.get("Aero", 80.0)) + float(stats_a.get("Chassi", 80.0))
+		var p_b = float(stats_b.get("Motor", 80.0)) + float(stats_b.get("Aero", 80.0)) + float(stats_b.get("Chassi", 80.0))
 		return p_a > p_b
 	)
 	
@@ -72,10 +72,10 @@ func build_ui() -> void:
 		
 		# CÁLCULO DINÂMICO DOS PARÂMETROS TÉCNICOS (MOTOR, AERO, CHASSI, CONFIABILIDADE, PESO)
 		var stats = Database.calculate_team_dev_stats(t) if Database.has_method("calculate_team_dev_stats") else t
-		var motor_val = int(stats.get("Motor", t.get("Motor", 80)))
-		var aero_val = int(stats.get("Aero", t.get("Aero", 80)))
-		var chassi_val = int(stats.get("Chassi", t.get("Chassi", 80)))
-		var rel_val = int(stats.get("Confiabilidade", t.get("Confiabilidade", 80)))
+		var motor_val := float(stats.get("Motor", t.get("Motor", 80.0)))
+		var aero_val := float(stats.get("Aero", t.get("Aero", 80.0)))
+		var chassi_val := float(stats.get("Chassi", t.get("Chassi", 80.0)))
+		var rel_val := float(stats.get("Confiabilidade", t.get("Confiabilidade", 80.0)))
 		var weight_val = float(stats.get("Peso", t.get("peso", 778.0)))
 		
 		# TETO DE GASTOS FIXO UNIVERSAL DO REGULAMENTO ($135.0M)
@@ -234,7 +234,7 @@ func _render_grid_budget_cap_summary(parent: VBoxContainer) -> void:
 	card.add_child(hbox)
 	parent.add_child(card)
 
-func _get_performance_tag(power: int) -> Dictionary:
+func _get_performance_tag(power: float) -> Dictionary:
 	if power >= 273:
 		return {"text": "🔥 Dominante (Top Grid)", "color": Color("#ef4444")}
 	elif power >= 262:
@@ -244,7 +244,7 @@ func _get_performance_tag(power: int) -> Dictionary:
 	else:
 		return {"text": "⚪ Retaguarda", "color": Color("#94a3b8")}
 
-func _add_component_bar(parent: VBoxContainer, label_text: String, value: int, color: Color) -> void:
+func _add_component_bar(parent: VBoxContainer, label_text: String, value: float, color: Color) -> void:
 	var hbox = HBoxContainer.new()
 	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hbox.add_theme_constant_override("separation", 8)
@@ -277,7 +277,7 @@ func _add_component_bar(parent: VBoxContainer, label_text: String, value: int, c
 	hbox.add_child(pbar)
 	
 	var val_lbl = Label.new()
-	val_lbl.text = str(value) + "%"
+	val_lbl.text = "%.1f%%" % value
 	val_lbl.custom_minimum_size.x = 45
 	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	val_lbl.add_theme_font_size_override("font_size", 12)

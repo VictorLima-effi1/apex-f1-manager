@@ -112,7 +112,7 @@ func setup_race(selected_track: Dictionary) -> void:
 	quali_time_elapsed = 0.0
 	quali_total_elapsed_time = 0.0
 	track_condition_time_accumulator = 0.0
-	track_grip = randf_range(0, 30)
+	track_grip = randf_range(0.0, 40.0)
 	quali_checker_flag = false
 	safety_car_status = "NONE"
 	safety_car_laps_left = 0
@@ -162,7 +162,7 @@ func setup_race(selected_track: Dictionary) -> void:
 			entry["is_in_pit"] = false
 			
 			entry["quali_state"] = "Box"
-			entry["timer_state"] = randf_range(10.0, 40.0)
+			entry["timer_state"] = 0.0
 			entry["quali_retry_allowed"] = true
 			entry["force_in_lap"] = true
 			entry["quali_lap_duration"] = _get_base_track_lap_time() * 1.08
@@ -244,6 +244,8 @@ func _get_used_dry_compounds(driver: Dictionary) -> Array:
 func _record_used_compound(driver: Dictionary, compound: String) -> void:
 	var used_dry_compounds := _get_used_dry_compounds(driver)
 	var canonical_compound := _canonical_tire_compound(compound)
+	if canonical_compound in ["Inter", "Wet"]:
+		driver["used_rain_tire"] = true
 	if _is_dry_tire_compound(canonical_compound) and not used_dry_compounds.has(canonical_compound):
 		used_dry_compounds.append(canonical_compound)
 	driver["used_compounds"] = used_dry_compounds
@@ -334,7 +336,7 @@ func _advance_quali_session() -> void:
 				active_quali_drivers[i]["BestQualiTime"] = 999.0
 				active_quali_drivers[i]["LastLapTime"] = 999.0
 				active_quali_drivers[i]["quali_state"] = "Box"
-				active_quali_drivers[i]["timer_state"] = randf_range(20.0, 60.0)
+				active_quali_drivers[i]["timer_state"] = 0.0
 				active_quali_drivers[i]["quali_retry_allowed"] = true
 				active_quali_drivers[i]["progress"] = 0.0
 				active_quali_drivers[i]["is_in_pit"] = true
@@ -376,7 +378,7 @@ func _advance_quali_session() -> void:
 				active_quali_drivers[i]["BestQualiTime"] = 999.0
 				active_quali_drivers[i]["LastLapTime"] = 999.0
 				active_quali_drivers[i]["quali_state"] = "Box"
-				active_quali_drivers[i]["timer_state"] = randf_range(20.0, 60.0)
+				active_quali_drivers[i]["timer_state"] = 0.0
 				active_quali_drivers[i]["quali_retry_allowed"] = true
 				active_quali_drivers[i]["progress"] = 0.0
 				active_quali_drivers[i]["is_in_pit"] = true
@@ -425,7 +427,7 @@ func _advance_quali_session() -> void:
 		race_elapsed_time = 0.0
 		_reset_session_sectors_for_race()
 		# --- ZERA A ADERÊNCIA PARA O INÍCIO DA CORRIDA ---
-		track_grip = randf_range(0,40)
+		track_grip = randf_range(0.0, 40.0)
 		race_logs.append("🏁 QUALIFICAÇÃO CONCLUÍDA! Grid de largada pronto.")
 
 func _compare_lap_times(time_a: float, time_b: float, name_a: String, name_b: String) -> bool:
@@ -446,6 +448,7 @@ func _initialize_driver_race_strategy(driver: Dictionary, start_pos: int) -> voi
 			
 	driver["tire_compound"] = first_compound
 	driver["used_compounds"] = []
+	driver["used_rain_tire"] = false
 	_record_used_compound(driver, first_compound)
 	driver["stint_lap"] = 0
 	driver["pit_window_offset"] = randi_range(-2, 2)
@@ -467,6 +470,7 @@ func process_lap() -> Dictionary:
 			if str(driver.get("Status", "")) == "Na Pista" \
 			and bool(driver.get("manager_controlled", false)) \
 			and _get_ideal_compound_for_water(water_level) not in ["Wet", "Inter"] \
+			and not bool(driver.get("used_rain_tire", false)) \
 			and _get_used_dry_compounds(driver).size() < 2 \
 			and not bool(driver.get("pit_requested", false)):
 				missing_manager_compound = true
@@ -567,7 +571,8 @@ func process_lap() -> Dictionary:
 				target_compound = ideal_compound if ideal_compound in ["Wet", "Inter"] else _select_next_dry_compound(d, remaining_laps)
 
 			if needs_pit and _is_dry_tire_compound(target_compound) and target_compound == compound \
-			and pit_count == 0 and _get_used_dry_compounds(d).size() < 2:
+			and pit_count == 0 and not bool(d.get("used_rain_tire", false)) \
+			and _get_used_dry_compounds(d).size() < 2:
 				target_compound = _select_next_dry_compound(d, remaining_laps)
 			
 		if needs_pit:
@@ -1120,6 +1125,7 @@ func request_manager_pit_stop(driver_name: String, tire_compound: String = "", d
 			return false
 		var used_dry_compounds := _get_used_dry_compounds(driver)
 		if _is_dry_tire_compound(requested_compound) \
+		and not bool(driver.get("used_rain_tire", false)) \
 		and used_dry_compounds.size() < 2 and used_dry_compounds.has(requested_compound):
 			pit_logs.append("⚠️ Selecione um composto diferente para cumprir a regra dos dois tipos de pneus.")
 			return false
@@ -1151,6 +1157,7 @@ func confirm_manager_pre_race_strategy(driver_name: String, tire_compound: Strin
 		else:
 			driver["tire_compound"] = selected_compound
 			driver["used_compounds"] = []
+			driver["used_rain_tire"] = false
 			_record_used_compound(driver, selected_compound)
 			driver["tire_wear"] = 100.0
 			driver["stint_lap"] = 0

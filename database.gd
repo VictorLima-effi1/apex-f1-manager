@@ -209,14 +209,10 @@ func init_season_budget_cap() -> void:
 		var team_name = str(team.get("Nome", team.get("nome", "")))
 		team_season_expenses[team_name] = 0.0
 		team_upgrade_reserves.erase(team_name)
-		if not team_budget_caps.has(team_name):
-			var last_rank = int(team.get("LastSeasonRank", 5))
-			var bonus_ratio = float(last_rank - 1) / float(max(1, teams.size() - 1))
-			var bonus_amount = 20_000_000.0 * bonus_ratio
-			team_budget_caps[team_name] = COST_CAP_LIMIT + bonus_amount
+		team_budget_caps[team_name] = COST_CAP_LIMIT
 
 func get_team_budget_cap(team_name: String) -> float:
-	return team_budget_caps.get(team_name, COST_CAP_LIMIT)
+	return COST_CAP_LIMIT
 
 func get_team_upgrade_reserve(team_name: String) -> float:
 	if not team_upgrade_reserves.has(team_name):
@@ -278,7 +274,7 @@ func process_ai_team_upgrades() -> void:
 		if randf() > buy_chance:
 			continue
 			
-		# Cálculo de rendimento decrescente (P&D)
+		# As equipes priorizam confiabilidade, sem deixar de desenvolver os demais componentes.
 		var motor_val := float(t.get("Motor", t.get("potencia", 80.0)))
 		var aero_val := float(t.get("Aero", t.get("aero", 80.0)))
 		var chassis_value: Variant = t.get("Chassi", t.get("chassi", 80.0))
@@ -290,15 +286,7 @@ func process_ai_team_upgrades() -> void:
 		var uses_legacy_motor: bool = not t.has("Motor")
 		var uses_legacy_aero: bool = not t.has("Aero")
 		var uses_legacy_reliability: bool = not t.has("Confiabilidade")
-		var current_avg = (motor_val + aero_val + chassi_val) / 3.0
-		
-		var gain: float = 0.0
-		if current_avg < 85.0:
-			gain = randf_range(0.8, 1.2)
-		elif current_avg < 92.0:
-			gain = randf_range(0.4, 0.7)
-		else:
-			gain = randf_range(0.15, 0.35)
+		var gain := randf_range(0.5, 1.5)
 			
 		var available_focuses = []
 		if motor_val < 99.0: available_focuses.append(0)
@@ -309,11 +297,18 @@ func process_ai_team_upgrades() -> void:
 		
 		if available_focuses.size() > 0:
 			var focus: int
-			if available_focuses.has(4) and randf() < 0.30:
+			if available_focuses.has(3) and randf() < 0.45:
+				focus = 3
+			elif available_focuses.has(4) and randf() < 0.30:
 				focus = 4
 			else:
-				var non_weight_focuses: Array = available_focuses.filter(func(item): return item != 4)
-				focus = non_weight_focuses[randi() % non_weight_focuses.size()] if not non_weight_focuses.is_empty() else 4
+				var other_focuses: Array = available_focuses.filter(func(item): return item != 3 and item != 4)
+				if not other_focuses.is_empty():
+					focus = other_focuses[randi() % other_focuses.size()]
+				elif available_focuses.has(4):
+					focus = 4
+				else:
+					focus = 3
 			var component_name = ""
 			var weight_reduction := 0.0
 			
@@ -390,10 +385,7 @@ func _recalculate_team_handicaps_and_reset_caps() -> void:
 			if not player_team_name.is_empty() and player_team_name.to_lower() == team_name.strip_edges().to_lower():
 				user_team["LastSeasonRank"] = rank
 		
-		var bonus_ratio = float(i) / float(max(1, total_teams - 1))
-		var bonus_amount = 20_000_000.0 * bonus_ratio
-		
-		team_budget_caps[team_name] = COST_CAP_LIMIT + bonus_amount
+		team_budget_caps[team_name] = COST_CAP_LIMIT
 		
 	team_season_expenses.clear()
 	team_upgrade_reserves.clear()
@@ -1707,6 +1699,12 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 			team_season_expenses = data.get("team_season_expenses", team_season_expenses)
 			last_financial_settlement_year = int(data.get("last_financial_settlement_year", -1))
 			full_season_archive = data.get("full_season_archive", full_season_archive)
+			for team in teams:
+				var team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
+				if not team_name.is_empty():
+					team_budget_caps[team_name] = COST_CAP_LIMIT
+			if not user_team.is_empty() and not user_team.get("development_upgrades", {}).is_empty():
+				_sync_user_team_development_stats()
 			active_engine = null
 			sanitize_unique_drivers()
 			ensure_full_grid()
@@ -1787,8 +1785,7 @@ func add_new_team(team_name: String, respeto: int = 50, aero: int = 75, motor: i
 	teams.append(new_team)
 	
 	team_season_expenses[team_name] = 0.0
-	var bonus_ratio = float(new_rank - 1) / float(max(1, teams.size() - 1))
-	team_budget_caps[team_name] = COST_CAP_LIMIT + (20_000_000.0 * bonus_ratio)
+	team_budget_caps[team_name] = COST_CAP_LIMIT
 	
 	add_news("📋 REGISTRO DE EQUIPE: %s foi cadastrada e fará sua estreia na próxima temporada!" % team_name)
 
@@ -1999,7 +1996,7 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 	var upgrades: Dictionary = team.get("development_upgrades", {})
 
 	var motor_base := float(team.get("Motor", team.get("potencia", e_info.get("potencia", 80.0))))
-	var calculated_motor = int(clampi(int(motor_base) + int(upgrades.get("Motor", 0)), 50, 99))
+	var calculated_motor := clampf(motor_base + float(upgrades.get("Motor", 0.0)), 50.0, 99.0)
 
 	var chassis_data: Dictionary = chassis_name if chassis_name is Dictionary else c_info
 	var chassis_base_value: Variant = team.get("Chassi", chassis_data.get("chassi", chassis_data.get("qualidade", 80.0)))
@@ -2009,9 +2006,9 @@ static func calculate_team_dev_stats(team: Dictionary) -> Dictionary:
 	var reliability_default := (float(e_info.get("confiabilidade", 80.0)) + float(chassis_data.get("confiabilidade", 80.0))) / 2.0
 	var reliability_base := float(team.get("Confiabilidade", team.get("confiabilidade", reliability_default)))
 
-	var calculated_chassis := int(clampi(int(float(chassis_base_value)) + int(upgrades.get("Chassi", 0)), 50, 99))
-	var calculated_aero := int(clampi(int(float(aero_base_value)) + int(upgrades.get("Aero", 0)), 50, 99))
-	var calculated_rel := int(clampi(int(reliability_base) + int(upgrades.get("Confiabilidade", 0)), 50, 99))
+	var calculated_chassis := clampf(float(chassis_base_value) + float(upgrades.get("Chassi", 0.0)), 50.0, 99.0)
+	var calculated_aero := clampf(float(aero_base_value) + float(upgrades.get("Aero", 0.0)), 50.0, 99.0)
+	var calculated_rel := clampf(reliability_base + float(upgrades.get("Confiabilidade", 0.0)), 50.0, 99.0)
 	
 	# -------------------------------------------------------------
 	# NOVO: LEITURA DO PESO INDIVIDUAL DA EQUIPE (KG)
@@ -2041,12 +2038,13 @@ func ensure_user_team_rd_slots() -> Array:
 func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races: int = 3) -> bool:
 	if game_mode != "manager" or user_team.is_empty():
 		return false
-	var allowed_amount := 1.0
 	if attribute == "Peso":
-		allowed_amount = 0.3
-	elif not ["Motor", "Aero", "Chassi", "Confiabilidade"].has(attribute):
-		return false
-	if not is_equal_approx(amount, allowed_amount):
+		if not is_equal_approx(amount, 0.3):
+			return false
+	elif ["Motor", "Aero", "Chassi", "Confiabilidade"].has(attribute):
+		if amount < 0.5 or amount > 1.5:
+			return false
+	else:
 		return false
 	var current_stats := calculate_team_dev_stats(user_team)
 	if attribute == "Peso" and float(current_stats.get("Peso", 778.0)) <= 768.0:
@@ -2140,6 +2138,7 @@ func _sync_user_team_development_stats() -> void:
 	var stats := calculate_team_dev_stats(user_team)
 	for attribute in ["Motor", "Aero", "Chassi", "Confiabilidade"]:
 		user_team[attribute] = stats[attribute]
+	user_team["development_upgrades"] = {}
 	var team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges().to_lower()
 	user_team["peso"] = float(stats.get("Peso", user_team.get("peso", 778.0)))
 	for team in teams:

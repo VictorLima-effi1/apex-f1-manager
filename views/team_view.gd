@@ -766,15 +766,15 @@ func _open_upgrade_selection() -> void:
 	margin.add_child(layout)
 
 	var info := Label.new()
-	info.text = "Selecione uma melhoria abaixo. O prazo de entrega será definido aleatoriamente pela equipe de engenharia (de 2 a 5 corridas). Cada projeto custa $%.1fM." % (Database.PLAYER_RD_COST / 1_000_000.0)
+	info.text = "Cada melhoria aumenta o parâmetro escolhido entre 0,5 e 1,5. O prazo de entrega é de 2 a 5 corridas e cada projeto custa $%.1fM." % (Database.PLAYER_RD_COST / 1_000_000.0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(info)
 
 	var options := [
-		{"atributo": "Motor", "valor": 1.0, "texto": "Motor +1.0"},
-		{"atributo": "Aero", "valor": 1.0, "texto": "Aerodinâmica +1.0"},
-		{"atributo": "Chassi", "valor": 1.0, "texto": "Chassi +1.0"},
-		{"atributo": "Confiabilidade", "valor": 1.0, "texto": "Confiabilidade +1.0"},
+		{"atributo": "Motor", "valor": 1.0, "texto": "Motor +0,5 a 1,5"},
+		{"atributo": "Aero", "valor": 1.0, "texto": "Aerodinâmica +0,5 a 1,5"},
+		{"atributo": "Chassi", "valor": 1.0, "texto": "Chassi +0,5 a 1,5"},
+		{"atributo": "Confiabilidade", "valor": 1.0, "texto": "Confiabilidade +0,5 a 1,5"},
 		{"atributo": "Peso", "valor": 0.3, "texto": "Redução de peso: −0.30 kg"}
 	]
 	
@@ -797,7 +797,10 @@ func _open_upgrade_selection() -> void:
 		# Sorteia aleatoriamente a duração entre 2 e 5 corridas ao clicar
 		button.pressed.connect(func():
 			var random_delivery_races := randi_range(2, 5)
-			_start_team_upgrade(selection, random_delivery_races, dialog)
+			var selected_upgrade := selection.duplicate()
+			if str(selected_upgrade.get("atributo", "")) != "Peso":
+				selected_upgrade["valor"] = randf_range(0.5, 1.5)
+			_start_team_upgrade(selected_upgrade, random_delivery_races, dialog)
 		)
 		layout.add_child(button)
 

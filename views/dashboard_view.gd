@@ -1435,6 +1435,18 @@ func _get_status_priority(team_name: String) -> int:
 		return 1 # Agentes livres ficam no meio
 	return 0     # Titulares contratados no topo
 
+func _get_market_contract_years(driver: Dictionary) -> int:
+	var driver_team := str(driver.get("Equipe", "")).strip_edges().to_lower()
+	var player_team := str(Database.user_team.get("nome", Database.user_team.get("Nome", ""))).strip_edges()
+	if player_team.is_empty():
+		player_team = str(Database.selected_manager_team.get("Nome", Database.selected_manager_team.get("nome", ""))).strip_edges()
+	if driver_team == player_team.to_lower():
+		var driver_name := str(driver.get("Nome", driver.get("nome", ""))).strip_edges().to_lower()
+		for roster_driver in Database.user_team.get("pilotos", []):
+			if str(roster_driver.get("Nome", roster_driver.get("nome", ""))).strip_edges().to_lower() == driver_name:
+				return int(roster_driver.get("contrato_anos", roster_driver.get("AnosContrato", 1)))
+	return int(driver.get("AnosContrato", driver.get("contrato_anos", 0)))
+
 
 func _populate_market_contract_box(grid_container: GridContainer) -> void:
 	# Limpa itens anteriores se necessário
@@ -1445,7 +1457,7 @@ func _populate_market_contract_box(grid_container: GridContainer) -> void:
 	
 	for d in sorted_drivers:
 		var team_name = str(d.get("Equipe", "Free Agent"))
-		var contract_years = int(d.get("AnosContrato", 0))
+		var contract_years := _get_market_contract_years(d)
 		var morale = float(d.get("Moral", 75.0))
 		
 		# Label Piloto
