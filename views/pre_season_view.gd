@@ -11,8 +11,8 @@ var last_negotiation_warning: String = ""
 var team_name: String = "Apex Grand Prix"
 var boss_name: String = "Chefe da Equipe"
 var team_color: Color = Color("#ef4444") # Cor padrão (Vermelho)
-var initial_budget: int = 135
-var remaining_budget: int = 135
+var initial_budget: float = 135.0
+var remaining_budget: float = 135.0
 
 # =============================================================
 # NOVAS VARIÁVEIS DE TEMPO E PILOTAGEM PARA OS TESTES
@@ -58,6 +58,8 @@ var driver_cards_container: HBoxContainer
 var title_label: Label
 var budget_label: Label
 var is_manager_offseason: bool = false
+var is_existing_team_mode: bool = false
+var selected_existing_team_index: int = -1
 var offseason_original_team_name: String = ""
 var offseason_original_engine: Dictionary = {}
 var offseason_original_chassis: Dictionary = {}
@@ -174,6 +176,7 @@ func _render_current_step() -> void:
 		
 	match current_step:
 		-1: _build_mode_selection_menu()
+		1: _build_existing_team_selection()
 		0: _build_team_creation_step()
 		3: _build_winter_testing_step()
 
@@ -261,6 +264,11 @@ func _build_mode_selection_menu() -> void:
 		selected_drivers.clear()
 		selected_engine = {}
 		selected_chassis = {}
+		is_existing_team_mode = false
+		Database.is_custom_team = true
+		Database.selected_manager_team = {}
+		initial_budget = 135.0
+		remaining_budget = initial_budget
 		current_step = 0
 		_render_current_step()
 	)
@@ -297,7 +305,7 @@ func _build_mode_selection_menu() -> void:
 	nv2.add_child(l_n2)
 	
 	var l_d2 = Label.new()
-	l_d2.text = "Assuma o comando de uma escuderia oficial (Ferrari, Red Bull, McLaren, etc.).\n\n⚠️ FUNCIONALIDADE EM DESENVOLVIMENTO"
+	l_d2.text = "Assuma o comando de uma escuderia oficial e mantenha seus dados, pilotos e desempenho.\n\nSeguindo o modelo atual da Fórmula 1 com 11 equipes"
 	l_d2.add_theme_font_size_override("font_size", 18)
 	l_d2.add_theme_color_override("font_color", Color("#e2e8f0"))
 	l_d2.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -305,15 +313,13 @@ func _build_mode_selection_menu() -> void:
 	nv2.add_child(l_d2)
 	
 	var btn_exist = Button.new()
-	btn_exist.text = "ASSUMIR EQUIPE 🔒"
+	btn_exist.text = "ESCOLHER EQUIPE ▶"
 	btn_exist.custom_minimum_size.y = 50
 	btn_exist.add_theme_font_size_override("font_size", 18)
 	btn_exist.pressed.connect(func():
-		var dialog = AcceptDialog.new()
-		dialog.title = "Aviso do Sistema"
-		dialog.dialog_text = "⚠️ Opção em desenvolvimento. Por favor, escolha 'Criar Nova Equipe'."
-		add_child(dialog)
-		dialog.popup_centered()
+		selected_existing_team_index = -1
+		current_step = 1
+		_render_current_step()
 	)
 	nv2.add_child(btn_exist)
 	nm2.add_child(nv2)
@@ -334,6 +340,249 @@ func _build_mode_selection_menu() -> void:
 	margin.add_child(vbox)
 	main_card.add_child(margin)
 
+func _build_existing_team_selection() -> void:
+	main_card.custom_minimum_size = Vector2(1150, 660)
+
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 32)
+	margin.add_theme_constant_override("margin_right", 32)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 14)
+
+	var title = Label.new()
+	title.text = "🏆 ESCOLHA SUA EQUIPE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color("#ef4444"))
+	vbox.add_child(title)
+
+	var description = Label.new()
+	description.text = "Selecione uma equipe para conferir seus atributos e assumir o comando."
+	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	description.add_theme_color_override("font_color", Color("#94a3b8"))
+	vbox.add_child(description)
+
+	var table = PanelContainer.new()
+	var table_style = StyleBoxFlat.new()
+	table_style.bg_color = Color("#0f172a")
+	table_style.set_corner_radius_all(6)
+	table.add_theme_stylebox_override("panel", table_style)
+
+	var table_margin = MarginContainer.new()
+	table_margin.add_theme_constant_override("margin_left", 12)
+	table_margin.add_theme_constant_override("margin_right", 12)
+	table_margin.add_theme_constant_override("margin_top", 10)
+	table_margin.add_theme_constant_override("margin_bottom", 10)
+
+	var table_vbox = VBoxContainer.new()
+	table_vbox.add_theme_constant_override("separation", 5)
+
+	var column_header = HBoxContainer.new()
+	column_header.add_theme_constant_override("separation", 8)
+	_add_existing_team_cell(column_header, "EQUIPE", 230, true)
+	_add_existing_team_cell(column_header, "ORÇAMENTO", 130, true)
+	_add_existing_team_cell(column_header, "MOTOR", 90, true)
+	_add_existing_team_cell(column_header, "AERO", 90, true)
+	_add_existing_team_cell(column_header, "CHASSI", 90, true)
+	_add_existing_team_cell(column_header, "CONFIAB.", 105, true)
+	_add_existing_team_cell(column_header, "RESPEITO", 100, true)
+	table_vbox.add_child(column_header)
+
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var rows = VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 4)
+
+	for team_index in range(Database.teams.size()):
+		var team: Dictionary = Database.teams[team_index]
+		if not bool(team.get("Ativa", true)) or bool(team.get("is_custom", false)):
+			continue
+
+		var row_button = Button.new()
+		row_button.custom_minimum_size.y = 42
+		row_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row_button.add_theme_stylebox_override("normal", _existing_team_row_style(team_index == selected_existing_team_index, false))
+		row_button.add_theme_stylebox_override("hover", _existing_team_row_style(team_index == selected_existing_team_index, true))
+		row_button.add_theme_stylebox_override("pressed", _existing_team_row_style(true, true))
+
+		var row = HBoxContainer.new()
+		row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		row.add_theme_constant_override("separation", 8)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_add_existing_team_name_cell(row, team, 230)
+		_add_existing_team_cell(row, "$%.0fM" % float(team.get("Orcamento", team.get("orcamento", 0.0))), 130)
+		_add_existing_team_cell(row, str(team.get("Motor", 0)), 90)
+		_add_existing_team_cell(row, str(team.get("Aero", 0)), 90)
+		_add_existing_team_cell(row, str(team.get("Chassi", 0)), 90)
+		_add_existing_team_cell(row, str(team.get("Confiabilidade", 0)), 105)
+		_add_existing_team_cell(row, str(team.get("Respeito", 0)), 100)
+		row_button.add_child(row)
+		var row_team_index := team_index
+		row_button.pressed.connect(func():
+			selected_existing_team_index = row_team_index
+			_render_current_step()
+		)
+		rows.add_child(row_button)
+
+	scroll.add_child(rows)
+	table_vbox.add_child(scroll)
+	table_margin.add_child(table_vbox)
+	table.add_child(table_margin)
+	table.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(table)
+
+	var actions = HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+
+	var back_button = Button.new()
+	back_button.text = "VOLTAR"
+	back_button.custom_minimum_size = Vector2(180, 46)
+	back_button.pressed.connect(func():
+		current_step = -1
+		_render_current_step()
+	)
+	actions.add_child(back_button)
+
+	var choose_button = Button.new()
+	choose_button.text = "ESCOLHER EQUIPE ▶"
+	choose_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choose_button.custom_minimum_size.y = 46
+	choose_button.disabled = not _is_existing_team_selection_valid()
+	var choose_style = StyleBoxFlat.new()
+	choose_style.bg_color = Color("#d97706")
+	choose_style.set_corner_radius_all(4)
+	choose_button.add_theme_stylebox_override("normal", choose_style)
+	var choose_hover_style = StyleBoxFlat.new()
+	choose_hover_style.bg_color = Color("#f59e0b")
+	choose_hover_style.set_corner_radius_all(4)
+	choose_button.add_theme_stylebox_override("hover", choose_hover_style)
+	var choose_disabled_style = StyleBoxFlat.new()
+	choose_disabled_style.bg_color = Color("#334155")
+	choose_disabled_style.set_corner_radius_all(4)
+	choose_button.add_theme_stylebox_override("disabled", choose_disabled_style)
+	choose_button.pressed.connect(_confirm_existing_team_selection)
+	actions.add_child(choose_button)
+	vbox.add_child(actions)
+
+	margin.add_child(vbox)
+	main_card.add_child(margin)
+
+func _add_existing_team_cell(parent: HBoxContainer, text: String, width: float, is_header: bool = false) -> void:
+	var label = Label.new()
+	label.text = text
+	label.custom_minimum_size.x = width
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 12 if is_header else 14)
+	label.add_theme_color_override("font_color", Color("#94a3b8") if is_header else Color("#e2e8f0"))
+	parent.add_child(label)
+
+func _add_existing_team_name_cell(parent: HBoxContainer, team: Dictionary, width: float) -> void:
+	var name_cell = HBoxContainer.new()
+	name_cell.custom_minimum_size.x = width
+	name_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_cell.add_theme_constant_override("separation", 8)
+	name_cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var color_bar = ColorRect.new()
+	color_bar.custom_minimum_size = Vector2(3, 22)
+	color_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	color_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var team_color: Variant = team.get("cor", Color("#64748b"))
+	color_bar.color = team_color if team_color is Color else Color("#64748b")
+	name_cell.add_child(color_bar)
+
+	var label = Label.new()
+	label.text = str(team.get("Nome", team.get("nome", "Sem nome")))
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color("#e2e8f0"))
+	name_cell.add_child(label)
+	parent.add_child(name_cell)
+
+func _existing_team_row_style(is_selected: bool, is_hovered: bool) -> StyleBoxFlat:
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color("#334155") if is_selected else (Color("#1e293b") if is_hovered else Color("#111827"))
+	style.set_corner_radius_all(4)
+	return style
+
+func _is_existing_team_selection_valid() -> bool:
+	if selected_existing_team_index < 0 or selected_existing_team_index >= Database.teams.size():
+		return false
+	var team: Dictionary = Database.teams[selected_existing_team_index]
+	return bool(team.get("Ativa", true)) and not bool(team.get("is_custom", false))
+
+func _confirm_existing_team_selection() -> void:
+	if not _is_existing_team_selection_valid():
+		return
+
+	var team: Dictionary = Database.teams[selected_existing_team_index].duplicate(true)
+	var chosen_team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
+	if chosen_team_name.is_empty():
+		push_error("A equipe selecionada não possui um nome válido.")
+		return
+
+	is_existing_team_mode = true
+	Database.is_custom_team = false
+	Database.selected_manager_team = team.duplicate(true)
+	team_name = chosen_team_name
+	boss_name = str(team.get("chefe", "Chefe da Equipe"))
+	initial_budget = float(team.get("Orcamento", team.get("orcamento", 100.0)))
+	remaining_budget = initial_budget
+	var saved_color: Variant = team.get("cor", team_color)
+	if saved_color is Color:
+		team_color = saved_color
+
+	selected_drivers.clear()
+	for driver_value in Database.drivers:
+		if not driver_value is Dictionary:
+			continue
+		var driver: Dictionary = driver_value
+		var driver_team := str(driver.get("Equipe", driver.get("equipe", ""))).strip_edges()
+		if driver_team.to_lower() == chosen_team_name.to_lower() and selected_drivers.size() < 2:
+			selected_drivers.append(driver.duplicate(true))
+
+	var engine_name := str(team.get("motor", ""))
+	var engine_data: Dictionary = Database.ENGINE_DATA.get(engine_name, {}).duplicate(true)
+	if engine_data.is_empty():
+		engine_data = {
+			"preco": 0.0
+		}
+	engine_data["potencia"] = float(team.get("Motor", engine_data.get("potencia", 85.0)))
+	engine_data["confiabilidade"] = float(team.get("Confiabilidade", engine_data.get("confiabilidade", 85.0)))
+	engine_data["nome"] = engine_name if not engine_name.is_empty() else "Motor atual"
+	engine_data["preco"] = 0.0
+	selected_engine = engine_data
+
+	var chassis_name := str(team.get("chassi", "Próprio"))
+	var chassis_data: Dictionary = Database.CHASSIS_DATA.get(chassis_name, {}).duplicate(true)
+	if chassis_data.is_empty():
+		chassis_data = {}
+	chassis_data["chassi"] = float(team.get("Chassi", chassis_data.get("chassi", 85.0)))
+	chassis_data["aero"] = float(team.get("Aero", chassis_data.get("aero", 85.0)))
+	chassis_data["confiabilidade"] = float(team.get("Confiabilidade", chassis_data.get("confiabilidade", 85.0)))
+	chassis_data["peso"] = float(team.get("peso", 778.0))
+	chassis_data["nome"] = chassis_name
+	chassis_data["preco"] = _calculate_chassis_manufacturing_cost(
+		float(chassis_data["aero"]),
+		float(chassis_data["confiabilidade"])
+	)
+	selected_chassis = chassis_data
+
+	selected_sponsors.clear()
+	current_step = 0
+	_recalculate_budget()
+	_render_current_step()
+
 # =============================================================
 # ETAPA 0: TELA UNIFICADA DE CRIAÇÃO DA EQUIPE
 # =============================================================
@@ -353,7 +602,7 @@ func _build_team_creation_step() -> void:
 	var head_hbox = HBoxContainer.new()
 	
 	var lbl_title = Label.new()
-	lbl_title.text = "🏎️ CRIAR NOVA ESCUDERIA"
+	lbl_title.text = "🏎️ CONFIGURAR ESCUDERIA" if is_existing_team_mode else "🏎️ CRIAR NOVA ESCUDERIA"
 	lbl_title.add_theme_font_size_override("font_size", 24)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	lbl_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -724,7 +973,7 @@ func _build_team_creation_step() -> void:
 	btn_hbox.add_theme_constant_override("separation", 20)
 	
 	var btn_confirm = Button.new()
-	btn_confirm.text = "🏁 FINALIZAR EQUIPE E IR PARA OS TESTES ▶"
+	btn_confirm.text = "🏁 FINALIZAR E IR PARA A PRÉ-TEMPORADA ▶" if is_existing_team_mode else "🏁 FINALIZAR EQUIPE E IR PARA OS TESTES ▶"
 	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_confirm.custom_minimum_size.y = 52
 	btn_confirm.add_theme_font_size_override("font_size", 18)
@@ -752,7 +1001,7 @@ func _build_team_creation_step() -> void:
 	btn_back.custom_minimum_size = Vector2(180, 52)
 	btn_back.add_theme_font_size_override("font_size", 18)
 	btn_back.pressed.connect(func():
-		current_step = -1
+		current_step = 1 if is_existing_team_mode else -1
 		_render_current_step()
 	)
 	btn_hbox.add_child(btn_back)
@@ -768,7 +1017,7 @@ func _update_card_border_color() -> void:
 			style.border_color = team_color
 
 func _recalculate_budget() -> void:
-	var base_starting_budget := float(Database.user_team.get("orcamento", 100.0)) if is_manager_offseason else 100.0
+	var base_starting_budget := float(Database.user_team.get("orcamento", 100.0)) if is_manager_offseason else (initial_budget if is_existing_team_mode else 100.0)
 	
 	# 1. Soma os patrocínios de temporada contratados
 	var sponsor_bonus = 0.0
@@ -795,6 +1044,11 @@ func _component_selection_changed(selected: Dictionary, original: Dictionary) ->
 	if original.is_empty():
 		return not selected.is_empty()
 	return str(selected.get("nome", "")).strip_edges().to_lower() != str(original.get("nome", "")).strip_edges().to_lower()
+
+func _calculate_chassis_manufacturing_cost(aero: float, reliability: float) -> float:
+	var aero_cost := maxf(0.0, (aero - 75.0) * 0.85)
+	var reliability_cost := maxf(0.0, (reliability - 75.0) * 0.30)
+	return Database.get_player_manufacturing_cost(10.0 + aero_cost + reliability_cost)
 
 ## Atualiza os textos de orçamento e a mensagem dos patrocinadores contratados
 func atualizar_interface_criacao() -> void:
@@ -869,6 +1123,17 @@ func _open_driver_modal() -> void:
 		wm.add_child(l_warn)
 		warn_box.add_child(wm)
 		main_vbox.add_child(warn_box)
+
+	var driver_search = LineEdit.new()
+	driver_search.placeholder_text = "Buscar piloto pelo nome..."
+	driver_search.clear_button_enabled = true
+	driver_search.custom_minimum_size.y = 36
+	main_vbox.add_child(driver_search)
+	var no_driver_results = Label.new()
+	no_driver_results.text = "Nenhum piloto encontrado."
+	no_driver_results.visible = false
+	no_driver_results.add_theme_color_override("font_color", Color("#94a3b8"))
+	main_vbox.add_child(no_driver_results)
 	
 	# Cabeçalho da Tabela
 	var th_box = PanelContainer.new()
@@ -1048,8 +1313,23 @@ func _open_driver_modal() -> void:
 		rh.add_child(btn_neg)
 		rm.add_child(rh)
 		row.add_child(rm)
+		row.set_meta("driver_search_name", str(d_name).to_lower())
 		rows_vbox.add_child(row)
-		
+
+	driver_search.text_changed.connect(func(query: String):
+		var normalized_query := query.strip_edges().to_lower()
+		var visible_count := 0
+		for driver_row in rows_vbox.get_children():
+			if not driver_row.has_meta("driver_search_name"):
+				continue
+			var matches := str(driver_row.get_meta("driver_search_name")).contains(normalized_query)
+			driver_row.visible = matches
+			if matches:
+				visible_count += 1
+		no_driver_results.visible = visible_count == 0
+	)
+	no_driver_results.visible = rows_vbox.get_child_count() == 0
+
 	scroll.add_child(rows_vbox)
 	main_vbox.add_child(scroll)
 	
@@ -1458,7 +1738,7 @@ func _open_engine_modal() -> void:
 		rh.add_child(l_c)
 		
 		var l_v = Label.new()
-		l_v.text = "💰 $%.1fM / ano" % eng["preco"]
+		l_v.text = "💰 $%.1fM / ano" % Database.get_player_manufacturing_cost(float(eng["preco"]))
 		l_v.custom_minimum_size.x = 200
 		l_v.add_theme_font_size_override("font_size", 15)
 		l_v.add_theme_color_override("font_color", Color("#10b981"))
@@ -1483,7 +1763,8 @@ func _open_engine_modal() -> void:
 			btn_sel.add_theme_stylebox_override("normal", st_g)
 			
 			btn_sel.pressed.connect(func():
-				selected_engine = eng
+				selected_engine = eng.duplicate(true)
+				selected_engine["preco"] = Database.get_player_manufacturing_cost(float(eng["preco"]))
 				_recalculate_budget()
 				dialog.queue_free()
 				_render_current_step()
@@ -1659,7 +1940,7 @@ func _open_custom_engine_builder_modal() -> void:
 		# -------------------------------------------------------------
 		# APLICAÇÃO DO BÔNUS DE +5% DE CUSTO DE FABRICAÇÃO PRÓPRIA (P&D)
 		# -------------------------------------------------------------
-		var total_cost = raw_total_cost * 1.05
+		var total_cost = Database.get_player_manufacturing_cost(raw_total_cost * 1.05)
 		
 		l_cost.text = "💰 Custo Total: $%.1fM" % total_cost
 
@@ -1723,7 +2004,7 @@ func _open_custom_engine_builder_modal() -> void:
 		var raw_cost = 12.0 + pow_cost + rel_cost
 		
 		# Salva o valor com a taxa adicional de 5%
-		var final_cost = raw_cost * 1.05
+		var final_cost = Database.get_player_manufacturing_cost(raw_cost * 1.05)
 		
 		selected_engine = {
 			"nome": in_engine_name.text,
@@ -1885,10 +2166,7 @@ func _open_custom_chassis_builder_modal() -> void:
 		l_weight.add_theme_color_override("font_color", Color("#38bdf8") if calculated_weight <= 778.0 else Color("#fbbf24"))
 		
 		# Cálculo do Custo
-		var base_cost = 10.0
-		var aero_cost = max(0.0, (aero_val - 75.0) * 0.85)
-		var rel_cost = max(0.0, (rel_val - 75.0) * 0.30)
-		var total_cost = base_cost + aero_cost + rel_cost
+		var total_cost := _calculate_chassis_manufacturing_cost(aero_val, rel_val)
 		
 		l_cost.text = "💰 Custo Total de Fabricação de Chassi: $%.1fM" % total_cost
 
@@ -1931,9 +2209,7 @@ func _open_custom_chassis_builder_modal() -> void:
 		var final_rel = int(slider_rel.value)
 		
 		var calculated_weight = maxf(768.0, 768.0 + ((final_aero - 75.0) * 0.1) + ((final_rel - 75.0) * 0.9))
-		var aero_cost = max(0.0, (final_aero - 75.0) * 0.85)
-		var rel_cost = max(0.0, (final_rel - 75.0) * 0.30)
-		var final_cost = 10.0 + aero_cost + rel_cost
+		var final_cost := _calculate_chassis_manufacturing_cost(final_aero, final_rel)
 		
 		selected_chassis = {
 			"nome": in_chassis_name.text,
@@ -1964,7 +2240,7 @@ func _open_custom_chassis_builder_modal() -> void:
 	dialog.popup_centered()
 
 func _save_team_to_database() -> void:
-	var updated_team: Dictionary = Database.user_team.duplicate(true) if is_manager_offseason else {}
+	var updated_team: Dictionary = Database.user_team.duplicate(true) if is_manager_offseason else (Database.selected_manager_team.duplicate(true) if is_existing_team_mode else {})
 	if not is_manager_offseason and Database.user_team.get("financas_detalhadas", {}) is Dictionary:
 		updated_team["financas_detalhadas"] = Database.user_team.get("financas_detalhadas", {}).duplicate(true)
 	var engine_power := float(selected_engine.get("potencia", 88.0))
@@ -2777,7 +3053,9 @@ func _open_sponsors_selection_modal() -> void:
 		# Exibição financeira detalhada
 		var l_pay = Label.new()
 		l_pay.text = "💰 Adiantado: $%.1fM  |  🏁 Por GP: $%.1fM  |  🏆 Por Ponto: $%.2fM" % [
-			sp["valor_temporada"], sp["valor_corrida"], sp["valor_ponto"]
+			float(sp["valor_temporada"]) * Database.get_manager_difficulty_modifier("sponsor_payout"),
+			float(sp["valor_corrida"]) * Database.get_manager_difficulty_modifier("sponsor_payout"),
+			float(sp["valor_ponto"]) * Database.get_manager_difficulty_modifier("sponsor_payout")
 		]
 		l_pay.add_theme_font_size_override("font_size", 12)
 		l_pay.add_theme_color_override("font_color", Color("#10b981"))
@@ -2843,6 +3121,12 @@ func _open_sponsor_negotiation_dialog(sponsor: Dictionary, parent_modal: Window)
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 10)
 	
+	var lbl_title = Label.new()
+	lbl_title.text = "🤝 NEGOCIAÇÃO DE PATROCÍNIO"
+	lbl_title.add_theme_font_size_override("font_size", 16)
+	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
+	vbox.add_child(lbl_title)
+
 	var lbl_info = Label.new()
 	lbl_info.text = "Defina os termos do contrato de patrocínio:"
 	lbl_info.add_theme_font_size_override("font_size", 13)
@@ -2866,7 +3150,10 @@ func _open_sponsor_negotiation_dialog(sponsor: Dictionary, parent_modal: Window)
 	# Resumo da Oferta
 	var lbl_summary = Label.new()
 	lbl_summary.text = "Adiantamento: $%.1fM\nReceita por GP: $%.1fM\nBônus p/ Ponto: $%.2fM\nMulta por Rescisão: $%.1fM" % [
-		sponsor["valor_temporada"], sponsor["valor_corrida"], sponsor["valor_ponto"], sponsor["multa_rescisao"]
+		float(sponsor["valor_temporada"]) * Database.get_manager_difficulty_modifier("sponsor_payout"),
+		float(sponsor["valor_corrida"]) * Database.get_manager_difficulty_modifier("sponsor_payout"),
+		float(sponsor["valor_ponto"]) * Database.get_manager_difficulty_modifier("sponsor_payout"),
+		sponsor["multa_rescisao"]
 	]
 	lbl_summary.add_theme_font_size_override("font_size", 12)
 	lbl_summary.add_theme_color_override("font_color", Color("#38bdf8"))
@@ -2878,6 +3165,7 @@ func _open_sponsor_negotiation_dialog(sponsor: Dictionary, parent_modal: Window)
 	btn_sign.pressed.connect(func():
 		var chosen_years = opt_years.get_selected_id()
 		var sp_copy = sponsor.duplicate()
+		Database.apply_player_sponsor_payout_modifier(sp_copy)
 		sp_copy["contrato_anos"] = chosen_years
 		sp_copy["anos_restantes"] = chosen_years
 		
@@ -3312,10 +3600,13 @@ func _apply_final_testing_upgrades_to_database() -> void:
 		# Insere/Atualiza a equipe na lista global de equipes do campeonato (Database.teams)
 		if "teams" in Database:
 			var found = false
+			var selected_team_original_name := str(Database.selected_manager_team.get("Nome", Database.selected_manager_team.get("nome", "")))
 			for idx in range(Database.teams.size()):
 				var t_item = Database.teams[idx]
 				var curr_name = t_item.get("nome", t_item.get("Nome", ""))
-				if curr_name == user_team_name or (is_manager_offseason and curr_name == offseason_original_team_name):
+				if curr_name == user_team_name \
+				or (is_manager_offseason and curr_name == offseason_original_team_name) \
+				or (is_existing_team_mode and curr_name == selected_team_original_name):
 					found = true
 					Database.teams[idx] = Database.user_team.duplicate(true)
 					break

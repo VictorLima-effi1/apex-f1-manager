@@ -5,6 +5,7 @@ var current_gp: int = 1
 var current_view: String = "dashboard"
 var race_finished: bool = false
 var game_mode: String = "manager"
+var manager_difficulty: String = "normal"
 var active_engine: RaceEngine = null
 var has_completed_season: bool = false
 var constructors_points_history: Array = [] # Estrutura: [{"gp": 1, "points": {"McLaren": 25, "Ferrari": 18, ...}}]
@@ -153,9 +154,10 @@ var team_upgrade_reserves: Dictionary = {}
 var team_car_construction_years: Dictionary = {}
 var last_financial_settlement_year: int = -1
 
-# --- SISTEMA DE MÚLTIPLOS SLOTS DE SAVE (1, 2 e 3) ---
-const MAX_SAVE_SLOTS: int = 3
-var current_slot: int = 1
+# --- SISTEMA DE MÚLTIPLOS SLOTS DE SAVE ---
+const MAX_SAVE_SLOTS: int = 4
+var current_slot: int = MAX_SAVE_SLOTS
+var auto_save_uses_default_slot: bool = true
 
 @warning_ignore("shadowed_global_identifier")
 const TracksData = preload("res://data/tracks_data.gd")
@@ -215,6 +217,46 @@ func init_season_budget_cap() -> void:
 func get_team_budget_cap(team_name: String) -> float:
 	return COST_CAP_LIMIT
 
+func get_manager_difficulty_modifier(effect: String) -> float:
+	match effect:
+		"cost_cap_penalty":
+			return {"easy": 0.5, "normal": 1.0, "hard": 1.5, "extreme": 2.0}.get(manager_difficulty, 1.0)
+		"dnf_cost":
+			return {"easy": 0.25, "normal": 1.0, "hard": 1.3, "extreme": 1.45}.get(manager_difficulty, 1.0)
+		"upgrade_cost":
+			return {"easy": 0.5, "normal": 1.0, "hard": 1.25, "extreme": 1.33}.get(manager_difficulty, 1.0)
+		"upgrade_gain":
+			return 1.1 if manager_difficulty == "easy" else 1.0
+		"manufacturing_cost":
+			return {"easy": 0.7, "normal": 1.0, "hard": 1.2, "extreme": 1.33}.get(manager_difficulty, 1.0)
+		"driver_acceptance":
+			return {"easy": 0.1, "normal": 0.0, "hard": -0.15, "extreme": -0.3}.get(manager_difficulty, 0.0)
+		"dnf_chance":
+			return {"easy": -0.1, "normal": 0.0, "hard": 0.015, "extreme": 0.03}.get(manager_difficulty, 0.0)
+		"sponsor_payout":
+			return {"easy": 1.15, "normal": 1.0, "hard": 0.95, "extreme": 0.9}.get(manager_difficulty, 1.0)
+	return 1.0
+
+func is_player_team(team_name: String) -> bool:
+	if game_mode != "manager":
+		return false
+	var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
+	if player_team_name.is_empty():
+		player_team_name = str(selected_manager_team.get("Nome", selected_manager_team.get("nome", ""))).strip_edges()
+	return not player_team_name.is_empty() and team_name.strip_edges().to_lower() == player_team_name.to_lower()
+
+func get_player_rd_cost() -> float:
+	return PLAYER_RD_COST * get_manager_difficulty_modifier("upgrade_cost")
+
+func get_player_manufacturing_cost(base_cost: float) -> float:
+	return base_cost * get_manager_difficulty_modifier("manufacturing_cost")
+
+func apply_player_sponsor_payout_modifier(sponsor: Dictionary) -> void:
+	var multiplier := get_manager_difficulty_modifier("sponsor_payout")
+	for key in ["valor_temporada", "valor_corrida", "valor_ponto"]:
+		if sponsor.has(key):
+			sponsor[key] = float(sponsor[key]) * multiplier
+
 func record_season_car_construction_expenses() -> void:
 	var player_team_name := ""
 	if game_mode == "manager":
@@ -243,11 +285,14 @@ func purchase_team_upgrade(team_name: String) -> bool:
 	var current_expense: float = float(team_season_expenses.get(team_name, 0.0))
 	var max_cap: float = get_team_budget_cap(team_name)
 	var remaining: float = max_cap - current_expense
+	var upgrade_cost: float = UPGRADE_COST
+	if is_player_team(team_name):
+		upgrade_cost *= get_manager_difficulty_modifier("upgrade_cost")
 	
-	if remaining < UPGRADE_COST or remaining - UPGRADE_COST < get_team_upgrade_reserve(team_name):
+	if remaining < upgrade_cost or remaining - upgrade_cost < get_team_upgrade_reserve(team_name):
 		return false
 		
-	team_season_expenses[team_name] = current_expense + UPGRADE_COST
+	team_season_expenses[team_name] = current_expense + upgrade_cost
 	
 	var team = _get_team_by_name(team_name)
 	var last_rank = int(team.get("LastSeasonRank", 5))
@@ -437,7 +482,8 @@ func get_team_cost_cap_penalty(team_name: String) -> int:
 		return 0
 	var excess_percent := int(floor((excess / cap) * 100.0 + 0.000001))
 	var available_points := maxi(0, int(_get_team_by_name(team_name).get("Pontos", 0)))
-	return mini(available_points, excess_percent * 2)
+	var penalty_multiplier := get_manager_difficulty_modifier("cost_cap_penalty") if is_player_team(team_name) else 1.0
+	return mini(available_points, int(floor(float(excess_percent * 2) * penalty_multiplier)))
 
 func get_team_championship_points(team_name: String) -> int:
 	var team := _get_team_by_name(team_name)
@@ -1540,58 +1586,129 @@ func _normalize_game_mode(mode: String) -> String:
 	return "observer" if mode.to_lower() == "observer" else "manager"
 
 func get_save_path(slot_index: int, mode: String = "") -> String:
-	var save_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
 	var slot: int = clampi(slot_index, 1, MAX_SAVE_SLOTS)
-	if save_mode == "observer":
-		return "user://savegame_observer_slot_%d.json" % slot
+	if slot == MAX_SAVE_SLOTS:
+		return "user://savegame_autosave.json"
 	return "user://savegame_slot_%d.json" % slot
 
 func get_all_slots_info() -> Array:
 	var slots_info: Array = []
-	for mode in ["manager", "observer"]:
-		for i in range(1, MAX_SAVE_SLOTS + 1):
-			var path := get_save_path(i, mode)
-			var empty_name := "Slot %d (%s)" % [
-				i, tr_text("SAVE_SLOT_EMPTY") if has_method("tr_text") else "Vazio"
-			]
-			var slot_info := {
-				"slot": i,
-				"mode": mode,
-				"exists": false,
-				"name": empty_name,
-				"year": 2026
-			}
-			if FileAccess.file_exists(path):
-				var file := FileAccess.open(path, FileAccess.READ)
-				if file:
-					var content := file.get_as_text()
-					file.close()
-					var json := JSON.new()
-					if json.parse(content) == OK and json.get_data() is Dictionary:
-						var data: Dictionary = json.get_data()
-						slot_info["exists"] = true
-						slot_info["name"] = str(data.get("save_name", empty_name))
-						slot_info["year"] = int(data.get("current_year", 2026))
-			slots_info.append(slot_info)
+	for i in range(1, MAX_SAVE_SLOTS + 1):
+		var path := get_save_path(i)
+		var empty_name := "Slot %d (%s)" % [
+			i, tr_text("SAVE_SLOT_EMPTY") if has_method("tr_text") else "Vazio"
+		]
+		var slot_info := {
+			"slot": i,
+			"mode": game_mode,
+			"exists": false,
+			"name": empty_name,
+			"year": 2026,
+			"is_autosave": i == MAX_SAVE_SLOTS
+		}
+		if i == MAX_SAVE_SLOTS:
+			slot_info["name"] = tr_text("SAVE_SLOT_AUTOSAVE") if has_method("tr_text") else "🔄 AutoSave"
+
+		if FileAccess.file_exists(path):
+			var file := FileAccess.open(path, FileAccess.READ)
+			if file:
+				var content := file.get_as_text()
+				file.close()
+				var json := JSON.new()
+				if json.parse(content) == OK and json.get_data() is Dictionary:
+					var data: Dictionary = json.get_data()
+					slot_info["exists"] = true
+					slot_info["name"] = tr_text("SAVE_SLOT_AUTOSAVE") if i == MAX_SAVE_SLOTS and has_method("tr_text") else ("🔄 AutoSave" if i == MAX_SAVE_SLOTS else str(data.get("save_name", empty_name)))
+					slot_info["year"] = int(data.get("current_year", 2026))
+					slot_info["mode"] = str(data.get("game_mode", game_mode))
+		elif i < MAX_SAVE_SLOTS:
+			for legacy_mode in ["manager", "observer"]:
+				var legacy_path := "user://savegame_%s_slot_%d.json" % [
+					"" if legacy_mode == "manager" else "observer_", i
+				]
+				if legacy_mode == "manager":
+					legacy_path = "user://savegame_slot_%d.json" % i
+				else:
+					legacy_path = "user://savegame_observer_slot_%d.json" % i
+				if FileAccess.file_exists(legacy_path):
+					var legacy_file := FileAccess.open(legacy_path, FileAccess.READ)
+					if legacy_file:
+						var legacy_json := JSON.new()
+						if legacy_json.parse(legacy_file.get_as_text()) == OK and legacy_json.get_data() is Dictionary:
+							var legacy_data: Dictionary = legacy_json.get_data()
+							slot_info["exists"] = true
+							slot_info["name"] = str(legacy_data.get("save_name", empty_name))
+							slot_info["year"] = int(legacy_data.get("current_year", 2026))
+							slot_info["mode"] = str(legacy_data.get("game_mode", legacy_mode))
+						legacy_file.close()
+					break
+		slots_info.append(slot_info)
 	return slots_info
 
 func delete_save_slot(slot_index: int, mode: String = "") -> bool:
-	slot_index = clamp(slot_index, 1, MAX_SAVE_SLOTS)
-	var save_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
-	var path := get_save_path(slot_index, save_mode)
+	slot_index = clampi(slot_index, 1, MAX_SAVE_SLOTS)
+	var path := get_save_path(slot_index)
+	var deleted := false
 	if FileAccess.file_exists(path):
 		var dir = DirAccess.open("user://")
 		if dir:
-			var filename := "savegame_observer_slot_%d.json" % slot_index if save_mode == "observer" else "savegame_slot_%d.json" % slot_index
+			var filename := "savegame_autosave.json" if slot_index == MAX_SAVE_SLOTS else "savegame_slot_%d.json" % slot_index
 			var err = dir.remove(filename)
 			if err == OK:
-				return true
+				deleted = true
+	if slot_index < MAX_SAVE_SLOTS:
+		var dir = DirAccess.open("user://")
+		if dir:
+			dir.remove("savegame_slot_%d.json" % slot_index)
+			dir.remove("savegame_observer_slot_%d.json" % slot_index)
+			deleted = true
+	if deleted:
+		return true
 	return false
 
-func save_game_slot(slot_index: int, custom_name: String = "", mode: String = "") -> bool:
-	slot_index = clamp(slot_index, 1, MAX_SAVE_SLOTS)
-	var save_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
-	current_slot = slot_index
+func rename_save_slot(slot_index: int, new_name: String, mode: String = "") -> bool:
+	if slot_index < 1 or slot_index >= MAX_SAVE_SLOTS:
+		push_error("Apenas slots manuais podem ser renomeados.")
+		return false
+	var trimmed_name := new_name.strip_edges()
+	if trimmed_name.is_empty():
+		push_error("O nome do save não pode ficar vazio.")
+		return false
+
+	var save_path := get_save_path(slot_index)
+	if not FileAccess.file_exists(save_path):
+		var legacy_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
+		save_path = "user://savegame_observer_slot_%d.json" % slot_index if legacy_mode == "observer" else "user://savegame_slot_%d.json" % slot_index
+	if not FileAccess.file_exists(save_path):
+		push_error("Não foi possível renomear o save: o slot está vazio.")
+		return false
+
+	var read_file := FileAccess.open(save_path, FileAccess.READ)
+	if read_file == null:
+		push_error("Não foi possível abrir o save para renomeá-lo.")
+		return false
+	var json := JSON.new()
+	var parse_result := json.parse(read_file.get_as_text())
+	read_file.close()
+	if parse_result != OK or not json.get_data() is Dictionary:
+		push_error("Não foi possível renomear o save: arquivo inválido.")
+		return false
+
+	var save_data: Dictionary = json.get_data()
+	save_data["save_name"] = trimmed_name
+	var write_file := FileAccess.open(save_path, FileAccess.WRITE)
+	if write_file == null:
+		push_error("Não foi possível abrir o save para gravar o novo nome.")
+		return false
+	write_file.store_string(JSON.stringify(save_data, "\t"))
+	write_file.close()
+	return true
+
+func save_game_slot(slot_index: int, custom_name: String = "", mode: String = "", is_auto_save: bool = false) -> bool:
+	slot_index = clampi(slot_index, 1, MAX_SAVE_SLOTS)
+	var save_mode := _normalize_game_mode(game_mode)
+	if slot_index == MAX_SAVE_SLOTS:
+		is_auto_save = true
 	
 	var datetime = Time.get_datetime_dict_from_system()
 	var formatted_date = "%02d/%02d/%04d %02d:%02d" % [datetime.day, datetime.month, datetime.year, datetime.hour, datetime.minute]
@@ -1600,7 +1717,7 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 	if save_name.is_empty():
 		var existing_name := "Carreira %s" % str(user_team.get("nome", user_team.get("Nome", save_mode)))
 		for slot in get_all_slots_info():
-			if int(slot["slot"]) == slot_index and str(slot["mode"]) == save_mode:
+			if int(slot["slot"]) == slot_index:
 				if bool(slot["exists"]):
 					existing_name = str(slot["name"])
 				break
@@ -1610,6 +1727,7 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"save_name": save_name,
 		"save_date": formatted_date,
 		"game_mode": save_mode,
+		"manager_difficulty": manager_difficulty,
 		"current_year": current_year,
 		"has_completed_season": has_completed_season,
 		"current_gp": current_gp,
@@ -1636,7 +1754,8 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"team_season_expenses": team_season_expenses,
 		"team_car_construction_years": team_car_construction_years,
 		"last_financial_settlement_year": last_financial_settlement_year,
-		"full_season_archive": full_season_archive
+		"full_season_archive": full_season_archive,
+		"autosave_target_slot": slot_index
 	}
 	
 	var safe_save_data = _make_json_safe(save_data)
@@ -1646,11 +1765,16 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		print_debug("Erro de serialização JSON!")
 		return false
 		
-	var file = FileAccess.open(get_save_path(slot_index, save_mode), FileAccess.WRITE)
+	var file = FileAccess.open(get_save_path(slot_index), FileAccess.WRITE)
 	if file:
 		file.store_string(json_string)
 		file.close()
-		add_news_event("💾 Jogo salvo com sucesso no Slot %d!" % slot_index)
+		current_slot = slot_index
+		if not is_auto_save:
+			auto_save_uses_default_slot = false
+			add_news_event("💾 Jogo salvo com sucesso no Slot %d!" % slot_index)
+		elif slot_index == MAX_SAVE_SLOTS:
+			auto_save_uses_default_slot = true
 		return true
 		
 	return false
@@ -1680,9 +1804,16 @@ func _make_json_safe(value):
 			return str(value)
 
 func load_game_slot(slot_index: int, mode: String = "") -> bool:
-	slot_index = clamp(slot_index, 1, MAX_SAVE_SLOTS)
-	var requested_mode := _normalize_game_mode(mode if not mode.is_empty() else game_mode)
-	var path := get_save_path(slot_index, requested_mode)
+	slot_index = clampi(slot_index, 1, MAX_SAVE_SLOTS)
+	var path := get_save_path(slot_index)
+	if not FileAccess.file_exists(path) and slot_index < MAX_SAVE_SLOTS:
+		for legacy_mode in ["manager", "observer"]:
+			var legacy_path := "user://savegame_slot_%d.json" % slot_index
+			if legacy_mode == "observer":
+				legacy_path = "user://savegame_observer_slot_%d.json" % slot_index
+			if FileAccess.file_exists(legacy_path):
+				path = legacy_path
+				break
 	
 	if not FileAccess.file_exists(path):
 		return false
@@ -1695,11 +1826,11 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 		var json = JSON.new()
 		if json.parse(content) == OK and json.get_data() is Dictionary:
 			var data: Dictionary = json.get_data()
-			var stored_mode := str(data.get("game_mode", requested_mode)).to_lower()
-			if stored_mode != requested_mode:
-				return false
+			var stored_mode := _normalize_game_mode(str(data.get("game_mode", game_mode)))
 			current_slot = slot_index
-			game_mode = requested_mode
+			auto_save_uses_default_slot = slot_index == MAX_SAVE_SLOTS
+			game_mode = stored_mode
+			manager_difficulty = str(data.get("manager_difficulty", "normal"))
 			current_year = data.get("current_year", 2026)
 			has_completed_season = bool(data.get("has_completed_season", int(current_year) > 2026))
 			current_gp = data.get("current_gp", 1)
@@ -1740,15 +1871,22 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 	return false
 
 func has_any_save() -> bool:
-	for mode in ["manager", "observer"]:
-		for i in range(1, MAX_SAVE_SLOTS + 1):
-			if FileAccess.file_exists(get_save_path(i, mode)):
-				return true
+	for i in range(1, MAX_SAVE_SLOTS + 1):
+		if FileAccess.file_exists(get_save_path(i)):
+			return true
+	for i in range(1, MAX_SAVE_SLOTS):
+		if FileAccess.file_exists("user://savegame_slot_%d.json" % i):
+			return true
+		if FileAccess.file_exists("user://savegame_observer_slot_%d.json" % i):
+			return true
 	return false
 
 func reset_database(mode: String = "") -> void:
 	if not mode.is_empty():
 		game_mode = _normalize_game_mode(mode)
+	current_slot = MAX_SAVE_SLOTS
+	auto_save_uses_default_slot = true
+	manager_difficulty = "normal"
 	current_year = 2026
 	current_gp = 1
 	has_completed_season = false
@@ -1793,6 +1931,9 @@ func record_gp_winner(track_index: int, winner_driver_name: String, winner_team_
 
 func save_game() -> bool:
 	return save_game_slot(current_slot)
+
+func save_auto_save() -> bool:
+	return save_game_slot(current_slot, "", game_mode, true)
 
 func add_new_team(team_name: String, respeto: int = 50, aero: int = 75, motor: int = 75, chassi: int = 75) -> void:
 	if not _get_team_by_name(team_name).is_empty():
@@ -1926,6 +2067,8 @@ func _apply_dnf_financial_penalty(team_name: String) -> void:
 		return
 
 	var repair_cost: int = randi_range(1000000, 10000000)
+	if is_player_team(team_name):
+		repair_cost = roundi(float(repair_cost) * get_manager_difficulty_modifier("dnf_cost"))
 	team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + repair_cost
 
 	if game_mode != "manager":
@@ -2090,7 +2233,8 @@ func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races
 		return false
 
 	var balance := float(user_team.get("orcamento", 0.0))
-	var cost_m := PLAYER_RD_COST / 1_000_000.0
+	var upgrade_cost := get_player_rd_cost()
+	var cost_m := upgrade_cost / 1_000_000.0
 	if balance < cost_m:
 		return false
 	var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
@@ -2098,8 +2242,8 @@ func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races
 		return false
 	var team_cap := get_team_budget_cap(player_team_name)
 	var spent := float(team_season_expenses.get(player_team_name, 0.0))
-	if team_cap - spent < PLAYER_RD_COST \
-	or team_cap - spent - PLAYER_RD_COST < get_team_upgrade_reserve(player_team_name):
+	if team_cap - spent < upgrade_cost \
+	or team_cap - spent - upgrade_cost < get_team_upgrade_reserve(player_team_name):
 		return false
 
 	var tracks_per_season := maxi(1, tracks.size())
@@ -2112,7 +2256,9 @@ func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races
 	user_team["orcamento"] = balance - cost_m
 	var team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
 	if not team_name.is_empty():
-		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + PLAYER_RD_COST
+		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + upgrade_cost
+	if attribute != "Peso":
+		amount *= get_manager_difficulty_modifier("upgrade_gain")
 	slots[free_slot] = {
 		"atributo": attribute,
 		"valor": amount,

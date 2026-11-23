@@ -3,8 +3,6 @@ extends Control
 var engine: RaceEngine
 var player_race_strategies: Dictionary = {}
 var manager_panel_container: VBoxContainer
-var manager_controls_race_session: bool = false
-var manager_controls_pre_race_session: bool = false
 
 @onready var top_title: Label
 @onready var weather_lbl: Label
@@ -254,13 +252,6 @@ func build_ui() -> void:
 	log_text_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	log_text_node.scroll_following = true
 	tab_events.add_child(log_text_node)
-	if is_manager_mode:
-		manager_panel_container = VBoxContainer.new()
-		manager_panel_container.name = "ManagerPanelContainer"
-		manager_panel_container.size_flags_vertical = Control.SIZE_SHRINK_END
-		manager_panel_container.add_theme_constant_override("separation", 6)
-		tab_events.add_child(manager_panel_container)
-		_build_manager_qualifying_controls(manager_panel_container)
 	tab_container.add_child(tab_events)
 	
 	var tab_pits = VBoxContainer.new()
@@ -272,6 +263,16 @@ func build_ui() -> void:
 	tab_container.add_child(tab_pits)
 	
 	right_vbox.add_child(tab_container)
+
+	if is_manager_mode:
+		manager_panel_container = VBoxContainer.new()
+		manager_panel_container.name = "ManagerPanelContainer"
+		manager_panel_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		manager_panel_container.size_flags_vertical = Control.SIZE_SHRINK_END
+		manager_panel_container.add_theme_constant_override("separation", 6)
+		right_vbox.add_child(manager_panel_container)
+		_build_manager_qualifying_controls(manager_panel_container)
+
 	right_panel.add_child(right_vbox)
 	main_hbox.add_child(right_panel)
 	main_vbox.add_child(main_hbox)
@@ -291,14 +292,14 @@ func build_ui() -> void:
 func _build_manager_qualifying_controls(parent_container: Control) -> void:
 	if not is_instance_valid(parent_container):
 		return
+	var race_session := engine != null and engine.is_quali_done()
+	parent_container.set_meta("manager_race_session", race_session)
+	parent_container.set_meta("manager_pre_race_session", race_session and engine.current_lap == 0)
 	
 	for c in parent_container.get_children():
 		if c.name == "ManagerQualiPanel":
 			parent_container.remove_child(c)
 			c.queue_free()
-	manager_controls_race_session = engine != null and engine.is_quali_done()
-	manager_controls_pre_race_session = manager_controls_race_session and engine.current_lap == 0
-		
 	var user_drivers = _get_user_drivers()
 	if user_drivers.is_empty():
 		return
@@ -416,8 +417,12 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 		if selected_index < tire_options.size():
 			if is_red_flag_strategy:
 				driver_data["red_flag_tire_compound"] = tire_options[selected_index]
+				driver_data["red_flag_strategy_confirmed"] = false
+				_refresh_manager_strategy_confirmation_state()
 			elif is_pre_race_session:
 				driver_data["tire_compound"] = tire_options[selected_index]
+				driver_data["pre_race_strategy_confirmed"] = false
+				_refresh_manager_strategy_confirmation_state()
 			elif is_race_session:
 				driver_data["planned_pit_tire"] = tire_options[selected_index]
 			else:
@@ -436,6 +441,12 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 		var paces := ["Conservador", "Normal", "Agressivo"]
 		if selected_index < paces.size():
 			driver_data["estilo"] = paces[selected_index]
+			if is_red_flag_strategy:
+				driver_data["red_flag_strategy_confirmed"] = false
+				_refresh_manager_strategy_confirmation_state()
+			elif is_pre_race_session:
+				driver_data["pre_race_strategy_confirmed"] = false
+				_refresh_manager_strategy_confirmation_state()
 	)
 	ch.add_child(opt_pace)
 	
@@ -449,10 +460,11 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 		if is_red_flag_strategy:
 			var strategy_confirmed := bool(driver_data.get("red_flag_strategy_confirmed", false))
 			btn_action.text = "✅ ESTRATÉGIA CONFIRMADA" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
-			btn_action.disabled = strategy_confirmed or not is_on_track
+			btn_action.disabled = strategy_confirmed
 		elif is_pre_race_session:
-			btn_action.text = "✅ CONFIRMAR"
-			btn_action.disabled = false
+			var strategy_confirmed := bool(driver_data.get("pre_race_strategy_confirmed", false))
+			btn_action.text = "✅ CONFIRMADO" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+			btn_action.disabled = strategy_confirmed
 		else:
 			btn_action.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
 			btn_action.disabled = not is_on_track or driver_in_pit or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
@@ -541,6 +553,8 @@ func _get_driver_quali_status(driver_idx: int) -> String:
 			var d_n = str(d.get("Nome", d.get("nome", "")))
 			if d_n == driver_name:
 				if engine.is_quali_done():
+					if engine.current_lap == 0 and bool(d.get("is_in_pit", false)):
+						return "Nos boxes"
 					return str(d.get("Status", "Na Pista"))
 				var quali_state := str(d.get("quali_state", "Box"))
 				if quali_state == "Box" and bool(d.get("manager_controlled", false)):
@@ -559,6 +573,8 @@ func _get_driver_status(driver: Dictionary) -> String:
 	if engine == null:
 		return "Box"
 	if engine.is_quali_done():
+		if engine.current_lap == 0 and bool(driver.get("is_in_pit", false)):
+			return "Nos boxes"
 		return str(driver.get("Status", "Na Pista"))
 	var quali_status := str(driver.get("QualiStatus", ""))
 	if quali_status.begins_with("ELIMINADO"):
@@ -594,43 +610,56 @@ func _get_driver_position(target_driver: Dictionary) -> int:
 			return i + 1
 	return 0
 
+func _refresh_manager_strategy_confirmation_state() -> void:
+	_update_manager_quali_ui_state()
+	_update_red_flag_modal_state()
+	_update_simulation_button()
+
 func _update_manager_quali_ui_state() -> void:
 	var user_drivers = _get_user_drivers()
+	var control_containers: Array[Node] = [manager_panel_container, red_flag_window]
 	for i in range(user_drivers.size()):
 		var st = _get_driver_quali_status(i)
-		var btn = find_child("BtnAction_%d" % i, true, false)
-		var lbl = find_child("LblStatus_%d" % i, true, false)
 		var is_on_track = ("Pista" in st or "Em pista" in st or "Hot Lap" in st or "Entrada" in st)
 		var driver: Dictionary = user_drivers[i]
-		
-		if is_instance_valid(btn):
-			if engine != null and engine.is_quali_done():
-				var red_flag_strategy := engine.pending_red_flag_modal
-				var pre_race := engine.current_lap == 0
-				var pit_requested := bool(driver.get("pit_requested", false))
-				var driver_in_pit := bool(driver.get("is_in_pit", false))
-				if red_flag_strategy:
-					var strategy_confirmed := bool(driver.get("red_flag_strategy_confirmed", false))
-					btn.text = "✅ ESTRATÉGIA CONFIRMADA" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
-					btn.disabled = strategy_confirmed or not is_on_track
-				elif pre_race:
-					btn.text = "✅ CONFIRMAR"
-					btn.disabled = false
+		for container in control_containers:
+			if not is_instance_valid(container):
+				continue
+			var btn = container.find_child("BtnAction_%d" % i, true, false)
+			var lbl = container.find_child("LblStatus_%d" % i, true, false)
+			var position_lbl = container.find_child("LblPosition_%d" % i, true, false)
+
+			if is_instance_valid(btn):
+				if engine != null and engine.is_quali_done():
+					var red_flag_strategy := engine.pending_red_flag_modal
+					var pre_race := engine.current_lap == 0
+					var pit_requested := bool(driver.get("pit_requested", false))
+					var driver_in_pit := bool(driver.get("is_in_pit", false))
+					if red_flag_strategy:
+						var strategy_confirmed := bool(driver.get("red_flag_strategy_confirmed", false))
+						btn.text = "✅ ESTRATÉGIA CONFIRMADA" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+						btn.disabled = strategy_confirmed
+					elif pre_race:
+						var strategy_confirmed := bool(driver.get("pre_race_strategy_confirmed", false))
+						btn.text = "✅ CONFIRMADO" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+						btn.disabled = strategy_confirmed
+					else:
+						btn.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
+						btn.disabled = not is_on_track or driver_in_pit or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
 				else:
-					btn.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
-					btn.disabled = not is_on_track or driver_in_pit or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
-			else:
-				btn.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
-				var eliminated := str(driver.get("QualiStatus", "")).begins_with("ELIMINADO")
-				var waiting_for_quali_release := not is_on_track and engine != null and (
-					engine.quali_checker_flag
-					or not bool(driver.get("quali_retry_allowed", true))
-					or float(driver.get("timer_state", 0.0)) > 0.0
-				)
-				btn.disabled = eliminated or waiting_for_quali_release
-		if is_instance_valid(lbl):
-			lbl.text = "Status: " + st
-			lbl.add_theme_color_override("font_color", Color("#34d399") if is_on_track else Color("#f87171"))
+					btn.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
+					var eliminated := str(driver.get("QualiStatus", "")).begins_with("ELIMINADO")
+					var waiting_for_quali_release := not is_on_track and engine != null and (
+						engine.quali_checker_flag
+						or not bool(driver.get("quali_retry_allowed", true))
+						or float(driver.get("timer_state", 0.0)) > 0.0
+					)
+					btn.disabled = eliminated or waiting_for_quali_release
+			if is_instance_valid(lbl):
+				lbl.text = "Status: " + st
+				lbl.add_theme_color_override("font_color", Color("#34d399") if is_on_track else Color("#f87171"))
+			if is_instance_valid(position_lbl):
+				position_lbl.text = "Posição: P%d" % _get_driver_position(driver)
 
 func _create_track_condition_bar(title: String, fill_color: Color) -> Dictionary:
 	var row := HBoxContainer.new()
@@ -751,6 +780,7 @@ func _skip_to_end_of_session() -> void:
 		simulation_running = false
 		_update_simulation_button()
 		_update_ui()
+		_update_simulation_button()
 	elif engine != null and not engine.is_finished():
 		simulation_running = false
 		_update_simulation_button()
@@ -781,6 +811,13 @@ func _on_btn_start_pressed() -> void:
 		_finish_race_and_advance()
 		return
 
+	if engine != null and engine.is_quali_done() and engine.current_lap == 0 \
+	and str(Database.game_mode) == "manager" \
+	and not engine.are_manager_pre_race_strategies_confirmed():
+		engine.pit_logs.append("⚠️ Confirme a estratégia dos dois pilotos antes de iniciar a corrida.")
+		_update_ui()
+		return
+
 	if engine != null and engine.pending_red_flag_modal:
 		if Database.game_mode == "manager":
 			_show_red_flag_modal()
@@ -796,12 +833,19 @@ func _on_btn_start_pressed() -> void:
 func _update_simulation_button() -> void:
 	if not is_instance_valid(btn_start) or engine == null:
 		return
+	btn_start.disabled = false
 	if engine.is_finished():
 		btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
 	elif engine.pending_red_flag_modal:
 		btn_start.text = "🔴 ESTRATÉGIA DE RELARGADA"
+	elif engine.is_quali_done() and engine.current_lap == 0 \
+	and str(Database.game_mode) == "manager" \
+	and not engine.are_manager_pre_race_strategies_confirmed():
+		btn_start.text = "✅ CONFIRME A ESTRATÉGIA"
+		btn_start.disabled = true
 	else:
 		btn_start.text = "⏸️ PAUSAR" if simulation_running else "▶ CONTINUAR"
+		btn_start.disabled = false
 
 func _show_red_flag_modal() -> void:
 	if Database.game_mode != "manager" or engine == null or not engine.pending_red_flag_modal:
@@ -942,7 +986,7 @@ func _update_ui() -> void:
 		})
 		# #endregion
 	else:
-		race_grid_node.columns = 9
+		race_grid_node.columns = 10
 		_update_session_clock()
 		_render_race_grid()
 		# #region agent log
@@ -968,14 +1012,22 @@ func _update_ui() -> void:
 	if "is_manager_mode" in Database:
 		is_mgr = is_mgr or bool(Database.is_manager_mode)
 
-	if is_mgr and is_instance_valid(manager_panel_container):
+	if is_mgr:
 		var race_session := engine.is_quali_done()
 		var pre_race_session := race_session and engine.current_lap == 0
-		if manager_panel_container.get_child_count() == 0 \
-		or manager_controls_race_session != race_session \
-		or manager_controls_pre_race_session != pre_race_session:
-			_build_manager_qualifying_controls(manager_panel_container)
+		for panel in [manager_panel_container]:
+			if not is_instance_valid(panel):
+				continue
+			var panel_matches_session: bool = panel.has_meta("manager_race_session") \
+			and bool(panel.get_meta("manager_race_session")) == race_session \
+			and bool(panel.get_meta("manager_pre_race_session")) == pre_race_session
+			if panel.get_child_count() == 0 \
+			or not panel_matches_session:
+				_build_manager_qualifying_controls(panel)
+				panel.set_meta("manager_race_session", race_session)
+				panel.set_meta("manager_pre_race_session", pre_race_session)
 		_update_manager_quali_ui_state()
+	_update_simulation_button()
 
 func _update_safety_banner() -> void:
 	if not is_instance_valid(banner_container) or not is_instance_valid(banner_label) or engine == null:
@@ -1113,6 +1165,7 @@ func _render_race_grid() -> void:
 
 	_add_grid_header("POS", 40)
 	_add_grid_header("PILOTO", 150)
+	_add_grid_header("EQUIPE", 110)
 	_add_grid_header("PNEU / DESGASTE", 140)
 	_add_grid_header("PARADAS", 70)
 	_add_grid_header("STATUS", 90)
@@ -1137,11 +1190,12 @@ func _render_race_grid() -> void:
 			text_color = Color("#ef4444")
 			
 		_add_cell("P" + str(pos), text_color)
-		var race_driver_name := str(d["Nome"]) + " (" + str(d["Equipe"]) + ")"
+		var race_driver_name := str(d["Nome"])
 		if _is_manager_team_driver(d):
 			_add_manager_driver_cell(race_driver_name)
 		else:
 			_add_cell(race_driver_name, text_color)
+		_add_cell(str(d.get("Equipe", "")), text_color)
 		
 		var compound = str(d.get("tire_compound", "Medium"))
 		var wear_val = int(d.get("tire_wear", 100))
@@ -1242,11 +1296,15 @@ func _finish_race_and_advance() -> void:
 		var summary_view = preload("res://views/season_summary_view.gd").new()
 		summary_view.open_summary(self, Database.get_season_summary(), func():
 			Database.end_season_and_advance_year()
+			if not Database.save_auto_save():
+				push_error("Não foi possível salvar automaticamente após o fim da corrida.")
 			_continue_to_next_season()
 		)
 	else:
 		Database.current_gp += 1
 		Database.race_finished = false
+		if not Database.save_auto_save():
+			push_error("Não foi possível salvar automaticamente após o fim da corrida.")
 		_return_to_dashboard()
 
 func _continue_to_next_season() -> void:

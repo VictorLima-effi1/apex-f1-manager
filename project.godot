@@ -18,6 +18,7 @@ config/icon="uid://com4kkk3atx0r"
 [autoload]
 
 Database="*uid://cqbpl7i8u1rgv"
+ApexUITheme="*res://components/apex_ui_theme.gd"
 
 [display]
 

@@ -191,8 +191,33 @@ func _build_table_section(section_title: String, driver_list: Array, is_active_t
 			# Conecta o clique diretamente ao modal de negociação sem interferência de hover
 			action_button.pressed.connect(func(): _on_negotiate_driver_pressed(d))
 			row.add_child(action_button)
+		row.set_meta("driver_search_name", d_name.to_lower())
 		rows.add_child(row)
-			
+
+	if not is_active_table:
+		var search = LineEdit.new()
+		search.placeholder_text = "Buscar piloto pelo nome..."
+		search.clear_button_enabled = true
+		search.custom_minimum_size.y = 34
+		vbox.add_child(search)
+		var no_results = Label.new()
+		no_results.text = "Nenhum piloto encontrado."
+		no_results.visible = false
+		no_results.add_theme_color_override("font_color", Color("#94a3b8"))
+		vbox.add_child(no_results)
+		search.text_changed.connect(func(query: String):
+			var normalized_query := query.strip_edges().to_lower()
+			var visible_count := 0
+			for driver_row in rows.get_children():
+				if not driver_row.has_meta("driver_search_name"):
+					continue
+				var matches := str(driver_row.get_meta("driver_search_name")).contains(normalized_query)
+				driver_row.visible = matches
+				if matches:
+					visible_count += 1
+			no_results.visible = visible_count == 0
+		)
+
 	scroll.add_child(rows)
 	vbox.add_child(scroll)
 	panel.add_child(vbox)
@@ -272,6 +297,11 @@ func _show_driver_release_choice(target_driver: Dictionary, manager_team: String
 	dialog.close_requested.connect(func(): dialog.queue_free())
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 12)
+	var title := Label.new()
+	title.text = "👥 ESCOLHER PILOTO PARA LIBERAR"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color("#ef4444"))
+	layout.add_child(title)
 	var prompt := Label.new()
 	prompt.text = "Sua equipe já tem dois pilotos. Escolha quem deixará a vaga para %s." % str(target_driver.get("Nome", "o novo piloto"))
 	prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

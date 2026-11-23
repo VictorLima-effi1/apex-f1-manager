@@ -46,6 +46,12 @@ func _apply_saved_settings() -> void:
 			2: window.size = Vector2i(2560, 1080)
 			3: window.size = Vector2i(1440, 1080)
 
+var bg_speed: float = 2.5
+
+func _process(delta: float) -> void:
+	time_passed += delta * bg_speed
+	queue_redraw()
+
 func _draw() -> void:
 	var screen_size = get_viewport_rect().size
 	draw_rect(Rect2(Vector2.ZERO, screen_size), Color("#0b0e14"))
@@ -63,7 +69,6 @@ func _draw() -> void:
 				var pos = Vector2(c * cell_w + wave_offset_x - 30, r * cell_h + wave_offset_y - 30)
 				var alpha = 0.03 + (sin(time_passed + c * 0.4) * 0.015)
 				draw_rect(Rect2(pos, Vector2(cell_w * 0.85, cell_h * 0.85)), Color(1, 1, 1, alpha))
-
 func build_ui() -> void:
 	for c in get_children():
 		c.queue_free()
@@ -320,13 +325,8 @@ func _show_mode_selection_modal() -> void:
 		lbl_desc.add_theme_color_override("font_color", Color("#94a3b8"))
 	)
 	btn_man.pressed.connect(func():
-		Database.reset_database("manager")
-		var pre_season_script = load("res://views/pre_season_view.gd")
-		if pre_season_script:
-			var new_view = pre_season_script.new()
-			get_tree().root.add_child(new_view)
-			queue_free()
-)
+		_show_manager_difficulty_modal()
+	)
 	btn_vbox.add_child(btn_man)
 	
 	vbox.add_child(btn_vbox)
@@ -353,6 +353,123 @@ func _show_mode_selection_modal() -> void:
 	margin.add_child(vbox)
 	card.add_child(margin)
 	center.add_child(card)
+
+func _show_manager_difficulty_modal() -> void:
+	if is_instance_valid(active_modal):
+		active_modal.queue_free()
+
+	active_modal = ColorRect.new()
+	active_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	active_modal.color = Color(0, 0, 0, 0.88)
+	add_child(active_modal)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	active_modal.add_child(center)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(820, 650)
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.06, 0.08, 0.12, 0.98)
+	card_style.border_width_top = 4
+	card_style.border_color = Color("#ef4444")
+	card_style.set_corner_radius_all(8)
+	card.add_theme_stylebox_override("panel", card_style)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 22)
+	margin.add_theme_constant_override("margin_bottom", 22)
+	card.add_child(margin)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 12)
+	margin.add_child(layout)
+
+	var title := Label.new()
+	title.text = "ESCOLHA A DIFICULDADE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color("#ef4444"))
+	layout.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "Os modificadores afetam somente a sua equipe."
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_color_override("font_color", Color("#94a3b8"))
+	layout.add_child(subtitle)
+
+	var difficulties := [
+		{
+			"id": "easy",
+			"name": "FÁCIL",
+			"color": Color("#34d399"),
+			"description": "−50% penalidade por teto excedido  |  −75% custo por DNF\n−50% custo de melhorias  |  +10% bônus nas melhorias\n−30% fabricação de chassi/motor  |  +10% chance de contratação de alto OVR\n−10% chance de DNF  |  +15% pagamentos de patrocinadores"
+		},
+		{
+			"id": "normal",
+			"name": "NORMAL",
+			"color": Color("#e2e8f0"),
+			"recommended": true,
+			"description": "Dificuldade padrão, sem alterações."
+		},
+		{
+			"id": "hard",
+			"name": "DIFÍCIL",
+			"color": Color("e75f03ff"),
+			"description": "+50% penalidade por teto excedido  |  +30% custo por DNF\n+25% custo de melhorias  |  +20% fabricação de chassi/motor\n−15% chance de contratação de alto OVR  |  +1,5% chance de DNF\n−5% pagamentos de patrocinadores"
+		},
+		{
+			"id": "extreme",
+			"name": "EXTREMO",
+			"color": Color("#ef4444"),
+			"description": "+100% penalidade por teto excedido  |  +45% custo por DNF\n+33% custo de melhorias  |  +33% fabricação de chassi/motor\n−30% chance de contratação de alto OVR  |  +3% chance de DNF\n−10% pagamentos de patrocinadores"
+		}
+	]
+
+	for difficulty in difficulties:
+		var option := Button.new()
+		option.custom_minimum_size.y = 90
+		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		option.text = "%s%s\n%s" % [
+			str(difficulty["name"]),
+			"  • RECOMENDADO" if bool(difficulty.get("recommended", false)) else "",
+			str(difficulty["description"])
+		]
+		option.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		option.add_theme_font_size_override("font_size", 13)
+		var option_color: Color = Color("#facc15") if bool(difficulty.get("recommended", false)) else difficulty["color"]
+		option.add_theme_color_override("font_color", option_color)
+		option.add_theme_color_override("font_hover_color", Color("#ffffff"))
+		option.pressed.connect(_start_manager_mode.bind(str(difficulty["id"])))
+		layout.add_child(option)
+
+	var back_button := Button.new()
+	back_button.text = "VOLTAR"
+	back_button.custom_minimum_size.y = 38
+	back_button.pressed.connect(func():
+		if is_instance_valid(active_modal):
+			active_modal.queue_free()
+			active_modal = null
+	)
+	layout.add_child(back_button)
+
+	center.add_child(card)
+
+func _start_manager_mode(difficulty: String) -> void:
+	Database.reset_database("manager")
+	Database.manager_difficulty = difficulty
+	var pre_season_script = load("res://views/pre_season_view.gd")
+	if pre_season_script == null:
+		push_error("Não foi possível carregar a tela de pré-temporada do Modo Manager.")
+		return
+	var new_view = pre_season_script.new()
+	get_tree().root.add_child(new_view)
+	if is_instance_valid(active_modal):
+		active_modal.queue_free()
+		active_modal = null
+	queue_free()
 
 func _apply_custom_option_button_styles(opt_btn: OptionButton) -> void:
 	var st_norm = StyleBoxFlat.new()

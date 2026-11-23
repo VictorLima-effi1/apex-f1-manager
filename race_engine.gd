@@ -176,6 +176,7 @@ func setup_race(selected_track: Dictionary) -> void:
 			entry["pit_requested"] = false
 			entry["pit_requested_tire"] = ""
 			entry["red_flag_strategy_confirmed"] = false
+			entry["pre_race_strategy_confirmed"] = false
 			
 			entry["last_sectors"] = {"s1": 0.0, "s2": 0.0, "s3": 0.0}
 			entry["best_personal_sectors"] = {"s1": 999.0, "s2": 999.0, "s3": 999.0}
@@ -423,6 +424,9 @@ func _advance_quali_session() -> void:
 		for d in full_grid:
 			d["grid_start_pos"] = pos_idx
 			d["TempoTotal"] = float(pos_idx - 1) * 0.1
+			if bool(d.get("manager_controlled", false)):
+				d["is_in_pit"] = true
+				d["pre_race_strategy_confirmed"] = false
 			_initialize_driver_race_strategy(d, pos_idx)
 			pos_idx += 1
 			
@@ -467,6 +471,10 @@ func process_lap() -> Dictionary:
 		
 	if pending_red_flag_modal:
 		return {"finished": false, "red_flag": true}
+
+	if current_lap == 0 and str(Database.game_mode) == "manager" \
+	and not are_manager_pre_race_strategies_confirmed():
+		return {"finished": false, "awaiting_manager_strategy": true}
 
 	is_race_running = true
 	if current_lap >= total_laps - 2:
@@ -519,7 +527,7 @@ func process_lap() -> Dictionary:
 		
 		# --- CHECAGEM DE DNF MECÂNICO BALANCEADO ---
 		var rel_val = float(d.get("Confiabilidade", 80.0))
-		if calculate_mechanical_dnf_chance(rel_val):
+		if calculate_mechanical_dnf_chance(rel_val, str(d.get("Equipe", ""))):
 			d["Status"] = "Abandonou (Quebra)"
 			d["retired_lap"] = current_lap
 			d["is_in_pit"] = false
@@ -1099,9 +1107,16 @@ func _select_next_dry_compound(driver: Dictionary, remaining_laps: int) -> Strin
 			
 	return candidates[0]
 
-func calculate_mechanical_dnf_chance(team_reliability: float) -> bool:
+func calculate_mechanical_dnf_chance(team_reliability: float, team_name: String = "") -> bool:
 	var total_team_failure_chance = maxf(100.0 - team_reliability, 0.4) 
 	var driver_failure_chance_gp = (total_team_failure_chance / 100.0) / 4.0 
+	if Database.is_player_team(team_name):
+		var difficulty_adjustment := Database.get_manager_difficulty_modifier("dnf_chance")
+		if difficulty_adjustment < 0.0:
+			driver_failure_chance_gp *= 1.0 + difficulty_adjustment
+		else:
+			driver_failure_chance_gp += difficulty_adjustment
+		driver_failure_chance_gp = clampf(driver_failure_chance_gp, 0.0, 1.0)
 	var lap_failure_chance = driver_failure_chance_gp / float(max(total_laps, 1))
 	return randf() < lap_failure_chance
 
@@ -1177,10 +1192,19 @@ func confirm_manager_pre_race_strategy(driver_name: String, tire_compound: Strin
 			driver["planned_pit_tire"] = ""
 			driver["pit_requested"] = false
 			driver["pit_requested_tire"] = ""
+			driver["pre_race_strategy_confirmed"] = true
 		if not driving_style.is_empty():
 			driver["estilo"] = driving_style
 		return true
 	return false
+
+func are_manager_pre_race_strategies_confirmed() -> bool:
+	for driver in race_drivers:
+		if bool(driver.get("manager_controlled", false)) \
+		and str(driver.get("Status", "")) == "Na Pista" \
+		and not bool(driver.get("pre_race_strategy_confirmed", false)):
+			return false
+	return true
 
 # Exemplo de verificação dentro da simulação da corrida por volta
 func _check_manager_planned_pit_stop(car: Dictionary, current_lap: int) -> void:

@@ -57,8 +57,7 @@ func _render_contents() -> void:
 	var slots_data = Database.get_all_slots_info()
 	var visible_slots: Array = []
 	for slot_info in slots_data:
-		if current_mode == Mode.LOAD or str(slot_info["mode"]) == str(Database.game_mode):
-			visible_slots.append(slot_info)
+		visible_slots.append(slot_info)
 
 	var slots_scroll := ScrollContainer.new()
 	slots_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -106,10 +105,19 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 	name_input.text = slot_info["name"]
 	name_input.placeholder_text = Database.tr_text("SAVE_INPUT_PLACEHOLDER") if Database.has_method("tr_text") else "Nome do Save..."
 	name_input.add_theme_font_size_override("font_size", 13)
+	name_input.editable = not bool(slot_info.get("is_autosave", false)) or current_mode == Mode.LOAD
 	info_vbox.add_child(name_input)
 	
 	var details_lbl = Label.new()
-	if slot_info["exists"]:
+	if bool(slot_info.get("is_autosave", false)):
+		if slot_info["exists"]:
+			var autosave_details := Database.tr_text("SAVE_SLOT_AUTOSAVE_DETAILS") if Database.has_method("tr_text") else "AutoSave • Modo: %s | Ano: %d"
+			var autosave_mode_name := "Observador" if str(slot_info["mode"]) == "observer" else "Manager"
+			details_lbl.text = autosave_details % [autosave_mode_name, slot_info["year"]]
+		else:
+			details_lbl.text = Database.tr_text("SAVE_SLOT_AUTOSAVE_EMPTY") if Database.has_method("tr_text") else "AutoSave automático até salvar ou carregar uma carreira."
+		details_lbl.add_theme_color_override("font_color", Color("#38bdf8"))
+	elif slot_info["exists"]:
 		var mode_name := "Observador" if str(slot_info["mode"]) == "observer" else "Manager"
 		details_lbl.text = "Modo: %s | Ano: %d" % [mode_name, slot_info["year"]]
 		details_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
@@ -146,12 +154,19 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 	
 	if current_mode == Mode.SAVE:
 		btn_action.text = Database.tr_text("BTN_SAVE") if Database.has_method("tr_text") else "💾 SALVAR"
+		if bool(slot_info.get("is_autosave", false)):
+			btn_action.disabled = true
 		btn_action.pressed.connect(func():
-			if Database.save_game_slot(slot_info["slot"], name_input.text, slot_info["mode"]):
+			if Database.save_game_slot(slot_info["slot"], name_input.text, Database.game_mode):
 				if on_completed_callback.is_valid():
 					on_completed_callback.call()
 				queue_free()
 		)
+		if bool(slot_info["exists"]) and not bool(slot_info.get("is_autosave", false)):
+			name_input.text_submitted.connect(func(submitted_text: String):
+				if Database.rename_save_slot(slot_info["slot"], submitted_text, slot_info["mode"]):
+					_render_contents()
+			)
 	else:
 		btn_action.text = Database.tr_text("BTN_LOAD") if Database.has_method("tr_text") else "▶ CARREGAR"
 		btn_action.disabled = not slot_info["exists"]

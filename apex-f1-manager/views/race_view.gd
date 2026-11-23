@@ -253,13 +253,6 @@ func build_ui() -> void:
 	log_text_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	log_text_node.scroll_following = true
 	tab_events.add_child(log_text_node)
-	if is_manager_mode:
-		manager_panel_container = VBoxContainer.new()
-		manager_panel_container.name = "ManagerPanelContainer"
-		manager_panel_container.size_flags_vertical = Control.SIZE_SHRINK_END
-		manager_panel_container.add_theme_constant_override("separation", 6)
-		tab_events.add_child(manager_panel_container)
-		_build_manager_qualifying_controls(manager_panel_container)
 	tab_container.add_child(tab_events)
 	
 	var tab_pits = VBoxContainer.new()
@@ -271,6 +264,16 @@ func build_ui() -> void:
 	tab_container.add_child(tab_pits)
 	
 	right_vbox.add_child(tab_container)
+
+	if is_manager_mode:
+		manager_panel_container = VBoxContainer.new()
+		manager_panel_container.name = "ManagerPanelContainer"
+		manager_panel_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		manager_panel_container.size_flags_vertical = Control.SIZE_SHRINK_END
+		manager_panel_container.add_theme_constant_override("separation", 6)
+		right_vbox.add_child(manager_panel_container)
+		_build_manager_qualifying_controls(manager_panel_container)
+
 	right_panel.add_child(right_vbox)
 	main_hbox.add_child(right_panel)
 	main_vbox.add_child(main_hbox)

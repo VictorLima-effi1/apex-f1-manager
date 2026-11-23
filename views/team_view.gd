@@ -375,10 +375,11 @@ func _build_rd_panel() -> PanelContainer:
 			break
 			
 	var available_cash := float(Database.user_team.get("orcamento", 0.0))
-	btn_select.disabled = not has_available_slot or available_cash < Database.PLAYER_RD_COST / 1_000_000.0
+	var player_rd_cost := Database.get_player_rd_cost()
+	btn_select.disabled = not has_available_slot or available_cash < player_rd_cost / 1_000_000.0
 	if not has_available_slot:
 		btn_select.tooltip_text = "Todos os slots de desenvolvimento estão ocupados."
-	elif available_cash < Database.PLAYER_RD_COST / 1_000_000.0:
+	elif available_cash < player_rd_cost / 1_000_000.0:
 		btn_select.tooltip_text = "Caixa insuficiente para iniciar uma melhoria."
 		
 	btn_select.pressed.connect(_on_select_upgrade_pressed)
@@ -765,8 +766,15 @@ func _open_upgrade_selection() -> void:
 	layout.add_theme_constant_override("separation", 10)
 	margin.add_child(layout)
 
+	var title := Label.new()
+	title.text = "🛠️ ESCOLHER MELHORIA DE P&D"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color("#ef4444"))
+	layout.add_child(title)
+
 	var info := Label.new()
-	info.text = "Cada melhoria aumenta o parâmetro escolhido entre 0,5 e 1,5. O prazo de entrega é de 2 a 5 corridas e cada projeto custa $%.1fM." % (Database.PLAYER_RD_COST / 1_000_000.0)
+	var player_rd_cost := Database.get_player_rd_cost()
+	info.text = "Cada melhoria aumenta o parâmetro escolhido entre 0,5 e 1,5. O prazo de entrega é de 2 a 5 corridas e cada projeto custa $%.1fM." % (player_rd_cost / 1_000_000.0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(info)
 
@@ -783,11 +791,11 @@ func _open_upgrade_selection() -> void:
 		var button := Button.new()
 		button.text = "%s  |  $%.1fM" % [
 			str(selection["texto"]),
-			Database.PLAYER_RD_COST / 1_000_000.0
+			player_rd_cost / 1_000_000.0
 		]
 		button.custom_minimum_size.y = 40
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.disabled = float(Database.user_team.get("orcamento", 0.0)) < Database.PLAYER_RD_COST / 1_000_000.0
+		button.disabled = float(Database.user_team.get("orcamento", 0.0)) < player_rd_cost / 1_000_000.0
 		var team_stats := Database.calculate_team_dev_stats(Database.user_team)
 		if str(selection["atributo"]) == "Peso":
 			button.disabled = button.disabled or float(team_stats.get("Peso", 778.0)) <= 768.0
@@ -820,7 +828,7 @@ func _start_team_upgrade(option: Dictionary, delivery_races: int, dialog: Window
 		return
 	dialog.queue_free()
 	build_ui()
-	Database.register_financial_transaction("gastos_pd", Database.PLAYER_RD_COST / 1_000_000.0)
+	Database.register_financial_transaction("gastos_pd", Database.get_player_rd_cost() / 1_000_000.0)
 
 func _open_capital_injection() -> void:
 	if not Database.can_inject_team_capital():
@@ -840,6 +848,12 @@ func _open_capital_injection() -> void:
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 12)
 	margin.add_child(layout)
+
+	var title := Label.new()
+	title.text = "💰 INJEÇÃO DE CAPITAL"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color("#ef4444"))
+	layout.add_child(title)
 
 	var description := Label.new()
 	description.text = "Escolha um aporte entre $10M e $50M. A próxima injeção ficará disponível após três temporadas."
@@ -952,8 +966,8 @@ func _open_sponsors_market_modal() -> void:
 
 		var l_pay = Label.new()
 		l_pay.text = "💰 Adiantado: $%.1fM  |  🏁 Por GP: $%.1fM" % [
-			float(sp.get("valor_temporada", 0.0)),
-			float(sp.get("valor_corrida", 0.0))
+			float(sp.get("valor_temporada", 0.0)) * Database.get_manager_difficulty_modifier("sponsor_payout"),
+			float(sp.get("valor_corrida", 0.0)) * Database.get_manager_difficulty_modifier("sponsor_payout")
 		]
 		l_pay.add_theme_font_size_override("font_size", 12)
 		l_pay.add_theme_color_override("font_color", Color("#10b981"))
@@ -982,14 +996,16 @@ func _open_sponsors_market_modal() -> void:
 						current_sponsors.append({})
 					
 					# Encontra o primeiro slot vazio
+					var player_sponsor: Dictionary = sp.duplicate(true)
+					Database.apply_player_sponsor_payout_modifier(player_sponsor)
 					for i in range(3):
 						if current_sponsors[i].is_empty():
-							current_sponsors[i] = sp.duplicate()
+							current_sponsors[i] = player_sponsor
 							break
 					
 					# Credita o valor adiantado no caixa do time
 					var current_cash = float(Database.user_team.get("orcamento", 0.0))
-					var sponsor_advance := float(sp.get("valor_temporada", 0.0))
+					var sponsor_advance := float(player_sponsor.get("valor_temporada", 0.0))
 					Database.user_team["orcamento"] = current_cash + sponsor_advance
 					Database.user_team["patrocinadores"] = current_sponsors
 					Database.register_financial_transaction("patrocinios_acumulados", sponsor_advance)

@@ -48,6 +48,12 @@ func _build_dialog() -> void:
 	layout.add_theme_constant_override("separation", 12)
 	margin.add_child(layout)
 
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.add_theme_font_size_override("font_size", 16)
+	title_label.add_theme_color_override("font_color", Color("#ef4444"))
+	layout.add_child(title_label)
+
 	var requirements := Label.new()
 	requirements.text = "Exigências de %s: $%.1fM/ano, %d ano(s), %s" % [
 		str(driver.get("Nome", "Piloto")), requested_salary, requested_years, requested_status
@@ -113,7 +119,13 @@ func _submit_offer() -> void:
 	if offered_years > requested_years:
 		minimum_salary *= 0.97
 
-	if salary_input.value >= minimum_salary:
+	var offer_accepted := salary_input.value >= minimum_salary
+	var overall := float(driver.get("Overall", driver.get("Habilidade", 75)))
+	if offer_accepted and overall >= 90.0:
+		var acceptance_chance := clampf(0.75 + Database.get_manager_difficulty_modifier("driver_acceptance"), 0.0, 1.0)
+		offer_accepted = randf() < acceptance_chance
+
+	if offer_accepted:
 		driver["salario"] = salary_input.value
 		driver["AnosContrato"] = offered_years
 		driver["contrato_anos"] = offered_years
