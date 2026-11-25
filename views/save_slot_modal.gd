@@ -4,6 +4,8 @@ class_name SaveSlotModal
 enum Mode { SAVE, LOAD }
 var current_mode: Mode = Mode.SAVE
 var on_completed_callback: Callable
+var autosave_card: Control
+var slots_scroll: ScrollContainer
 
 func open_modal(parent_node: Node, mode: Mode, callback: Callable = Callable()) -> void:
 	current_mode = mode
@@ -14,8 +16,10 @@ func open_modal(parent_node: Node, mode: Mode, callback: Callable = Callable()) 
 	
 	_render_contents()
 	parent_node.add_child(self)
+	call_deferred("_start_autosave_tutorial")
 
 func _render_contents() -> void:
+	autosave_card = null
 	for c in get_children():
 		c.queue_free()
 		
@@ -59,13 +63,15 @@ func _render_contents() -> void:
 	for slot_info in slots_data:
 		visible_slots.append(slot_info)
 
-	var slots_scroll := ScrollContainer.new()
+	slots_scroll = ScrollContainer.new()
 	slots_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	slots_scroll.custom_minimum_size.y = 260
 	var slots_list := VBoxContainer.new()
 	slots_list.add_theme_constant_override("separation", 10)
 	for slot_info in visible_slots:
 		var slot_card = _build_slot_row(slot_info)
+		if bool(slot_info.get("is_autosave", false)):
+			autosave_card = slot_card
 		slots_list.add_child(slot_card)
 	slots_scroll.add_child(slots_list)
 	vbox.add_child(slots_scroll)
@@ -81,6 +87,26 @@ func _render_contents() -> void:
 	margin.add_child(vbox)
 	card.add_child(margin)
 	center.add_child(card)
+
+func _start_autosave_tutorial() -> void:
+	if current_mode != Mode.SAVE or not Database.tutorial_enabled \
+	or bool(Database.tutorial_completed_screens.get("save_slots", false)) \
+	or not is_instance_valid(autosave_card):
+		return
+	await get_tree().process_frame
+	if not is_inside_tree() or not is_instance_valid(autosave_card) or not is_instance_valid(slots_scroll):
+		return
+	slots_scroll.scroll_vertical = int(slots_scroll.get_v_scroll_bar().max_value)
+	Database.tutorial_completed_screens["save_slots"] = true
+	var tutorial_script := preload("res://components/tutorial_overlay.gd")
+	var overlay: TutorialOverlay = tutorial_script.new()
+	add_child(overlay)
+	overlay.start_tutorial([
+		{
+			"target": autosave_card,
+			"text": Database.tr_text("TUTORIAL_AUTOSAVE_SLOT")
+		}
+	])
 
 func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 	var row = PanelContainer.new()

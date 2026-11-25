@@ -24,6 +24,9 @@ var grip_value_label: Label
 var left_vbox: VBoxContainer
 var banner_container: PanelContainer
 var banner_label: Label
+var tutorial_speed_controls: Control
+var tutorial_track_conditions: Control
+var tutorial_incident_feed: Control
 
 var simulation_speed: float = 1.0
 var simulation_running: bool = false
@@ -132,6 +135,7 @@ func build_ui() -> void:
 	main_vbox.add_child(weather_lbl)
 
 	var track_conditions := HBoxContainer.new()
+	tutorial_track_conditions = track_conditions
 	track_conditions.add_theme_constant_override("separation", 14)
 	var water_row := _create_track_condition_bar("ÁGUA", Color("#38bdf8"))
 	water_bar = water_row.get("bar")
@@ -144,6 +148,7 @@ func build_ui() -> void:
 	main_vbox.add_child(track_conditions)
 
 	var ctrl_hbox = HBoxContainer.new()
+	tutorial_speed_controls = ctrl_hbox
 	ctrl_hbox.add_theme_constant_override("separation", 8)
 
 	btn_start = Button.new()
@@ -247,6 +252,7 @@ func build_ui() -> void:
 	tab_container.add_theme_font_size_override("font_size", 12)
 	
 	var tab_events = VBoxContainer.new()
+	tutorial_incident_feed = tab_events
 	tab_events.name = "📢 INCIDENTES & CLIMA"
 	log_text_node = RichTextLabel.new()
 	log_text_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -288,6 +294,30 @@ func build_ui() -> void:
 	# #endregion
 	
 	_update_ui()
+
+func get_tutorial_steps() -> Array[Dictionary]:
+	var steps: Array[Dictionary] = []
+	if is_instance_valid(tutorial_speed_controls):
+		steps.append({
+			"target": tutorial_speed_controls,
+			"text": Database.tr_text("TUTORIAL_RACE_SPEED") if Database.has_method("tr_text") else "Aqui está o controle da simulação, pause, dê continuidade, acelere ou pule a sessão como preferir."
+		})
+	if is_instance_valid(tutorial_track_conditions):
+		steps.append({
+			"target": tutorial_track_conditions,
+			"text": Database.tr_text("TUTORIAL_RACE_TRACK") if Database.has_method("tr_text") else "Por aqui é possível ver como está a situação da pista. Esta área é essencial para gerir a sua estratégia se você for um manager."
+		})
+	if is_instance_valid(tutorial_incident_feed):
+		steps.append({
+			"target": tutorial_incident_feed,
+			"text": Database.tr_text("TUTORIAL_RACE_EVENTS") if Database.has_method("tr_text") else "Por aqui você pode acompanhar tudo que acontece em tempo real na pista, acidentes, pitstops, bandeiras amarelas e vermelhas, Safety Cars e etc."
+		})
+	if is_instance_valid(manager_panel_container):
+		steps.append({
+			"target": manager_panel_container,
+			"text": Database.tr_text("TUTORIAL_RACE_TEAM") if Database.has_method("tr_text") else "Chegamos a melhor parte! Por aqui você controla seus pilotos, pneus, ritmo e quando devem ir a pista ou voltar aos Boxes."
+		})
+	return steps
 
 func _build_manager_qualifying_controls(parent_container: Control) -> void:
 	if not is_instance_valid(parent_container):

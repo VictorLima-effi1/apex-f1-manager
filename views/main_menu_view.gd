@@ -205,6 +205,76 @@ func _animate_menu_entrance() -> void:
 # --- FLUXO DE ESCOLHA DE MODO DE JOGO ---
 
 func _on_btn_new_game_pressed() -> void:
+	_show_tutorial_choice_modal()
+
+func _show_tutorial_choice_modal() -> void:
+	if is_instance_valid(active_modal):
+		active_modal.queue_free()
+
+	active_modal = ColorRect.new()
+	active_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	active_modal.color = Color(0, 0, 0, 0.85)
+	add_child(active_modal)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	active_modal.add_child(center)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(520, 260)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.11, 0.16, 0.98)
+	style.border_width_top = 4
+	style.border_color = Color("#ef4444")
+	style.set_corner_radius_all(8)
+	style.shadow_size = 24
+	card.add_theme_stylebox_override("panel", style)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 14)
+
+	var title := Label.new()
+	title.text = Database.tr_text("TUTORIAL_TITLE") if Database.has_method("tr_text") else "TUTORIAL"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color("#ef4444"))
+	layout.add_child(title)
+
+	var description := Label.new()
+	description.text = Database.tr_text("TUTORIAL_PROMPT") if Database.has_method("tr_text") else "Deseja conhecer as principais áreas do jogo com um tutorial guiado?"
+	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	description.add_theme_font_size_override("font_size", 14)
+	description.add_theme_color_override("font_color", Color("#cbd5e1"))
+	layout.add_child(description)
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	for option in [
+		{"text": Database.tr_text("TUTORIAL_START") if Database.has_method("tr_text") else "▶ VER TUTORIAL", "enabled": true},
+		{"text": Database.tr_text("TUTORIAL_SKIP") if Database.has_method("tr_text") else "PULAR", "enabled": false}
+	]:
+		var button := Button.new()
+		button.text = str(option["text"])
+		button.custom_minimum_size = Vector2(190, 42)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.add_theme_font_size_override("font_size", 13)
+		button.pressed.connect(_on_tutorial_choice.bind(bool(option["enabled"])))
+		actions.add_child(button)
+	layout.add_child(actions)
+
+	margin.add_child(layout)
+	card.add_child(margin)
+	center.add_child(card)
+
+func _on_tutorial_choice(should_enable: bool) -> void:
+	Database.tutorial_enabled = should_enable
+	Database.tutorial_completed_screens.clear()
 	_show_mode_selection_modal()
 
 func _show_mode_selection_modal() -> void:

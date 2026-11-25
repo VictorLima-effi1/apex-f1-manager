@@ -15,6 +15,8 @@ signal language_changed
 var current_language: String = "pt"
 var available_sponsors: Array = []
 var current_session: String = "preseason"
+var tutorial_enabled: bool = false
+var tutorial_completed_screens: Dictionary = {}
 
 # Fornecedores de Motor (Potência e Confiabilidade)
 const ENGINE_DATA: Dictionary = {
@@ -1755,7 +1757,9 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"team_car_construction_years": team_car_construction_years,
 		"last_financial_settlement_year": last_financial_settlement_year,
 		"full_season_archive": full_season_archive,
-		"autosave_target_slot": slot_index
+		"autosave_target_slot": slot_index,
+		"tutorial_enabled": tutorial_enabled,
+		"tutorial_completed_screens": tutorial_completed_screens
 	}
 	
 	var safe_save_data = _make_json_safe(save_data)
@@ -1858,6 +1862,8 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 			team_car_construction_years = data.get("team_car_construction_years", {})
 			last_financial_settlement_year = int(data.get("last_financial_settlement_year", -1))
 			full_season_archive = data.get("full_season_archive", full_season_archive)
+			tutorial_enabled = bool(data.get("tutorial_enabled", false))
+			tutorial_completed_screens = data.get("tutorial_completed_screens", {})
 			for team in teams:
 				var team_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
 				if not team_name.is_empty():
@@ -1886,6 +1892,7 @@ func reset_database(mode: String = "") -> void:
 		game_mode = _normalize_game_mode(mode)
 	current_slot = MAX_SAVE_SLOTS
 	auto_save_uses_default_slot = true
+	tutorial_completed_screens.clear()
 	manager_difficulty = "normal"
 	current_year = 2026
 	current_gp = 1

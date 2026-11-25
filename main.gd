@@ -4,6 +4,7 @@ var content_container: PanelContainer
 var current_view_node: Node = null
 var nav_buttons: Dictionary = {}
 var esc_modal: Control = null
+var tutorial_overlay: TutorialOverlay
 
 var views = {
 	"dashboard": preload("res://views/dashboard_view.gd"),
@@ -222,6 +223,7 @@ func switch_view(view_name: String) -> void:
 	if current_view_node.has_signal("request_advance_gp"):
 		current_view_node.request_advance_gp.connect(_advance_gp)
 	margin_node.add_child(current_view_node)
+	call_deferred("_try_start_tutorial", view_name)
 	# #region agent log
 	if view_name == "race":
 		var path := "C:/Users/Limad/Desktop/Apex/apex-f1-manager/debug-2b010b.log"
@@ -246,6 +248,56 @@ func switch_view(view_name: String) -> void:
 			}))
 			fa.close()
 	# #endregion
+
+func _try_start_tutorial(view_name: String) -> void:
+	if not Database.tutorial_enabled \
+	or bool(Database.tutorial_completed_screens.get(view_name, false)) \
+	or is_instance_valid(tutorial_overlay):
+		return
+
+	await get_tree().process_frame
+	if view_name != Database.current_view or not is_instance_valid(current_view_node):
+		return
+
+	var tutorial_steps: Array[Dictionary] = []
+	var navigation_text := {
+		"dashboard": "TUTORIAL_DASHBOARD",
+		"race": "TUTORIAL_RACE_NAV",
+		"dev": "TUTORIAL_DEV",
+		"market": "TUTORIAL_MARKET",
+		"history": "TUTORIAL_HISTORY",
+		"editor": "TUTORIAL_EDITOR",
+		"team": "TUTORIAL_TEAM"
+	}
+	var navigation_button := nav_buttons.get(view_name) as Control
+	if is_instance_valid(navigation_button) and navigation_text.has(view_name):
+		tutorial_steps.append({
+			"target": navigation_button,
+			"text": Database.tr_text(navigation_text[view_name]) if Database.has_method("tr_text") else str(navigation_text[view_name])
+		})
+
+	if current_view_node.has_method("get_tutorial_steps"):
+		var view_steps: Variant = current_view_node.call("get_tutorial_steps")
+		if view_steps is Array:
+			for step in view_steps:
+				if not (step is Dictionary):
+					continue
+				var step_target: Variant = step.get("target")
+				if step_target is Control and is_instance_valid(step_target):
+					tutorial_steps.append(step)
+
+	if tutorial_steps.is_empty():
+		return
+
+	Database.tutorial_completed_screens[view_name] = true
+	var tutorial_script := preload("res://components/tutorial_overlay.gd")
+	tutorial_overlay = tutorial_script.new()
+	add_child(tutorial_overlay)
+	tutorial_overlay.tutorial_finished.connect(_on_tutorial_finished)
+	tutorial_overlay.start_tutorial(tutorial_steps)
+
+func _on_tutorial_finished() -> void:
+	tutorial_overlay = null
 
 func _open_manager_offseason() -> void:
 	var scene_error := get_tree().change_scene_to_file("res://views/pre_season_view.tscn")

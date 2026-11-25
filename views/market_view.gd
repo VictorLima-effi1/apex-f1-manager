@@ -8,6 +8,9 @@ var sort_ascending_active: bool = false
 
 var sort_column_free: String = "Overall"
 var sort_ascending_free: bool = false
+var tutorial_active_table: Control
+var tutorial_free_table: Control
+var tutorial_transfer_history: Control
 
 func _process(delta: float) -> void:
 	time_passed += delta * 1.2
@@ -72,11 +75,13 @@ func build_ui() -> void:
 	
 	# Tabela 1: Titulares
 	var active_section = _build_table_section("🏎️ PILOTOS COM EQUIPE (TITULARES)", active_drivers, true)
+	tutorial_active_table = active_section
 	active_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tables_hbox.add_child(active_section)
 	
 	# Tabela 2: Free Agents
 	var free_section = _build_table_section("📋 AGENTES LIVRES (FREE AGENTS)", free_agents, false)
+	tutorial_free_table = free_section
 	free_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tables_hbox.add_child(free_section)
 	
@@ -84,6 +89,26 @@ func build_ui() -> void:
 	
 	# 3. Painel Inferior: Histórico de Transferências
 	_build_transfer_history_panel(main_vbox)
+	tutorial_transfer_history = main_vbox.get_child(main_vbox.get_child_count() - 1) as Control
+
+func get_tutorial_steps() -> Array[Dictionary]:
+	var steps: Array[Dictionary] = []
+	if is_instance_valid(tutorial_active_table):
+		steps.append({
+			"target": tutorial_active_table,
+			"text": Database.tr_text("TUTORIAL_MARKET_ACTIVE") if Database.has_method("tr_text") else "À esquerda você pode ver os pilotos que já possuem contratos."
+		})
+	if is_instance_valid(tutorial_free_table):
+		steps.append({
+			"target": tutorial_free_table,
+			"text": Database.tr_text("TUTORIAL_MARKET_FREE") if Database.has_method("tr_text") else "Por aqui estão os pilotos sem contrato, livres no mercado, esperando uma oferta."
+		})
+	if is_instance_valid(tutorial_transfer_history):
+		steps.append({
+			"target": tutorial_transfer_history,
+			"text": Database.tr_text("TUTORIAL_MARKET_TRANSFERS") if Database.has_method("tr_text") else "Aqui embaixo está o histórico das transferências, onde as últimas movimentações são registradas."
+		})
+	return steps
 
 # Lógica universal de ordenação por coluna
 func _sort_driver_list(list: Array, column_name: String, ascending: bool) -> void:

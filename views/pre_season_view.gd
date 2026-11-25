@@ -57,6 +57,10 @@ var grid_container_vbox: VBoxContainer
 var driver_cards_container: HBoxContainer
 var title_label: Label
 var budget_label: Label
+var tutorial_overlay: TutorialOverlay
+var tutorial_session_controls: Control
+var tutorial_timing_table: Control
+var tutorial_pit_time_bar: ProgressBar
 var is_manager_offseason: bool = false
 var is_existing_team_mode: bool = false
 var selected_existing_team_index: int = -1
@@ -2304,6 +2308,7 @@ func _build_winter_testing_step() -> void:
 	
 	# --- HEADER COM RELÓGIO REGRESSIVO DE 4H E CONTROLES ---
 	var header = PanelContainer.new()
+	tutorial_session_controls = header
 	var st_h = StyleBoxFlat.new()
 	st_h.bg_color = Color(0.06, 0.08, 0.12, 0.95)
 	st_h.border_width_left = 5
@@ -2430,6 +2435,7 @@ func _build_winter_testing_step() -> void:
 	
 	# Tabela de Tempos
 	var table_card = PanelContainer.new()
+	tutorial_timing_table = table_card
 	table_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var st_t = StyleBoxFlat.new()
 	st_t.bg_color = Color(0.09, 0.11, 0.16, 0.95)
@@ -2511,6 +2517,41 @@ func _build_winter_testing_step() -> void:
 	_rebuild_driver_control_boxes()
 	_render_timing_table()
 	_update_speed_buttons_ui(controls_hbox)
+	call_deferred("_start_preseason_tutorial")
+
+func _start_preseason_tutorial() -> void:
+	if Database.game_mode != "manager" or not Database.tutorial_enabled \
+	or bool(Database.tutorial_completed_screens.get("preseason", false)) \
+	or is_instance_valid(tutorial_overlay):
+		return
+
+	var tutorial_steps: Array[Dictionary] = [
+		{"text": Database.tr_text("TUTORIAL_PRESEASON_INTRO")},
+		{
+			"target": tutorial_session_controls,
+			"text": Database.tr_text("TUTORIAL_PRESEASON_CONTROLS")
+		},
+		{
+			"target": driver_cards_container,
+			"text": Database.tr_text("TUTORIAL_PRESEASON_DRIVERS")
+		},
+		{
+			"target": tutorial_timing_table,
+			"text": Database.tr_text("TUTORIAL_PRESEASON_TABLE")
+		},
+		{
+			"target": tutorial_pit_time_bar,
+			"target_root": self,
+			"target_name": "TutorialPitTimeBar",
+			"text": Database.tr_text("TUTORIAL_PRESEASON_PIT")
+		}
+	]
+	Database.tutorial_completed_screens["preseason"] = true
+	var tutorial_script := preload("res://components/tutorial_overlay.gd")
+	tutorial_overlay = tutorial_script.new()
+	add_child(tutorial_overlay)
+	tutorial_overlay.tutorial_finished.connect(func(): tutorial_overlay = null)
+	tutorial_overlay.start_tutorial(tutorial_steps)
 
 # Simula o restante das 4h instantaneamente quando o jogador clica em "PULAR DIA"
 func _fast_forward_remaining_day_laps() -> void:
@@ -2835,6 +2876,8 @@ func _render_timing_table() -> void:
 		
 		if status_str == "Nos Boxes" and pit_left > 0.0:
 			var pbar = ProgressBar.new()
+			if data.get("is_player", false):
+				pbar.name = "TutorialPitTimeBar"
 			pbar.custom_minimum_size = Vector2(110, 18)
 			pbar.min_value = 0
 			pbar.max_value = pit_max
@@ -2861,6 +2904,8 @@ func _render_timing_table() -> void:
 			
 			pbar.add_child(lbl_pit)
 			rh.add_child(pbar)
+			if data.get("is_player", false):
+				tutorial_pit_time_bar = pbar
 		else:
 			_add_lbl(rh, " -- ", 110, Color("#64748b"))
 		
@@ -3497,12 +3542,15 @@ func _open_testing_results_modal() -> void:
 	var list_vbox = VBoxContainer.new()
 	list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_vbox.add_theme_constant_override("separation", 8)
+	var first_team_card: Control
 	
 	# Percorre todas as equipes e exibe no formato solicitado
 	for t_name in team_testing_upgrades.keys():
 		var upg = team_testing_upgrades[t_name]
 		
 		var card = PanelContainer.new()
+		if not is_instance_valid(first_team_card):
+			first_team_card = card
 		var st_c = StyleBoxFlat.new()
 		st_c.bg_color = Color("#1e293b") if t_name == team_name else Color("#0f172a")
 		if t_name == team_name:
@@ -3572,6 +3620,23 @@ func _open_testing_results_modal() -> void:
 	add_child(dialog)
 	active_modal_window = dialog
 	dialog.popup_centered()
+	call_deferred("_start_preseason_report_tutorial", dialog, first_team_card)
+
+func _start_preseason_report_tutorial(dialog: Window, first_team_card: Control) -> void:
+	if Database.game_mode != "manager" or not Database.tutorial_enabled \
+	or bool(Database.tutorial_completed_screens.get("preseason_report", false)) \
+	or not is_instance_valid(dialog) or not is_instance_valid(first_team_card):
+		return
+	Database.tutorial_completed_screens["preseason_report"] = true
+	var tutorial_script := preload("res://components/tutorial_overlay.gd")
+	var overlay: TutorialOverlay = tutorial_script.new()
+	dialog.add_child(overlay)
+	overlay.start_tutorial([
+		{
+			"target": first_team_card,
+			"text": Database.tr_text("TUTORIAL_PRESEASON_REPORT")
+		}
+	])
 
 func _change_to_main_game_scene() -> void:
 	var scene_error := get_tree().change_scene_to_file("res://main.tscn")
