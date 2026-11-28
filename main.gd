@@ -98,7 +98,7 @@ func setup_layout() -> void:
 		{"label": Database.tr_text("NAV_MARKET"), "view": "market"}
 	]
 	if str(Database.game_mode) == "manager":
-		nav_items.append({"label": "👥 Equipe", "view": "team"})
+		nav_items.append({"label": Database.tr_text("NAV_TEAM"), "view": "team"})
 	else:
 		nav_items.append({"label": Database.tr_text("NAV_EDITOR"), "view": "editor"})
 	nav_items.append({"label": Database.tr_text("NAV_HISTORY"), "view": "history"})
@@ -121,7 +121,7 @@ func setup_layout() -> void:
 
 	# Botão Salvar Jogo
 	var btn_save = Button.new()
-	btn_save.text = "  💾 Salvar Jogo"
+	btn_save.text = "  " + Database.tr_text("NAV_SAVE")
 	btn_save.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn_save.custom_minimum_size.y = 40
 	btn_save.flat = true
@@ -131,7 +131,7 @@ func setup_layout() -> void:
 	sidebar_vbox.add_child(btn_save)
 
 	var btn_menu = Button.new()
-	btn_menu.text = "  🚪 Menu Inicial"
+	btn_menu.text = "  " + Database.tr_text("NAV_MAIN_MENU")
 	btn_menu.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn_menu.custom_minimum_size.y = 40
 	btn_menu.flat = true
@@ -415,14 +415,14 @@ func _show_esc_pause_modal() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 
 	var lbl_title = Label.new()
-	lbl_title.text = "PAUSA / MENU"
+	lbl_title.text = Database.tr_text("PAUSE_MENU_TITLE")
 	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_title.add_theme_font_size_override("font_size", 16)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
 	vbox.add_child(lbl_title)
 
 	var lbl_msg = Label.new()
-	lbl_msg.text = "O que deseja fazer?"
+	lbl_msg.text = Database.tr_text("PAUSE_MENU_PROMPT")
 	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_msg.add_theme_font_size_override("font_size", 13)
 	lbl_msg.add_theme_color_override("font_color", Color("#cbd5e1"))
@@ -436,7 +436,7 @@ func _show_esc_pause_modal() -> void:
 
 	# Botão 1: Voltar ao Menu
 	var btn_menu = Button.new()
-	btn_menu.text = "🏠 Voltar ao Menu"
+	btn_menu.text = Database.tr_text("PAUSE_RETURN_MAIN")
 	btn_menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_menu.custom_minimum_size.y = 38
 	btn_menu.add_theme_font_size_override("font_size", 12)
@@ -455,7 +455,7 @@ func _show_esc_pause_modal() -> void:
 
 	# Botão 2: Ver Opções
 	var btn_options = Button.new()
-	btn_options.text = "⚙️ Ver Opções"
+	btn_options.text = Database.tr_text("PAUSE_OPTIONS")
 	btn_options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_options.custom_minimum_size.y = 38
 	btn_options.add_theme_font_size_override("font_size", 12)
@@ -478,7 +478,7 @@ func _show_esc_pause_modal() -> void:
 
 	# Botão 3: Continuar Jogando
 	var btn_cancel = Button.new()
-	btn_cancel.text = "▶ Continuar Jogando"
+	btn_cancel.text = Database.tr_text("PAUSE_CONTINUE")
 	btn_cancel.custom_minimum_size.y = 32
 	btn_cancel.add_theme_font_size_override("font_size", 11)
 

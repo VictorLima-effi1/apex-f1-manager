@@ -28,6 +28,41 @@ var tutorial_speed_controls: Control
 var tutorial_track_conditions: Control
 var tutorial_incident_feed: Control
 
+func _translate_race_status(status: String) -> String:
+	match status:
+		"Na Pista": return Database.tr_text("RACE_STATUS_ON_TRACK")
+		"Nos Boxes": return Database.tr_text("RACE_STATUS_IN_PITS")
+		"Nos boxes": return Database.tr_text("RACE_STATUS_IN_PITS")
+		"Volta de Entrada": return Database.tr_text("RACE_STATUS_ENTRY_LAP")
+		"Volta de Saída": return Database.tr_text("RACE_STATUS_EXIT_LAP")
+		"Abandonou (Acidente)": return Database.tr_text("RACE_STATUS_RETIRED_ACCIDENT")
+		"Abandonou (Quebra)": return Database.tr_text("RACE_STATUS_RETIRED_MECHANICAL")
+	return status
+
+func _translate_quali_status(status: String) -> String:
+	match status:
+		"Box": return Database.tr_text("RACE_STATUS_IN_PITS")
+		"Em pista": return Database.tr_text("RACE_STATUS_ON_TRACK")
+		"Hot Lap": return Database.tr_text("RACE_HOT_LAP")
+		"Em Entrada": return Database.tr_text("RACE_STATUS_ENTRY_LAP")
+		"Box (sessão encerrada)": return Database.tr_text("RACE_QUALI_SESSION_ENDED")
+		"Box (sem tempo para nova volta)": return Database.tr_text("RACE_QUALI_NO_RETRY")
+	if status.begins_with("Box (aguardando "):
+		var wait_seconds := status.trim_prefix("Box (aguardando ").trim_suffix(" s)")
+		return Database.tr_text("RACE_QUALI_WAITING") % wait_seconds
+	if status.begins_with("ELIMINADO"):
+		return Database.tr_text("RACE_ELIMINATED") + status.trim_prefix("ELIMINADO")
+	return status
+
+func _translate_tire_compound(compound: String) -> String:
+	match compound:
+		"Soft", "Macio": return Database.tr_text("TIRE_SOFT")
+		"Medium", "Médio": return Database.tr_text("TIRE_MEDIUM")
+		"Hard", "Duro": return Database.tr_text("TIRE_HARD")
+		"Inter", "Intermediário": return Database.tr_text("RACE_TIRE_INTER")
+		"Wet", "Chuva Extrema": return Database.tr_text("TIRE_WET")
+	return compound
+
 var simulation_speed: float = 1.0
 var simulation_running: bool = false
 var simulation_tick_accumulator: float = 0.0
@@ -124,7 +159,7 @@ func build_ui() -> void:
 	var track_info = Database.tracks[current_gp_idx]
 
 	top_title = Label.new()
-	top_title.text = "QUALIFICAÇÃO (Q1) - GP " + str(Database.current_gp) + " (" + str(track_info.get("Nome", "")) + ")"
+	top_title.text = Database.tr_text("RACE_TITLE_QUALI") % [Database.current_gp, str(track_info.get("Nome", ""))]
 	top_title.add_theme_font_size_override("font_size", 18)
 	top_title.add_theme_color_override("font_color", Color("#ef4444"))
 	main_vbox.add_child(top_title)
@@ -137,11 +172,11 @@ func build_ui() -> void:
 	var track_conditions := HBoxContainer.new()
 	tutorial_track_conditions = track_conditions
 	track_conditions.add_theme_constant_override("separation", 14)
-	var water_row := _create_track_condition_bar("ÁGUA", Color("#38bdf8"))
+	var water_row := _create_track_condition_bar(Database.tr_text("TRACK_WATER"), Color("#38bdf8"))
 	water_bar = water_row.get("bar")
 	water_value_label = water_row.get("value")
 	track_conditions.add_child(water_row.get("container"))
-	var grip_row := _create_track_condition_bar("ADERÊNCIA", Color("#f97316"))
+	var grip_row := _create_track_condition_bar(Database.tr_text("TRACK_GRIP"), Color("#f97316"))
 	grip_bar = grip_row.get("bar")
 	grip_value_label = grip_row.get("value")
 	track_conditions.add_child(grip_row.get("container"))
@@ -152,13 +187,13 @@ func build_ui() -> void:
 	ctrl_hbox.add_theme_constant_override("separation", 8)
 
 	btn_start = Button.new()
-	btn_start.text = "▶ CONTINUAR"
+	btn_start.text = Database.tr_text("RACE_CONTINUE")
 	btn_start.custom_minimum_size = Vector2(130, 32)
 	btn_start.pressed.connect(_on_btn_start_pressed)
 	ctrl_hbox.add_child(btn_start)
 
 	btn_speed_1x = Button.new()
-	btn_speed_1x.text = "1x (Tempo Real)"
+	btn_speed_1x.text = Database.tr_text("RACE_REAL_TIME")
 	btn_speed_1x.pressed.connect(func(): _set_speed_mode(1.0))
 	ctrl_hbox.add_child(btn_speed_1x)
 
@@ -183,7 +218,7 @@ func build_ui() -> void:
 	ctrl_hbox.add_child(btn_speed_30x)
 
 	btn_speed_skip = Button.new()
-	btn_speed_skip.text = "⏭ PULAR PARA O FINAL DA SESSÃO"
+	btn_speed_skip.text = Database.tr_text("RACE_SKIP_SESSION")
 	btn_speed_skip.pressed.connect(_skip_to_end_of_session)
 	ctrl_hbox.add_child(btn_speed_skip)
 
@@ -253,7 +288,7 @@ func build_ui() -> void:
 	
 	var tab_events = VBoxContainer.new()
 	tutorial_incident_feed = tab_events
-	tab_events.name = "📢 INCIDENTES & CLIMA"
+	tab_events.name = Database.tr_text("RACE_EVENTS_TAB")
 	log_text_node = RichTextLabel.new()
 	log_text_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	log_text_node.scroll_following = true
@@ -261,7 +296,7 @@ func build_ui() -> void:
 	tab_container.add_child(tab_events)
 	
 	var tab_pits = VBoxContainer.new()
-	tab_pits.name = "🛠️ PIT STOPS"
+	tab_pits.name = Database.tr_text("RACE_PIT_STOPS_TAB")
 	pit_log_text_node = RichTextLabel.new()
 	pit_log_text_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	pit_log_text_node.scroll_following = true
@@ -355,7 +390,7 @@ func _build_manager_qualifying_controls(parent_container: Control) -> void:
 	vbox_main.add_theme_constant_override("separation", 12)
 	
 	var lbl_title = Label.new()
-	lbl_title.text = "🎧 ESTRATÉGIA DA EQUIPE"
+	lbl_title.text = Database.tr_text("RACE_TEAM_STRATEGY")
 	lbl_title.add_theme_font_size_override("font_size", 14)
 	lbl_title.add_theme_color_override("font_color", Color("#38bdf8"))
 	vbox_main.add_child(lbl_title)
@@ -403,13 +438,13 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	var current_status = _get_driver_status(driver_data)
 	var l_status = Label.new()
 	l_status.name = "LblStatus_%d" % driver_index
-	l_status.text = "Status: " + current_status
+	l_status.text = Database.tr_text("TEXT_STATUS") + ": " + _translate_race_status(current_status)
 	l_status.add_theme_font_size_override("font_size", 11)
 	l_status.add_theme_color_override("font_color", Color("#34d399") if ("Pista" in current_status or "Em pista" in current_status or "Hot Lap" in current_status) else Color("#f87171"))
 	cv.add_child(l_status)
 	var position_label := Label.new()
 	position_label.name = "LblPosition_%d" % driver_index
-	position_label.text = "Posição: P%d" % _get_driver_position(driver_data)
+	position_label.text = Database.tr_text("RACE_POSITION") + ": P%d" % _get_driver_position(driver_data)
 	position_label.add_theme_font_size_override("font_size", 11)
 	position_label.add_theme_color_override("font_color", Color("#cbd5e1"))
 	cv.add_child(position_label)
@@ -423,11 +458,11 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	
 	var opt_tire = OptionButton.new()
 	opt_tire.name = "OptTire_%d" % driver_index
-	opt_tire.add_item("Macio (C5)", 0)
-	opt_tire.add_item("Médio (C4)", 1)
-	opt_tire.add_item("Duro (C3)", 2)
-	opt_tire.add_item("Intermediário (Inter)", 3)
-	opt_tire.add_item("Chuva Extrema (Wet)", 4)
+	opt_tire.add_item(Database.tr_text("TIRE_SOFT"), 0)
+	opt_tire.add_item(Database.tr_text("TIRE_MEDIUM"), 1)
+	opt_tire.add_item(Database.tr_text("TIRE_HARD"), 2)
+	opt_tire.add_item(Database.tr_text("RACE_TIRE_INTER"), 3)
+	opt_tire.add_item(Database.tr_text("TIRE_WET"), 4)
 	
 	var tire_options := ["Soft", "Medium", "Hard", "Inter", "Wet"]
 	var current_tire := str(driver_data.get("tire_compound", ""))
@@ -455,6 +490,8 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 				_refresh_manager_strategy_confirmation_state()
 			elif is_race_session:
 				driver_data["planned_pit_tire"] = tire_options[selected_index]
+				if bool(driver_data.get("pit_requested", false)):
+					driver_data["pit_requested_tire"] = tire_options[selected_index]
 			else:
 				driver_data["tire_compound"] = tire_options[selected_index]
 	)
@@ -462,15 +499,19 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	
 	var opt_pace = OptionButton.new()
 	opt_pace.name = "OptPace_%d" % driver_index
-	opt_pace.add_item("🛡️ Conservador", 0)
-	opt_pace.add_item("⚖️ Normal", 1)
-	opt_pace.add_item("🔥 Ataque Máximo", 2)
-	var current_style := str(driver_data.get("estilo", "Normal"))
+	opt_pace.add_item(Database.tr_text("RACE_PACE_CONSERVATIVE"), 0)
+	opt_pace.add_item(Database.tr_text("RACE_PACE_NORMAL"), 1)
+	opt_pace.add_item(Database.tr_text("RACE_PACE_MAX_ATTACK"), 2)
+	var current_style := str(driver_data.get("pit_requested_driving_style", driver_data.get("estilo", "Normal"))) \
+		if bool(driver_data.get("pit_requested", false)) else str(driver_data.get("estilo", "Normal"))
 	opt_pace.select(0 if current_style == "Conservador" else (2 if current_style in ["Agressivo", "Ataque Máximo"] else 1))
 	opt_pace.item_selected.connect(func(selected_index: int):
 		var paces := ["Conservador", "Normal", "Agressivo"]
 		if selected_index < paces.size():
-			driver_data["estilo"] = paces[selected_index]
+			if is_race_session and bool(driver_data.get("pit_requested", false)):
+				driver_data["pit_requested_driving_style"] = paces[selected_index]
+			else:
+				driver_data["estilo"] = paces[selected_index]
 			if is_red_flag_strategy:
 				driver_data["red_flag_strategy_confirmed"] = false
 				_refresh_manager_strategy_confirmation_state()
@@ -489,17 +530,17 @@ func _create_single_driver_quali_card(driver_index: int, driver_data: Dictionary
 	if is_race_session:
 		if is_red_flag_strategy:
 			var strategy_confirmed := bool(driver_data.get("red_flag_strategy_confirmed", false))
-			btn_action.text = "✅ ESTRATÉGIA CONFIRMADA" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+			btn_action.text = Database.tr_text("RACE_STRATEGY_CONFIRMED") if strategy_confirmed else Database.tr_text("RACE_CONFIRM_STRATEGY")
 			btn_action.disabled = strategy_confirmed
 		elif is_pre_race_session:
 			var strategy_confirmed := bool(driver_data.get("pre_race_strategy_confirmed", false))
-			btn_action.text = "✅ CONFIRMADO" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+			btn_action.text = Database.tr_text("RACE_CONFIRMED") if strategy_confirmed else Database.tr_text("RACE_CONFIRM_STRATEGY")
 			btn_action.disabled = strategy_confirmed
 		else:
-			btn_action.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
+			btn_action.text = Database.tr_text("RACE_PIT_REQUESTED") if pit_requested else Database.tr_text("RACE_CALL_PIT")
 			btn_action.disabled = not is_on_track or driver_in_pit or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
 	else:
-		btn_action.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
+		btn_action.text = Database.tr_text("RACE_RECALL") if is_on_track else Database.tr_text("RACE_SEND_OUT")
 		var waiting_for_quali_release := not is_on_track and (
 			engine.quali_checker_flag
 			or not bool(driver_data.get("quali_retry_allowed", true))
@@ -667,17 +708,17 @@ func _update_manager_quali_ui_state() -> void:
 					var driver_in_pit := bool(driver.get("is_in_pit", false))
 					if red_flag_strategy:
 						var strategy_confirmed := bool(driver.get("red_flag_strategy_confirmed", false))
-						btn.text = "✅ ESTRATÉGIA CONFIRMADA" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+						btn.text = Database.tr_text("RACE_STRATEGY_CONFIRMED") if strategy_confirmed else Database.tr_text("RACE_CONFIRM_STRATEGY")
 						btn.disabled = strategy_confirmed
 					elif pre_race:
 						var strategy_confirmed := bool(driver.get("pre_race_strategy_confirmed", false))
-						btn.text = "✅ CONFIRMADO" if strategy_confirmed else "✅ CONFIRMAR ESTRATÉGIA"
+						btn.text = Database.tr_text("RACE_CONFIRMED") if strategy_confirmed else Database.tr_text("RACE_CONFIRM_STRATEGY")
 						btn.disabled = strategy_confirmed
 					else:
-						btn.text = "📨 BOX SOLICITADO" if pit_requested else "🛠️ CHAMAR AO BOX"
+						btn.text = Database.tr_text("RACE_PIT_REQUESTED") if pit_requested else Database.tr_text("RACE_CALL_PIT")
 						btn.disabled = not is_on_track or driver_in_pit or pit_requested or engine.is_finished() or engine.current_lap >= engine.total_laps - 1
 				else:
-					btn.text = "🛑 RECOLHER" if is_on_track else "🚀 MANDAR À PISTA"
+					btn.text = Database.tr_text("RACE_RECALL") if is_on_track else Database.tr_text("RACE_SEND_OUT")
 					var eliminated := str(driver.get("QualiStatus", "")).begins_with("ELIMINADO")
 					var waiting_for_quali_release := not is_on_track and engine != null and (
 						engine.quali_checker_flag
@@ -686,10 +727,10 @@ func _update_manager_quali_ui_state() -> void:
 					)
 					btn.disabled = eliminated or waiting_for_quali_release
 			if is_instance_valid(lbl):
-				lbl.text = "Status: " + st
+				lbl.text = Database.tr_text("TEXT_STATUS") + ": " + _translate_race_status(st)
 				lbl.add_theme_color_override("font_color", Color("#34d399") if is_on_track else Color("#f87171"))
 			if is_instance_valid(position_lbl):
-				position_lbl.text = "Posição: P%d" % _get_driver_position(driver)
+				position_lbl.text = Database.tr_text("RACE_POSITION") + ": P%d" % _get_driver_position(driver)
 
 func _create_track_condition_bar(title: String, fill_color: Color) -> Dictionary:
 	var row := HBoxContainer.new()
@@ -865,16 +906,16 @@ func _update_simulation_button() -> void:
 		return
 	btn_start.disabled = false
 	if engine.is_finished():
-		btn_start.text = "🏁 CONCLUIR GP & AVANÇAR"
+		btn_start.text = Database.tr_text("RACE_FINISH_ADVANCE")
 	elif engine.pending_red_flag_modal:
-		btn_start.text = "🔴 ESTRATÉGIA DE RELARGADA"
+		btn_start.text = Database.tr_text("RACE_RESTART_STRATEGY")
 	elif engine.is_quali_done() and engine.current_lap == 0 \
 	and str(Database.game_mode) == "manager" \
 	and not engine.are_manager_pre_race_strategies_confirmed():
-		btn_start.text = "✅ CONFIRME A ESTRATÉGIA"
+		btn_start.text = Database.tr_text("RACE_CONFIRM_REQUIRED")
 		btn_start.disabled = true
 	else:
-		btn_start.text = "⏸️ PAUSAR" if simulation_running else "▶ CONTINUAR"
+		btn_start.text = Database.tr_text("RACE_PAUSE") if simulation_running else Database.tr_text("RACE_CONTINUE")
 		btn_start.disabled = false
 
 func _show_red_flag_modal() -> void:
@@ -888,7 +929,7 @@ func _show_red_flag_modal() -> void:
 
 	red_flag_window = Window.new()
 	red_flag_window.name = "RedFlagStrategyWindow"
-	red_flag_window.title = "🔴 Bandeira vermelha"
+	red_flag_window.title = Database.tr_text("RACE_RED_FLAG_TITLE")
 	red_flag_window.size = Vector2i(760, 560)
 	red_flag_window.exclusive = true
 	red_flag_window.close_requested.connect(func():
@@ -908,7 +949,7 @@ func _show_red_flag_modal() -> void:
 	content.add_theme_constant_override("separation", 12)
 
 	var title := Label.new()
-	title.text = "Corrida paralisada. Confirme a estratégia dos seus pilotos para a relargada."
+	title.text = Database.tr_text("RACE_RED_FLAG_DESC")
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.add_theme_font_size_override("font_size", 16)
 	content.add_child(title)
@@ -916,7 +957,7 @@ func _show_red_flag_modal() -> void:
 
 	var restart_button := Button.new()
 	restart_button.name = "BtnRedFlagRestart"
-	restart_button.text = "CONFIRMAR E RELARGAR"
+	restart_button.text = Database.tr_text("RACE_RED_FLAG_RESTART")
 	restart_button.custom_minimum_size.y = 42
 	restart_button.pressed.connect(func():
 		if not engine.resolve_red_flag_restart():
@@ -963,23 +1004,28 @@ func _update_ui() -> void:
 	var current_gp_idx = clamp(Database.current_gp - 1, 0, Database.tracks.size() - 1)
 	var current_track = Database.tracks[current_gp_idx]
 	
-	var flag_text = "NENHUMA (Normal)"
+	var flag_text = Database.tr_text("FLAG_NORMAL")
 	var flag_color = Color("#22c55e")
+	var has_active_flag := false
 
 	if "safety_car_status" in engine:
 		match engine.safety_car_status:
 			"SC":
-				flag_text = "🚨 SAFETY CAR (SC)"
+				flag_text = Database.tr_text("FLAG_SC")
 				flag_color = Color("#ef4444")
+				has_active_flag = true
 			"VSC":
-				flag_text = "🟡 VIRTUAL SAFETY CAR (VSC)"
+				flag_text = Database.tr_text("FLAG_VSC")
 				flag_color = Color("#f59e0b")
+				has_active_flag = true
 			"YELLOW":
-				flag_text = "⚠️ BANDEIRA AMARELA"
+				flag_text = Database.tr_text("FLAG_YELLOW")
 				flag_color = Color("#facc15")
+				has_active_flag = true
 			"RED_FLAG":
-				flag_text = "🔴 BANDEIRA VERMELHA"
+				flag_text = Database.tr_text("FLAG_RED")
 				flag_color = Color("#ef4444")
+				has_active_flag = true
 
 	var weather_state = "☀️ Ensolarado"
 	# #region agent log
@@ -995,7 +1041,7 @@ func _update_ui() -> void:
 	})
 	# #endregion
 	weather_lbl.text = weather_state
-	weather_lbl.add_theme_color_override("font_color", flag_color if flag_text != "NENHUMA (Normal)" else Color("#38bdf8"))
+	weather_lbl.add_theme_color_override("font_color", flag_color if has_active_flag else Color("#38bdf8"))
 	if is_instance_valid(water_bar):
 		water_bar.value = engine.water_level
 		water_value_label.text = "%d%%" % int(round(engine.water_level))
@@ -1069,18 +1115,18 @@ func _update_safety_banner() -> void:
 	if engine.is_quali_done():
 		match status:
 			"SC":
-				banner_text = "SAFETY CAR: velocidade reduzida e pelotão agrupado; desgaste dos pneus reduzido."
+				banner_text = Database.tr_text("RACE_SC_BANNER")
 				banner_color = Color("#ef4444")
 			"VSC":
-				banner_text = "VSC: velocidade reduzida, sem agrupar o pelotão; desgaste dos pneus reduzido."
+				banner_text = Database.tr_text("RACE_VSC_BANNER")
 				banner_color = Color("#f59e0b")
 			"YELLOW":
-				banner_text = "BANDEIRA AMARELA: velocidade reduzida; ultrapassagens suspensas durante a neutralização."
+				banner_text = Database.tr_text("RACE_YELLOW_BANNER")
 			"RED_FLAG":
-				banner_text = "BANDEIRA VERMELHA: corrida paralisada; confirme a retomada para reiniciar."
+				banner_text = Database.tr_text("RACE_RED_BANNER")
 				banner_color = Color("#ef4444")
 	elif status == "YELLOW":
-		banner_text = "BANDEIRA AMARELA: velocidade reduzida; ultrapassagens suspensas durante a neutralização."
+		banner_text = Database.tr_text("RACE_YELLOW_BANNER")
 
 	banner_container.visible = not banner_text.is_empty()
 	if not banner_text.is_empty():
@@ -1097,12 +1143,12 @@ func _update_session_clock() -> void:
 		var remaining := maxf(0.0, limit - engine.quali_time_elapsed)
 		var clock_text := engine.format_session_clock(remaining)
 		if engine.quali_checker_flag:
-			clock_text = "00:00 (⏱️ AGUARDANDO VOLTAS FINAIS)"
-		top_title.text = "QUALIFICAÇÃO (%s) - GP %d (%s) - Tempo Restante: %s" % [
+			clock_text = Database.tr_text("RACE_WAITING_FINAL_LAPS")
+		top_title.text = Database.tr_text("RACE_TITLE_QUALI_CLOCK") % [
 			engine.quali_phase, Database.current_gp, track_name, clock_text
 		]
 	else:
-		top_title.text = "GP %d (%s) - Volta %d/%d" % [
+		top_title.text = Database.tr_text("RACE_TITLE_LAP") % [
 			Database.current_gp, track_name, engine.current_lap, engine.total_laps
 		]
 
@@ -1111,15 +1157,15 @@ func _render_quali_grid() -> void:
 		race_grid_node.remove_child(c)
 		c.queue_free()
 
-	_add_grid_header("POS", 40)
-	_add_grid_header("PILOTO", 140)
-	_add_grid_header("EQUIPE", 100)
-	_add_grid_header("PNEU", 60)
-	_add_grid_header("STATUS", 90)
-	_add_grid_header("SETORES", 80)
-	_add_grid_header("MELHOR VOLTA", 100)
-	_add_grid_header("ÚLTIMA VOLTA", 90)
-	_add_grid_header("SITUAÇÃO", 110)
+	_add_grid_header(Database.tr_text("COL_POS"), 40)
+	_add_grid_header(Database.tr_text("COL_DRIVER"), 140)
+	_add_grid_header(Database.tr_text("COL_TEAM"), 100)
+	_add_grid_header(Database.tr_text("PRESEASON_TIRE"), 60)
+	_add_grid_header(Database.tr_text("COL_STATUS"), 90)
+	_add_grid_header(Database.tr_text("RACE_SECTORS"), 80)
+	_add_grid_header(Database.tr_text("PRESEASON_BEST_LAP"), 100)
+	_add_grid_header(Database.tr_text("PRESEASON_LAST_LAP"), 90)
+	_add_grid_header(Database.tr_text("RACE_SITUATION"), 110)
 
 	var pos = 1
 	var list: Array = []
@@ -1165,10 +1211,10 @@ func _render_quali_grid() -> void:
 		_add_cell(str(d.get("Equipe", "")), row_color, is_in_danger_zone or is_eliminated)
 		
 		var compound = str(d.get("tire_compound", "Soft"))
-		_add_cell(compound, _get_compound_color(compound), is_in_danger_zone or is_eliminated)
+		_add_cell(_translate_tire_compound(compound), _get_compound_color(compound), is_in_danger_zone or is_eliminated)
 		
 		var state_text = str(d.get("quali_state", "Box"))
-		_add_cell(state_text, Color("#94a3b8") if state_text == "Box" else Color("#eab308"), is_in_danger_zone or is_eliminated)
+		_add_cell(_translate_quali_status(state_text), Color("#94a3b8") if state_text == "Box" else Color("#eab308"), is_in_danger_zone or is_eliminated)
 		
 		var sec_colors = d.get("sector_colors", {"s1": "⬜", "s2": "⬜", "s3": "⬜"})
 		var sectors_str = "%s %s %s" % [sec_colors.get("s1", "⬜"), sec_colors.get("s2", "⬜"), sec_colors.get("s3", "⬜")]
@@ -1182,7 +1228,7 @@ func _render_quali_grid() -> void:
 		var last_str = engine.format_time_f1(last_t) if last_t < 900.0 else "--:--.---"
 		_add_cell(last_str, Color("#ffffff"), is_in_danger_zone or is_eliminated)
 		
-		var danger_str = "⚠️ Zona de Eliminação" if is_in_danger_zone else (str(d.get("QualiStatus", "Classificado")) if is_eliminated else "Classificado")
+		var danger_str = Database.tr_text("RACE_ELIMINATION_ZONE") if is_in_danger_zone else (Database.tr_text("RACE_ELIMINATED") + str(d.get("QualiStatus", "")).trim_prefix("ELIMINADO") if is_eliminated else Database.tr_text("RACE_QUALIFIED"))
 		var danger_color = Color("#ef4444") if (is_in_danger_zone or is_eliminated) else Color("#22c55e")
 		_add_cell(danger_str, danger_color, is_in_danger_zone or is_eliminated)
 
@@ -1193,16 +1239,16 @@ func _render_race_grid() -> void:
 		race_grid_node.remove_child(c)
 		c.queue_free()
 
-	_add_grid_header("POS", 40)
-	_add_grid_header("PILOTO", 150)
-	_add_grid_header("EQUIPE", 110)
-	_add_grid_header("PNEU / DESGASTE", 140)
-	_add_grid_header("PARADAS", 70)
-	_add_grid_header("STATUS", 90)
-	_add_grid_header("SETORES", 80)
+	_add_grid_header(Database.tr_text("COL_POS"), 40)
+	_add_grid_header(Database.tr_text("COL_DRIVER"), 150)
+	_add_grid_header(Database.tr_text("COL_TEAM"), 110)
+	_add_grid_header(Database.tr_text("RACE_TIRE_WEAR"), 140)
+	_add_grid_header(Database.tr_text("RACE_STOPS"), 70)
+	_add_grid_header(Database.tr_text("COL_STATUS"), 90)
+	_add_grid_header(Database.tr_text("RACE_SECTORS"), 80)
 	_add_grid_header("GAP", 70)
-	_add_grid_header("ÚLTIMA VOLTA", 100)
-	_add_grid_header("POSIÇÕES GANHAS", 120)
+	_add_grid_header(Database.tr_text("PRESEASON_LAST_LAP"), 100)
+	_add_grid_header(Database.tr_text("RACE_POSITIONS_GAINED"), 120)
 		
 	var pos = 1
 	var leader_time = 0.0
@@ -1229,26 +1275,26 @@ func _render_race_grid() -> void:
 		
 		var compound = str(d.get("tire_compound", "Medium"))
 		var wear_val = int(d.get("tire_wear", 100))
-		_add_cell(compound + " (" + str(wear_val) + "%)", _get_compound_color(compound) if not is_pit else Color("#f97316"))
+		_add_cell(_translate_tire_compound(compound) + " (" + str(wear_val) + "%)", _get_compound_color(compound) if not is_pit else Color("#f97316"))
 		
 		var pits = int(d.get("pit_stops", 0))
-		_add_cell(str(pits) + " pit", text_color)
+		_add_cell(Database.tr_text("RACE_PIT_COUNT") % pits, text_color)
 		
 		if driver_status != "Na Pista":
-			_add_cell("💥 Out", Color("#ef4444"))
+			_add_cell(Database.tr_text("RACE_OUT"), Color("#ef4444"))
 		elif is_pit:
-			_add_cell("🛠️ EM PIT", Color("#f97316"))
+			_add_cell(Database.tr_text("RACE_IN_PIT"), Color("#f97316"))
 		else:
-			_add_cell("🟢 Em pista", Color("#22c55e"))
+			_add_cell("🟢 " + Database.tr_text("RACE_STATUS_ON_TRACK"), Color("#22c55e"))
 			
 		var sec_colors = d.get("sector_colors", {"s1": "⬜", "s2": "⬜", "s3": "⬜"})
 		var sectors_str = "%s %s %s" % [sec_colors.get("s1", "⬜"), sec_colors.get("s2", "⬜"), sec_colors.get("s3", "⬜")]
 		_add_cell(sectors_str, text_color)
 		
 		if driver_status != "Na Pista":
-			_add_cell(driver_status, Color("#ef4444"))
+			_add_cell(_translate_race_status(driver_status), Color("#ef4444"))
 		elif pos == 1:
-			_add_cell("LÍDER", Color("#22c55e"))
+			_add_cell(Database.tr_text("RACE_LEADER"), Color("#22c55e"))
 		else:
 			var diff = float(d.get("TempoTotal", 0.0)) - leader_time
 			_add_cell("+" + str(snapped(diff, 0.1)) + "s", text_color)

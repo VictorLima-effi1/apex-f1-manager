@@ -145,7 +145,7 @@ func _build_slot_row(slot_info: Dictionary) -> PanelContainer:
 		details_lbl.add_theme_color_override("font_color", Color("#38bdf8"))
 	elif slot_info["exists"]:
 		var mode_name := "Observador" if str(slot_info["mode"]) == "observer" else "Manager"
-		details_lbl.text = "Modo: %s | Ano: %d" % [mode_name, slot_info["year"]]
+		details_lbl.text = Database.tr_text("SAVE_SLOT_MODE_YEAR") % [mode_name, slot_info["year"]]
 		details_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 	else:
 		details_lbl.text = Database.tr_text("SAVE_SLOT_EMPTY") if Database.has_method("tr_text") else "Slot Vazio"

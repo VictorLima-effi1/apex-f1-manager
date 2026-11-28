@@ -79,7 +79,7 @@ func _setup_custom_modals() -> void:
 	var vbox_t = VBoxContainer.new()
 	vbox_t.add_theme_constant_override("separation", 8)
 	
-	_add_modal_header(vbox_t, "➕ CRIAR NOVA EQUIPE", func(): _close_modal(create_team_modal))
+	_add_modal_header(vbox_t, Database.tr_text("EDITOR_TEAM_MODAL"), func(): _close_modal(create_team_modal))
 	
 	var scroll_t = ScrollContainer.new()
 	scroll_t.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -87,17 +87,17 @@ func _setup_custom_modals() -> void:
 	inner_t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner_t.add_theme_constant_override("separation", 6)
 	
-	input_team_name = _create_styled_line_edit(inner_t, "Nome da Equipe:", "Ex: Porsche F1")
-	input_team_resp = _create_styled_spinbox(inner_t, "Respeito:", 10, 100, 60)
-	input_team_aero = _create_styled_spinbox(inner_t, "Aerodinâmica:", 50, 99, 75)
-	input_team_motor = _create_styled_spinbox(inner_t, "Motor:", 50, 99, 75)
-	input_team_chassis = _create_styled_spinbox(inner_t, "Chassi:", 50, 99, 75)
-	input_team_reliability = _create_styled_spinbox(inner_t, "Confiabilidade:", 50, 99, 80)
+	input_team_name = _create_styled_line_edit(inner_t, Database.tr_text("EDITOR_TEAM_NAME"), Database.tr_text("EDITOR_TEAM_NAME_EXAMPLE"))
+	input_team_resp = _create_styled_spinbox(inner_t, Database.tr_text("EDITOR_RESPECT"), 10, 100, 60)
+	input_team_aero = _create_styled_spinbox(inner_t, Database.tr_text("EDITOR_AERO"), 50, 99, 75)
+	input_team_motor = _create_styled_spinbox(inner_t, Database.tr_text("EDITOR_ENGINE"), 50, 99, 75)
+	input_team_chassis = _create_styled_spinbox(inner_t, Database.tr_text("EDITOR_CHASSIS"), 50, 99, 75)
+	input_team_reliability = _create_styled_spinbox(inner_t, Database.tr_text("EDITOR_RELIABILITY"), 50, 99, 80)
 	
 	scroll_t.add_child(inner_t)
 	vbox_t.add_child(scroll_t)
 	
-	_add_modal_footer_buttons(vbox_t, "Confirmar Criar Equipe", _on_create_team_confirmed, func(): _close_modal(create_team_modal))
+	_add_modal_footer_buttons(vbox_t, Database.tr_text("EDITOR_CREATE_TEAM_CONFIRM"), _on_create_team_confirmed, func(): _close_modal(create_team_modal))
 	create_team_modal.add_child(vbox_t)
 	modal_overlay.add_child(create_team_modal)
 
@@ -106,7 +106,7 @@ func _setup_custom_modals() -> void:
 	var vbox_d = VBoxContainer.new()
 	vbox_d.add_theme_constant_override("separation", 8)
 	
-	_add_modal_header(vbox_d, "👤+ CRIAR NOVO PILOTO", func(): _close_modal(create_driver_modal))
+	_add_modal_header(vbox_d, Database.tr_text("EDITOR_DRIVER_MODAL"), func(): _close_modal(create_driver_modal))
 	
 	var scroll_d = ScrollContainer.new()
 	scroll_d.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -114,18 +114,18 @@ func _setup_custom_modals() -> void:
 	inner_d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner_d.add_theme_constant_override("separation", 6)
 	
-	input_driver_name = _create_styled_line_edit(inner_d, "Nome do Piloto:", "Ex: Ayrton Senna")
-	input_driver_age = _create_styled_spinbox(inner_d, "Idade:", 16, 50, 20)
-	input_driver_ovr = _create_styled_spinbox(inner_d, "Overall:", 50, 99, 75)
-	input_driver_pace = _create_styled_spinbox(inner_d, "Pace/Corrida:", 50, 99, 75)
-	input_driver_tire = _create_styled_spinbox(inner_d, "Pneus:", 50, 99, 75)
-	input_driver_ovt = _create_styled_spinbox(inner_d, "Ultrapassagem (OVT):", 50, 99, 75)
-	input_driver_def = _create_styled_spinbox(inner_d, "Defesa (DEF):", 50, 99, 75)
-	input_driver_wet = _create_styled_spinbox(inner_d, "Habilidade Chuva (WET):", 50, 99, 75)
-	input_driver_moral = _create_styled_spinbox(inner_d, "Moral (MOR):", 0, 100, 75)
+	input_driver_name = _create_styled_line_edit(inner_d, Database.tr_text("EDITOR_DRIVER_NAME"), Database.tr_text("EDITOR_DRIVER_NAME_EXAMPLE"))
+	input_driver_age = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_AGE"), 16, 50, 20)
+	input_driver_ovr = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_OVERALL"), 50, 99, 75)
+	input_driver_pace = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_PACE"), 50, 99, 75)
+	input_driver_tire = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_TIRES"), 50, 99, 75)
+	input_driver_ovt = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_OVERTAKING"), 50, 99, 75)
+	input_driver_def = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_DEFENSE"), 50, 99, 75)
+	input_driver_wet = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_WET"), 50, 99, 75)
+	input_driver_moral = _create_styled_spinbox(inner_d, Database.tr_text("EDITOR_MORALE"), 0, 100, 75)
 	
 	var lbl_t = Label.new()
-	lbl_t.text = "Equipe Inicial:"
+	lbl_t.text = Database.tr_text("EDITOR_INITIAL_TEAM")
 	lbl_t.add_theme_font_size_override("font_size", 12)
 	lbl_t.add_theme_color_override("font_color", Color("#94a3b8"))
 	inner_d.add_child(lbl_t)
@@ -137,7 +137,7 @@ func _setup_custom_modals() -> void:
 	scroll_d.add_child(inner_d)
 	vbox_d.add_child(scroll_d)
 	
-	_add_modal_footer_buttons(vbox_d, "Confirmar Criar Piloto", _on_create_driver_confirmed, func(): _close_modal(create_driver_modal))
+	_add_modal_footer_buttons(vbox_d, Database.tr_text("EDITOR_CREATE_DRIVER_CONFIRM"), _on_create_driver_confirmed, func(): _close_modal(create_driver_modal))
 	create_driver_modal.add_child(vbox_d)
 	modal_overlay.add_child(create_driver_modal)
 
@@ -198,7 +198,7 @@ func _add_modal_footer_buttons(parent: VBoxContainer, confirm_text: String, conf
 	hbox.add_child(btn_confirm)
 	
 	var btn_cancel = Button.new()
-	btn_cancel.text = "Cancelar"
+	btn_cancel.text = Database.tr_text("EDITOR_CANCEL")
 	btn_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_cancel.custom_minimum_size = Vector2(0, 36)
 	
@@ -243,7 +243,7 @@ func build_ui() -> void:
 	header_hbox.add_theme_constant_override("separation", 12)
 	
 	var title = Label.new()
-	title.text = "🛠️ EDITOR DE ATRIBUTOS E BANCO DE DADOS"
+	title.text = Database.tr_text("EDITOR_TITLE")
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color("#ef4444"))
 	header_hbox.add_child(title)
@@ -254,14 +254,14 @@ func build_ui() -> void:
 	
 	# BOTÕES DE AÇÃO DO HEADER
 	var btn_add_driver = Button.new()
-	btn_add_driver.text = "👤+ Criar Piloto"
+	btn_add_driver.text = Database.tr_text("EDITOR_CREATE_DRIVER")
 	btn_add_driver.custom_minimum_size = Vector2(125, 36)
 	btn_add_driver.add_theme_color_override("font_color", Color("#38bdf8"))
 	btn_add_driver.pressed.connect(_open_create_driver_modal)
 	header_hbox.add_child(btn_add_driver)
 	
 	var btn_add_team = Button.new()
-	btn_add_team.text = "🏎️+ Criar Equipe"
+	btn_add_team.text = Database.tr_text("EDITOR_CREATE_TEAM")
 	btn_add_team.custom_minimum_size = Vector2(130, 36)
 	btn_add_team.add_theme_color_override("font_color", Color("#f59e0b"))
 	btn_add_team.pressed.connect(_open_create_team_modal)
@@ -269,14 +269,14 @@ func build_ui() -> void:
 	
 	# NOVO BOTÃO: Carregar Dados (Roxo)
 	var btn_load_data = Button.new()
-	btn_load_data.text = "📥 Carregar Dados"
+	btn_load_data.text = Database.tr_text("EDITOR_LOAD_DATA")
 	btn_load_data.custom_minimum_size = Vector2(140, 36)
 	btn_load_data.add_theme_color_override("font_color", Color("#a855f7"))
 	btn_load_data.pressed.connect(_on_load_data_pressed)
 	header_hbox.add_child(btn_load_data)
 
 	var btn_save_all = Button.new()
-	btn_save_all.text = "💾 SALVAR TUDO"
+	btn_save_all.text = Database.tr_text("EDITOR_SAVE_ALL")
 	btn_save_all.custom_minimum_size = Vector2(140, 36)
 	btn_save_all.add_theme_color_override("font_color", Color("#22c55e"))
 	btn_save_all.pressed.connect(_on_save_all_pressed)
@@ -299,13 +299,13 @@ func build_ui() -> void:
 		else:
 			grid_drivers.append(d)
 			
-	_build_driver_box(split_hbox, "🏎️ PILOTOS DO GRID", grid_drivers, Color("#38bdf8"), grid_driver_inputs)
+	_build_driver_box(split_hbox, Database.tr_text("EDITOR_GRID_DRIVERS"), grid_drivers, Color("#38bdf8"), grid_driver_inputs)
 	
 	# 2. BOX PILOTOS FREE AGENT
-	_build_driver_box(split_hbox, "📋 FREE AGENTS", fa_drivers, Color("#a855f7"), fa_driver_inputs)
+	_build_driver_box(split_hbox, Database.tr_text("EDITOR_FREE_AGENTS"), fa_drivers, Color("#a855f7"), fa_driver_inputs)
 	
 	# 3. BOX EQUIPES
-	_build_team_box(split_hbox, "🏛️ EQUIPES & DESEMPENHO", Database.teams, Color("#f59e0b"), team_inputs)
+	_build_team_box(split_hbox, Database.tr_text("EDITOR_TEAMS_PERFORMANCE"), Database.teams, Color("#f59e0b"), team_inputs)
 
 func _build_driver_box(parent: HBoxContainer, box_title: String, driver_list: Array, theme_color: Color, input_array: Array) -> void:
 	var panel = PanelContainer.new()
@@ -341,16 +341,16 @@ func _build_driver_box(parent: HBoxContainer, box_title: String, driver_list: Ar
 	grid.add_theme_constant_override("h_separation", 4)
 	grid.add_theme_constant_override("v_separation", 6)
 	
-	_add_header(grid, "PILOTO", 95)
-	_add_header(grid, "IDADE", 38)
-	_add_header(grid, "OVR", 40)
-	_add_header(grid, "PACE", 40)
-	_add_header(grid, "PNEU", 40)
-	_add_header(grid, "OVT", 40)
-	_add_header(grid, "DEF", 40)
-	_add_header(grid, "WET", 40)
-	_add_header(grid, "MOR", 40)
-	_add_header(grid, "EQUIPE", 85)
+	_add_header(grid, Database.tr_text("EDITOR_DRIVER"), 95)
+	_add_header(grid, Database.tr_text("EDITOR_AGE_SHORT"), 38)
+	_add_header(grid, Database.tr_text("EDITOR_OVR_SHORT"), 40)
+	_add_header(grid, Database.tr_text("EDITOR_PACE_SHORT"), 40)
+	_add_header(grid, Database.tr_text("EDITOR_TIRES_SHORT"), 40)
+	_add_header(grid, Database.tr_text("EDITOR_OVT_SHORT"), 40)
+	_add_header(grid, Database.tr_text("EDITOR_DEF_SHORT"), 40)
+	_add_header(grid, Database.tr_text("EDITOR_WET_SHORT"), 40)
+	_add_header(grid, Database.tr_text("EDITOR_MORALE_SHORT"), 40)
+	_add_header(grid, Database.tr_text("MARKET_TEAM"), 85)
 	
 	for d in driver_list:
 		var name_lbl = Label.new()
@@ -408,7 +408,7 @@ func _build_driver_box(parent: HBoxContainer, box_title: String, driver_list: Ar
 		grid.add_child(mor_spin)
 		
 		var team_opt = OptionButton.new()
-		team_opt.add_item("Free Agent")
+		team_opt.add_item(Database.tr_text("STATUS_FREE_AGENT"))
 		var current_team = d.get("Equipe", "Free Agent")
 		var sel_idx = 0
 		var idx = 1
@@ -473,12 +473,12 @@ func _build_team_box(parent: HBoxContainer, box_title: String, team_list: Array,
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	
-	_add_header(grid, "EQUIPE", 95)
-	_add_header(grid, "RESP", 45)
-	_add_header(grid, "AERO", 45)
-	_add_header(grid, "MOTOR", 45)
-	_add_header(grid, "CHASSI", 45)
-	_add_header(grid, "CONF", 45)
+	_add_header(grid, Database.tr_text("MARKET_TEAM"), 95)
+	_add_header(grid, Database.tr_text("EDITOR_RESPECT_SHORT"), 45)
+	_add_header(grid, Database.tr_text("EDITOR_AERO_SHORT"), 45)
+	_add_header(grid, Database.tr_text("EDITOR_ENGINE_SHORT"), 45)
+	_add_header(grid, Database.tr_text("EDITOR_CHASSIS_SHORT"), 45)
+	_add_header(grid, Database.tr_text("EDITOR_RELIABILITY_SHORT"), 45)
 	
 	for t in team_list:
 		var t_name_lbl = Label.new()
@@ -546,7 +546,7 @@ func _open_create_team_modal() -> void:
 func _open_create_driver_modal() -> void:
 	input_driver_name.text = ""
 	input_driver_team.clear()
-	input_driver_team.add_item("Free Agent")
+	input_driver_team.add_item(Database.tr_text("STATUS_FREE_AGENT"))
 	for t in Database.teams:
 		input_driver_team.add_item(t.get("Nome", ""))
 	input_driver_team.selected = 0
@@ -607,7 +607,7 @@ func _open_data_file_dialog(mode: FileDialog.FileMode) -> void:
 	data_file_dialog.file_mode = mode
 	data_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	data_file_dialog.filters = PackedStringArray(["*.json ; Arquivos JSON"])
-	data_file_dialog.title = "Carregar dados JSON" if mode == FileDialog.FILE_MODE_OPEN_FILE else "Salvar dados JSON"
+	data_file_dialog.title = Database.tr_text("EDITOR_LOAD_JSON") if mode == FileDialog.FILE_MODE_OPEN_FILE else Database.tr_text("EDITOR_SAVE_JSON")
 	if mode == FileDialog.FILE_MODE_SAVE_FILE:
 		data_file_dialog.current_file = "apex_f1_manager_data.json"
 	data_file_dialog.file_selected.connect(_on_data_file_selected.bind(mode))
@@ -672,7 +672,7 @@ func _load_editor_data_from_file(path: String) -> void:
 
 func _show_data_result(message: String) -> void:
 	var dialog := AcceptDialog.new()
-	dialog.title = "Dados do Editor"
+	dialog.title = Database.tr_text("EDITOR_DATA_TITLE")
 	dialog.dialog_text = message
 	add_child(dialog)
 	dialog.confirmed.connect(dialog.queue_free)

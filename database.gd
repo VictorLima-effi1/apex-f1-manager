@@ -17,6 +17,11 @@ var available_sponsors: Array = []
 var current_session: String = "preseason"
 var tutorial_enabled: bool = false
 var tutorial_completed_screens: Dictionary = {}
+var current_save_playtime_seconds: float = 0.0
+var total_playtime_seconds: float = 0.0
+var has_active_save: bool = false
+var active_save_path: String = ""
+var _playtime_save_elapsed: float = 0.0
 
 # Fornecedores de Motor (Potência e Confiabilidade)
 const ENGINE_DATA: Dictionary = {
@@ -200,6 +205,7 @@ var transfer_history: Array = [
 const F1_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
 
 func _ready() -> void:
+	_load_total_playtime()
 	load_drivers_from_json()
 	init_season_budget_cap()
 	if tracks.is_empty():
@@ -207,6 +213,63 @@ func _ready() -> void:
 	if teams.is_empty():
 		teams = TeamsData.get_initial_teams()
 	ensure_full_grid()
+
+func _process(delta: float) -> void:
+	total_playtime_seconds += delta
+	if has_active_save:
+		current_save_playtime_seconds += delta
+	_playtime_save_elapsed += delta
+	if _playtime_save_elapsed >= 15.0:
+		_playtime_save_elapsed = 0.0
+		_save_total_playtime()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE:
+		_save_total_playtime()
+		_persist_active_save_playtime()
+
+func _load_total_playtime() -> void:
+	var config := ConfigFile.new()
+	var error := config.load("user://player_stats.cfg")
+	if error == ERR_FILE_NOT_FOUND:
+		return
+	if error != OK:
+		push_error("Não foi possível carregar o tempo total de jogo. Erro: %d" % error)
+		return
+	total_playtime_seconds = maxf(0.0, float(config.get_value("playtime", "total_seconds", 0.0)))
+
+func _save_total_playtime() -> void:
+	var config := ConfigFile.new()
+	var load_error := config.load("user://player_stats.cfg")
+	if load_error != OK and load_error != ERR_FILE_NOT_FOUND:
+		push_error("Não foi possível abrir as estatísticas de jogo. Erro: %d" % load_error)
+		return
+	config.set_value("playtime", "total_seconds", total_playtime_seconds)
+	var save_error := config.save("user://player_stats.cfg")
+	if save_error != OK:
+		push_error("Não foi possível salvar o tempo total de jogo. Erro: %d" % save_error)
+
+func _persist_active_save_playtime() -> void:
+	if not has_active_save or active_save_path.is_empty() or not FileAccess.file_exists(active_save_path):
+		return
+	var read_file := FileAccess.open(active_save_path, FileAccess.READ)
+	if read_file == null:
+		push_error("Não foi possível abrir o save para atualizar o tempo de jogo.")
+		return
+	var json := JSON.new()
+	var parse_error := json.parse(read_file.get_as_text())
+	read_file.close()
+	if parse_error != OK or not json.get_data() is Dictionary:
+		push_error("Não foi possível atualizar o tempo: o arquivo de save está inválido.")
+		return
+	var save_data: Dictionary = json.get_data()
+	save_data["current_save_playtime_seconds"] = current_save_playtime_seconds
+	var write_file := FileAccess.open(active_save_path, FileAccess.WRITE)
+	if write_file == null:
+		push_error("Não foi possível gravar o tempo de jogo no save.")
+		return
+	write_file.store_string(JSON.stringify(save_data, "\t"))
+	write_file.close()
 
 func init_season_budget_cap() -> void:
 	team_season_expenses.clear()
@@ -218,6 +281,24 @@ func init_season_budget_cap() -> void:
 
 func get_team_budget_cap(team_name: String) -> float:
 	return COST_CAP_LIMIT
+
+func get_team_season_expense(team_name: String) -> float:
+	var normalized_name := team_name.strip_edges().to_lower()
+	for stored_name in team_season_expenses.keys():
+		if str(stored_name).strip_edges().to_lower() == normalized_name:
+			return float(team_season_expenses[stored_name])
+	return 0.0
+
+func record_team_season_expense(team_name: String, amount: float) -> void:
+	var canonical_name := team_name.strip_edges()
+	for team in teams:
+		var stored_name := str(team.get("Nome", team.get("nome", ""))).strip_edges()
+		if stored_name.to_lower() == canonical_name.to_lower():
+			canonical_name = stored_name
+			break
+	if canonical_name.is_empty():
+		return
+	team_season_expenses[canonical_name] = get_team_season_expense(canonical_name) + maxf(0.0, amount)
 
 func get_manager_difficulty_modifier(effect: String) -> float:
 	match effect:
@@ -275,7 +356,7 @@ func record_season_car_construction_expenses() -> void:
 
 		var power_index := clampf(float(get_team_power_index(team)["overall"]), 75.0, 99.0)
 		var construction_cost := lerpf(12_000_000.0, 32_000_000.0, (power_index - 75.0) / 24.0)
-		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + construction_cost
+		record_team_season_expense(team_name, construction_cost)
 		team_car_construction_years[team_name] = current_year
 
 func get_team_upgrade_reserve(team_name: String) -> float:
@@ -284,7 +365,7 @@ func get_team_upgrade_reserve(team_name: String) -> float:
 	return float(team_upgrade_reserves[team_name])
 
 func purchase_team_upgrade(team_name: String) -> bool:
-	var current_expense: float = float(team_season_expenses.get(team_name, 0.0))
+	var current_expense := get_team_season_expense(team_name)
 	var max_cap: float = get_team_budget_cap(team_name)
 	var remaining: float = max_cap - current_expense
 	var upgrade_cost: float = UPGRADE_COST
@@ -294,7 +375,7 @@ func purchase_team_upgrade(team_name: String) -> bool:
 	if remaining < upgrade_cost or remaining - upgrade_cost < get_team_upgrade_reserve(team_name):
 		return false
 		
-	team_season_expenses[team_name] = current_expense + upgrade_cost
+	record_team_season_expense(team_name, upgrade_cost)
 	
 	var team = _get_team_by_name(team_name)
 	var last_rank = int(team.get("LastSeasonRank", 5))
@@ -325,7 +406,7 @@ func process_ai_team_upgrades() -> void:
 			var player_team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
 			if team_name.strip_edges().to_lower() == player_team_name.to_lower():
 				continue
-		var current_expense = team_season_expenses.get(team_name, 0.0)
+		var current_expense = get_team_season_expense(team_name)
 		var max_cap = get_team_budget_cap(team_name)
 		var remaining = max_cap - current_expense
 		
@@ -404,7 +485,7 @@ func process_ai_team_upgrades() -> void:
 					component_name = "Peso"
 
 			if not component_name.is_empty():
-				team_season_expenses[team_name] = current_expense + UPGRADE_COST
+				record_team_season_expense(team_name, UPGRADE_COST)
 				total_upgrades_in_gp += 1
 				
 				# Formata o trecho individual (ex: "Audi (+0.90)")
@@ -472,14 +553,13 @@ func record_gp_salary_expenses(results: Array) -> void:
 		if salary_millions <= 0.0:
 			var driver := _get_driver_by_name(str(result.get("Nome", result.get("nome", ""))))
 			salary_millions = float(driver.get("salario", 0.0))
-		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) \
-			+ maxf(0.0, salary_millions) * 1_000_000.0 / float(race_count)
+		record_team_season_expense(team_name, maxf(0.0, salary_millions) * 1_000_000.0 / float(race_count))
 
 func get_team_cost_cap_penalty(team_name: String) -> int:
 	var cap := get_team_budget_cap(team_name)
 	if cap <= 0.0:
 		return 0
-	var excess := float(team_season_expenses.get(team_name, 0.0)) - cap
+	var excess := get_team_season_expense(team_name) - cap
 	if excess <= 0.0:
 		return 0
 	var excess_percent := int(floor((excess / cap) * 100.0 + 0.000001))
@@ -1063,7 +1143,7 @@ func fire_driver(team_name: String, driver_name: String) -> void:
 			fired_by.append(team_name)
 		driver["demitido_por_equipes"] = fired_by
 		
-		log_transfer_event("🚨 DEMISSÃO: " + driver_name + " foi demitido da " + team_name + " por baixo desempenho!", "Demissão")
+		log_transfer_event("🚨 DEMISSÃO: " + driver_name + " foi demitido da " + team_name + " por baixo desempenho!", "Demissão", driver_name, team_name, int(driver.get("Idade", 25)))
 
 	_auto_fill_team_seat(team_name)
 
@@ -1076,7 +1156,7 @@ func driver_resigns(driver_name: String) -> void:
 			driver["AnosContrato"] = 0
 			driver["Moral"] = 40.0
 			
-			log_transfer_event("🚨 RESCISÃO: " + driver_name + " pediu demissão da " + team_name + " por insatisfação com a equipe!", "Rescisão")
+			log_transfer_event("🚨 RESCISÃO: " + driver_name + " pediu demissão da " + team_name + " por insatisfação com a equipe!", "Rescisão", driver_name, team_name, int(driver.get("Idade", 25)))
 			
 			_auto_fill_team_seat(team_name)
 
@@ -1296,7 +1376,7 @@ func process_mid_season_renewals() -> void:
 				if added_years > 0:
 					d["AnosContrato"] = final_contract
 					var msg = tr_text("NEWS_RENEWAL") % [driver_name, eq, added_years]
-					log_transfer_event(msg, "Renovação")
+					log_transfer_event(msg, "Renovação", driver_name, eq, int(d.get("Idade", 25)), added_years)
 
 func end_season_and_advance_year() -> void:
 	process_end_of_season_finances(teams)
@@ -1402,7 +1482,7 @@ func _process_driver_evolution() -> void:
 			d["Equipe"] = "Aposentado"
 			d["Aposentado"] = true
 			d["AnosContrato"] = 0
-			log_transfer_event("🏁 APOSENTADORIA: %s anunciou sua aposentadoria aos %d anos!" % [d["Nome"], age], "Aposentadoria")
+			log_transfer_event("🏁 APOSENTADORIA: %s anunciou sua aposentadoria aos %d anos!" % [d["Nome"], age], "Aposentadoria", str(d["Nome"]), "", age)
 			
 			if team_name != "Free Agent" and team_name != "Aposentado" and not team_name.is_empty():
 				_auto_fill_team_seat(team_name)
@@ -1432,7 +1512,7 @@ func _process_ai_transfer_market() -> void:
 				if not fired_by.has(team_name):
 					fired_by.append(team_name)
 				d["demitido_por_equipes"] = fired_by
-				log_transfer_event("🚨 FIM DE CONTRATO: " + str(d.get("Nome", "")) + " não renovou com a " + team_name + "!", "Demissão")
+				log_transfer_event("🚨 FIM DE CONTRATO: " + str(d.get("Nome", "")) + " não renovou com a " + team_name + "!", "Demissão", str(d.get("Nome", "")), team_name, int(d.get("Idade", 25)))
 
 	# 2. FASE DE ROUBO DE PILOTOS (Poaching / Compra de Contratos por Interesses de Mercado)
 	# Equipes do topo (P1 a P11) tentam tirar destaques de equipes menores
@@ -1486,7 +1566,7 @@ func _process_ai_transfer_market() -> void:
 				var rookie_age := randi_range(18, 22)
 				var ovr_tmp = randi_range(68, 75)
 				add_new_driver(new_promoted_name, rookie_age, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, ovr_tmp, team_name)
-				log_transfer_event("🌟 PROMOÇÃO: " + team_name + " promoveu o jovem " + new_promoted_name + " da base!", "Contratação", new_promoted_name, team_name, rookie_age, 1)
+				log_transfer_event("🌟 PROMOÇÃO: " + team_name + " promoveu o jovem " + new_promoted_name + " da base!", "Promoção", new_promoted_name, team_name, rookie_age, 1)
 				active_team_drivers = get_team_drivers(team_name)
 
 	ensure_full_grid()
@@ -1749,6 +1829,7 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		"team_upgrade_reserves": team_upgrade_reserves,
 		"current_session": current_session,
 		"race_finished": race_finished,
+		"current_save_playtime_seconds": current_save_playtime_seconds,
 		"driver_market_interests": driver_market_interests,
 		"constructors_points_history": constructors_points_history,
 		"transfer_history": transfer_history,
@@ -1774,6 +1855,8 @@ func save_game_slot(slot_index: int, custom_name: String = "", mode: String = ""
 		file.store_string(json_string)
 		file.close()
 		current_slot = slot_index
+		has_active_save = true
+		active_save_path = get_save_path(slot_index)
 		if not is_auto_save:
 			auto_save_uses_default_slot = false
 			add_news_event("💾 Jogo salvo com sucesso no Slot %d!" % slot_index)
@@ -1833,6 +1916,9 @@ func load_game_slot(slot_index: int, mode: String = "") -> bool:
 			var stored_mode := _normalize_game_mode(str(data.get("game_mode", game_mode)))
 			current_slot = slot_index
 			auto_save_uses_default_slot = slot_index == MAX_SAVE_SLOTS
+			active_save_path = path
+			current_save_playtime_seconds = maxf(0.0, float(data.get("current_save_playtime_seconds", 0.0)))
+			has_active_save = true
 			game_mode = stored_mode
 			manager_difficulty = str(data.get("manager_difficulty", "normal"))
 			current_year = data.get("current_year", 2026)
@@ -1890,6 +1976,9 @@ func has_any_save() -> bool:
 func reset_database(mode: String = "") -> void:
 	if not mode.is_empty():
 		game_mode = _normalize_game_mode(mode)
+	current_save_playtime_seconds = 0.0
+	has_active_save = true
+	active_save_path = ""
 	current_slot = MAX_SAVE_SLOTS
 	auto_save_uses_default_slot = true
 	tutorial_completed_screens.clear()
@@ -2076,7 +2165,7 @@ func _apply_dnf_financial_penalty(team_name: String) -> void:
 	var repair_cost: int = randi_range(1000000, 10000000)
 	if is_player_team(team_name):
 		repair_cost = roundi(float(repair_cost) * get_manager_difficulty_modifier("dnf_cost"))
-	team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + repair_cost
+	record_team_season_expense(team_name, repair_cost)
 
 	if game_mode != "manager":
 		return
@@ -2248,7 +2337,7 @@ func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races
 	if player_team_name.is_empty():
 		return false
 	var team_cap := get_team_budget_cap(player_team_name)
-	var spent := float(team_season_expenses.get(player_team_name, 0.0))
+	var spent := get_team_season_expense(player_team_name)
 	if team_cap - spent < upgrade_cost \
 	or team_cap - spent - upgrade_cost < get_team_upgrade_reserve(player_team_name):
 		return false
@@ -2263,7 +2352,8 @@ func schedule_user_team_upgrade(attribute: String, amount: float, delivery_races
 	user_team["orcamento"] = balance - cost_m
 	var team_name := str(user_team.get("nome", user_team.get("Nome", ""))).strip_edges()
 	if not team_name.is_empty():
-		team_season_expenses[team_name] = float(team_season_expenses.get(team_name, 0.0)) + upgrade_cost
+		record_team_season_expense(team_name, upgrade_cost)
+	register_financial_transaction("gastos_pd", cost_m)
 	if attribute != "Peso":
 		amount *= get_manager_difficulty_modifier("upgrade_gain")
 	slots[free_slot] = {

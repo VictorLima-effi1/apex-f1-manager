@@ -17,7 +17,7 @@ func build_ui() -> void:
 	# --- HEADER DA TELA ---
 	var header_hbox = HBoxContainer.new()
 	var title = Label.new()
-	title.text = "DESENVOLVIMENTO TÉCNICO & HIERARQUIA DE MAQUINÁRIO"
+	title.text = Database.tr_text("DEV_TITLE")
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color("#ef4444"))
 	header_hbox.add_child(title)
@@ -68,7 +68,7 @@ func build_ui() -> void:
 	
 	for t in sorted_teams:
 		var team_name = str(t.get("Nome", ""))
-		var spent = Database.team_season_expenses.get(team_name, 0.0)
+		var spent = Database.get_team_season_expense(team_name)
 		
 		# CÁLCULO DINÂMICO DOS PARÂMETROS TÉCNICOS (MOTOR, AERO, CHASSI, CONFIABILIDADE, PESO)
 		var stats = Database.calculate_team_dev_stats(t) if Database.has_method("calculate_team_dev_stats") else t
@@ -116,7 +116,7 @@ func build_ui() -> void:
 		team_info.add_theme_constant_override("separation", 3)
 		
 		var r_lbl = Label.new()
-		r_lbl.text = "RANK #" + str(rank) + " NO GRID"
+		r_lbl.text = Database.tr_text("DEV_RANK") % rank
 		r_lbl.add_theme_font_size_override("font_size", 12)
 		r_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 		team_info.add_child(r_lbl)
@@ -136,7 +136,7 @@ func build_ui() -> void:
 		# INDICADOR DE GANHO DE UPGRADE
 		var const_rank = team_points_rank.get(team_name, 5)
 		var is_top_3 = const_rank <= 3
-		var dev_rate_str = "🚀 Ganho: +1~2% (Top 3)" if is_top_3 else "⚡ Ganho: +3~4% (Handicap)"
+		var dev_rate_str = Database.tr_text("DEV_GAIN_TOP") if is_top_3 else Database.tr_text("DEV_GAIN_HANDICAP")
 		
 		var dev_lbl = Label.new()
 		dev_lbl.text = dev_rate_str
@@ -147,13 +147,13 @@ func build_ui() -> void:
 		# INDICADOR COMPLETO: GASTOS + VERBA RESTANTE + TETO
 		var budget_lbl = Label.new()
 		if excess > 0.0:
-			budget_lbl.text = "💰 Gastou: $%sM | Excesso: $%.1fM | Penalidade: -%d pts" % [str(spent_m), excess / 1_000_000.0, penalty_points]
+			budget_lbl.text = Database.tr_text("DEV_SPENT_EXCESS") % [str(spent_m), excess / 1_000_000.0, penalty_points]
 			budget_lbl.add_theme_color_override("font_color", Color("#ef4444"))
 		elif remaining <= 0.0:
-			budget_lbl.text = "💰 Gastou: $%sM | Teto Atingido ($0M Restantes)" % str(spent_m)
+			budget_lbl.text = Database.tr_text("DEV_SPENT_CAPPED") % str(spent_m)
 			budget_lbl.add_theme_color_override("font_color", Color("#ef4444"))
 		else:
-			budget_lbl.text = "💰 Gastou: $%sM | Restante: $%sM (Teto: $%sM)" % [str(spent_m), str(remaining_m), str(max_cap_m)]
+			budget_lbl.text = Database.tr_text("DEV_SPENT_REMAINING") % [str(spent_m), str(remaining_m), str(max_cap_m)]
 			if remaining_m <= 25.0:
 				budget_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
 			else:
@@ -173,13 +173,13 @@ func build_ui() -> void:
 		stats_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats_vbox.add_theme_constant_override("separation", 5)
 		
-		_add_component_bar(stats_vbox, "🚀 Motor", motor_val, Color("#ef4444"))
-		_add_component_bar(stats_vbox, "💨 Aero", aero_val, Color("#22c55e"))
-		_add_component_bar(stats_vbox, "🏎️ Chassi", chassi_val, Color("#facc15"))
-		_add_component_bar(stats_vbox, "🔧 Confiab.", rel_val, Color("#a855f7"))
+		_add_component_bar(stats_vbox, Database.tr_text("DEV_ENGINE"), motor_val, Color("#ef4444"))
+		_add_component_bar(stats_vbox, Database.tr_text("DEV_AERO"), aero_val, Color("#22c55e"))
+		_add_component_bar(stats_vbox, Database.tr_text("DEV_CHASSIS"), chassi_val, Color("#facc15"))
+		_add_component_bar(stats_vbox, Database.tr_text("DEV_RELIABILITY"), rel_val, Color("#a855f7"))
 		
 		# 5. BARRA DE PESO (KG)
-		_add_weight_bar(stats_vbox, "⚖️ Peso", weight_val)
+		_add_weight_bar(stats_vbox, Database.tr_text("DEV_WEIGHT"), weight_val)
 		
 		main_hbox.add_child(stats_vbox)
 		panel.add_child(main_hbox)
@@ -204,7 +204,7 @@ func _render_grid_budget_cap_summary(parent: VBoxContainer) -> void:
 	var teams_at_cap = 0
 	for t in Database.teams:
 		var team_name = str(t.get("Nome", ""))
-		var spent = Database.team_season_expenses.get(team_name, 0.0)
+		var spent = Database.get_team_season_expense(team_name)
 		var team_cap = Database.get_team_budget_cap(team_name) if Database.has_method("get_team_budget_cap") else 135_000_000.0
 		
 		total_spent += spent
@@ -214,19 +214,19 @@ func _render_grid_budget_cap_summary(parent: VBoxContainer) -> void:
 	var avg_spent_m = snapped((total_spent / max(1, Database.teams.size())) / 1_000_000.0, 0.1)
 	
 	var lbl_cap_title = Label.new()
-	lbl_cap_title.text = "📊 TETO DE GASTOS REGULAMENTAR POR EQUIPE"
+	lbl_cap_title.text = Database.tr_text("DEV_BUDGET_CAP")
 	lbl_cap_title.add_theme_font_size_override("font_size", 13)
 	lbl_cap_title.add_theme_color_override("font_color", Color("#94a3b8"))
 	hbox.add_child(lbl_cap_title)
 	
 	var lbl_avg = Label.new()
-	lbl_avg.text = "• Média gasta: $%sM" % str(avg_spent_m)
+	lbl_avg.text = Database.tr_text("DEV_AVERAGE_SPENT") % str(avg_spent_m)
 	lbl_avg.add_theme_font_size_override("font_size", 13)
 	lbl_avg.add_theme_color_override("font_color", Color("#38bdf8"))
 	hbox.add_child(lbl_avg)
 	
 	var lbl_blocked = Label.new()
-	lbl_blocked.text = "• Equipes com teto esgotado: %d / %d" % [teams_at_cap, Database.teams.size()]
+	lbl_blocked.text = Database.tr_text("DEV_TEAMS_AT_CAP") % [teams_at_cap, Database.teams.size()]
 	lbl_blocked.add_theme_font_size_override("font_size", 13)
 	lbl_blocked.add_theme_color_override("font_color", Color("#ef4444") if teams_at_cap > 0 else Color("#22c55e"))
 	hbox.add_child(lbl_blocked)

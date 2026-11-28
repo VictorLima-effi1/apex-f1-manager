@@ -19,7 +19,7 @@ func build_ui() -> void:
 	
 	# Header
 	var title = Label.new()
-	title.text = "HALL DA FAMA & HISTÓRICO DA F1"
+	title.text = Database.tr_text("HIST_TITLE")
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color("#ef4444"))
 	main_vbox.add_child(title)
@@ -37,7 +37,7 @@ func build_ui() -> void:
 	
 	var stats_vbox = VBoxContainer.new()
 	var stats_title = Label.new()
-	stats_title.text = "📊 RECORDES MUNDIAIS & ESTATÍSTICAS GLOBAIS"
+	stats_title.text = Database.tr_text("HIST_RECORDS")
 	stats_title.add_theme_color_override("font_color", Color("#38bdf8"))
 	stats_title.add_theme_font_size_override("font_size", 16)
 	stats_vbox.add_child(stats_title)
@@ -58,13 +58,17 @@ func build_ui() -> void:
 			most_titles_driver = d
 			
 	var d_wins_name = most_wins_driver.get("Nome", "Nenhum")
-	var d_wins_cnt = str(most_wins_driver.get("VitoriasCarreira", 0)) + " Vitórias"
+	var d_wins_cnt = Database.tr_text("HIST_WINS_COUNT") % str(most_wins_driver.get("VitoriasCarreira", 0))
 	var d_titles_name = most_titles_driver.get("Nome", "Nenhum")
-	var d_titles_cnt = str(most_titles_driver.get("Titulos", 0)) + " Títulos"
+	var d_titles_cnt = Database.tr_text("HIST_TITLES_COUNT") % str(most_titles_driver.get("Titulos", 0))
 
-	stats_grid.add_child(_create_stat_box("MAIOR VENCEDOR DA HISTÓRIA", d_wins_name, d_wins_cnt))
-	stats_grid.add_child(_create_stat_box("MAIOR CAMPEÃO MUNDIAL", d_titles_name, d_titles_cnt))
-	stats_grid.add_child(_create_stat_box("ERA ATUAL DO CAMPEONATO", "Ano " + str(Database.current_year), "GP " + str(Database.current_gp) + "/24"))
+	stats_grid.add_child(_create_stat_box(Database.tr_text("HIST_MOST_WINS"), d_wins_name, d_wins_cnt))
+	stats_grid.add_child(_create_stat_box(Database.tr_text("HIST_MOST_TITLES"), d_titles_name, d_titles_cnt))
+	stats_grid.add_child(_create_stat_box(
+		Database.tr_text("HIST_CURRENT_ERA"),
+		Database.tr_text("HIST_YEAR") % str(Database.current_year),
+		Database.tr_text("HIST_GP_COUNT") % str(Database.current_gp)
+	))
 	
 	stats_vbox.add_child(stats_grid)
 	stats_panel.add_child(stats_vbox)
@@ -76,7 +80,7 @@ func build_ui() -> void:
 	
 	var hall_vbox = VBoxContainer.new()
 	var hall_title = Label.new()
-	hall_title.text = "👑 GALERIA DE CAMPEÕES MUNDIAIS"
+	hall_title.text = Database.tr_text("HIST_CHAMPIONS")
 	hall_title.add_theme_color_override("font_color", Color("#eab308"))
 	hall_title.add_theme_font_size_override("font_size", 16)
 	hall_vbox.add_child(hall_title)
@@ -90,14 +94,14 @@ func build_ui() -> void:
 		champions = Database.champions_history
 		
 	if champions.is_empty():
-		hall_text.append_text("[color=#94a3b8]Nenhum campeão registrado no save atual. Conclua os 24 GPs da temporada.[/color]\n")
+		hall_text.append_text("[color=#94a3b8]" + Database.tr_text("HIST_NO_CHAMPIONS") + "[/color]\n")
 	else:
 		for champ in champions:
 			var c_ano = str(champ.get("ano", "-"))
 			var c_piloto = str(champ.get("piloto", "-"))
 			var c_equipe = str(champ.get("equipe", "-"))
 			var c_pontos = str(champ.get("pontos", 0))
-			hall_text.append_text("🏆 [b]Ano " + c_ano + "[/b]: " + c_piloto + " (" + c_equipe + ") - " + c_pontos + " pts\n")
+			hall_text.append_text(Database.tr_text("HIST_CHAMPION_ROW") % [c_ano, c_piloto, c_equipe, c_pontos])
 			
 	hall_vbox.add_child(hall_text)
 	hall_panel.add_child(hall_vbox)
@@ -112,7 +116,7 @@ func build_ui() -> void:
 	
 	var filter_hbox = HBoxContainer.new()
 	var race_title = Label.new()
-	race_title.text = "🏁 HISTÓRICO DE CORRIDAS"
+	race_title.text = Database.tr_text("HIST_RACES")
 	race_title.add_theme_color_override("font_color", Color("#ef4444"))
 	race_title.add_theme_font_size_override("font_size", 16)
 	filter_hbox.add_child(race_title)
@@ -120,17 +124,17 @@ func build_ui() -> void:
 	filter_hbox.add_child(VSeparator.new())
 	
 	var filter_lbl = Label.new()
-	filter_lbl.text = "Filtrar Temporada:"
+	filter_lbl.text = Database.tr_text("HIST_FILTER_SEASON")
 	filter_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 	filter_hbox.add_child(filter_lbl)
 	
 	var opt = OptionButton.new()
-	opt.add_item(str(Database.current_year) + " (Em andamento)", Database.current_year)
+	opt.add_item(Database.tr_text("HIST_SEASON_CURRENT") % str(Database.current_year), Database.current_year)
 	
 	if "full_season_archive" in Database:
 		for y in Database.full_season_archive.keys():
 			if int(y) != Database.current_year:
-				opt.add_item("Temporada " + str(y), int(y))
+				opt.add_item(Database.tr_text("HIST_SEASON") % str(y), int(y))
 				
 	for i in range(opt.item_count):
 		if opt.get_item_id(i) == selected_year:
@@ -160,7 +164,7 @@ func build_ui() -> void:
 		
 	if target_history == null or target_history.is_empty():
 		var empty_lbl = Label.new()
-		empty_lbl.text = "Nenhuma corrida concluída na temporada " + str(selected_year) + "."
+		empty_lbl.text = Database.tr_text("HIST_NO_RACES") % str(selected_year)
 		empty_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 		race_list_vbox.add_child(empty_lbl)
 	else:
@@ -180,7 +184,7 @@ func build_ui() -> void:
 			var track_name = rh.get("track", rh.get("Circuito", "GP"))
 
 			var gp_lbl = Label.new()
-			gp_lbl.text = "GP " + str(gp_num_val) + " - " + str(track_name)
+			gp_lbl.text = Database.tr_text("HIST_GP_TRACK") % [str(gp_num_val), str(track_name)]
 			gp_lbl.add_theme_font_size_override("font_size", 14)
 			gp_lbl.add_theme_color_override("font_color", Color("#38bdf8"))
 			hbox.add_child(gp_lbl)

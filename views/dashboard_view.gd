@@ -155,7 +155,7 @@ func build_ui() -> void:
 	_build_track_info_content(track_win.get_content_node(), track_curr)
 	_apply_fixed_transform(track_win, Vector2(col4_x, margin_y + col4_h1 + gap_y), Vector2(col_w, col4_h2))
 
-	var final_panel_title := "Finanças" if str(Database.game_mode) == "manager" else Database.tr_text("PANEL_FAST_SIM")
+	var final_panel_title := Database.tr_text("PANEL_FINANCES") if str(Database.game_mode) == "manager" else Database.tr_text("PANEL_FAST_SIM")
 	var final_panel := _create_resizable_window("fast_sim_panel", final_panel_title, canvas)
 	if str(Database.game_mode).to_lower() == "manager":
 		var finances_content := final_panel.get_content_node()
@@ -201,7 +201,7 @@ func _build_season_stats_content(parent: Control) -> void:
 
 	# ABA 1: RIVALIDADES
 	var tab_rivalry = MarginContainer.new()
-	tab_rivalry.name = "⚔️ Rivalidades"
+	tab_rivalry.name = Database.tr_text("TAB_RIVALRIES")
 	tab_rivalry.add_theme_constant_override("margin_left", 6)
 	tab_rivalry.add_theme_constant_override("margin_top", 6)
 	tab_rivalry.add_theme_constant_override("margin_right", 6)
@@ -212,7 +212,7 @@ func _build_season_stats_content(parent: Control) -> void:
 
 	# ABA 2: PILOTOS
 	var tab_drivers = MarginContainer.new()
-	tab_drivers.name = "Pilotos"
+	tab_drivers.name = Database.tr_text("TAB_DRIVERS")
 	tab_drivers.add_theme_constant_override("margin_left", 6)
 	tab_drivers.add_theme_constant_override("margin_top", 6)
 	tab_drivers.add_theme_constant_override("margin_right", 6)
@@ -223,7 +223,7 @@ func _build_season_stats_content(parent: Control) -> void:
 
 	# ABA 3: EQUIPES
 	var tab_teams = MarginContainer.new()
-	tab_teams.name = "Equipes"
+	tab_teams.name = Database.tr_text("TAB_TEAMS")
 	tab_teams.add_theme_constant_override("margin_left", 6)
 	tab_teams.add_theme_constant_override("margin_top", 6)
 	tab_teams.add_theme_constant_override("margin_right", 6)
@@ -251,13 +251,13 @@ func _build_rivalry_tab(parent: Control) -> void:
 	var gap = p1_pts - p2_pts
 
 	var title_lbl = Label.new()
-	title_lbl.text = "🏆 Disputa do Título"
+	title_lbl.text = Database.tr_text("DASH_TITLE_BATTLE")
 	title_lbl.add_theme_font_size_override("font_size", 12)
 	title_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
 	vbox.add_child(title_lbl)
 
 	var title_battle_lbl = Label.new()
-	title_battle_lbl.text = "• %s (%dP) vs %s (%dP)\n  ➔ Diferença: %d pts" % [p1_name, p1_pts, p2_name, p2_pts, gap]
+	title_battle_lbl.text = Database.tr_text("DASH_BATTLE_SCORE") % [p1_name, p1_pts, p2_name, p2_pts, Database.tr_text("DASH_GAP"), gap]
 	title_battle_lbl.add_theme_font_size_override("font_size", 11)
 	title_battle_lbl.add_theme_color_override("font_color", Color("#e2e8f0"))
 	vbox.add_child(title_battle_lbl)
@@ -278,16 +278,16 @@ func _build_rivalry_tab(parent: Control) -> void:
 		var t_gap = t1_points - t2_points
 
 		var const_title = Label.new()
-		const_title.text = "🏎️ Disputa de Construtores"
+		const_title.text = Database.tr_text("DASH_CONSTRUCTORS_BATTLE")
 		const_title.add_theme_font_size_override("font_size", 12)
 		const_title.add_theme_color_override("font_color", Color("#38bdf8"))
 		vbox.add_child(const_title)
 
 		var const_lbl = Label.new()
-		const_lbl.text = "• %s (%dP) vs %s (%dP)\n  ➔ Diferença: %d pts" % [
+		const_lbl.text = Database.tr_text("DASH_BATTLE_SCORE") % [
 			t1.get("Nome", "-"), t1_points,
 			t2.get("Nome", "-"), t2_points,
-			t_gap
+		Database.tr_text("DASH_GAP"), t_gap
 		]
 		const_lbl.add_theme_font_size_override("font_size", 11)
 		const_lbl.add_theme_color_override("font_color", Color("#cbd5e1"))
@@ -326,11 +326,11 @@ func _build_driver_stats_tab(parent: Control) -> void:
 	var best_gained = _find_best_driver_stat(active_drivers, "PosicoesGanhaAno", true)
 	var best_lost = _find_best_driver_stat(active_drivers, "PosicoesPerdidasAno", false)
 
-	_add_stat_row(vbox, "🥇 Mais vitórias:", _format_stat_driver(best_wins, "VitoriasAno", ""), Color("#22c55e"))
-	_add_stat_row(vbox, "💥 Mais abandonos:", _format_stat_driver(best_dnfs, "DNFsAno", ""), Color("#ef4444"))
-	_add_stat_row(vbox, "🔥 Sequência pontuando:", _format_stat_driver(best_streak, "SequenciaPontos", " GPs"), Color("#38bdf8"))
-	_add_stat_row(vbox, "📈 Mais posições ganhas:", _format_stat_driver(best_gained, "PosicoesGanhaAno", ""), Color("#22c55e"))
-	_add_stat_row(vbox, "📉 Mais posições perdidas:", _format_stat_driver(best_lost, "PosicoesPerdidasAno", ""), Color("#f59e0b"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_WINS"), _format_stat_driver(best_wins, "VitoriasAno", ""), Color("#22c55e"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_DNFS"), _format_stat_driver(best_dnfs, "DNFsAno", ""), Color("#ef4444"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_STREAK"), _format_stat_driver(best_streak, "SequenciaPontos", Database.tr_text("DASH_POINTS_SUFFIX")), Color("#38bdf8"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_POSITIONS_GAINED"), _format_stat_driver(best_gained, "PosicoesGanhaAno", ""), Color("#22c55e"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_POSITIONS_LOST"), _format_stat_driver(best_lost, "PosicoesPerdidasAno", ""), Color("#f59e0b"))
 
 	scroll.add_child(vbox)
 	parent.add_child(scroll)
@@ -378,11 +378,11 @@ func _build_team_stats_tab(parent: Control) -> void:
 	var best_gained = _find_best_team_stat(teams_list, "PosicoesGanhaAno", true)
 	var best_lost = _find_best_team_stat(teams_list, "PosicoesPerdidasAno", false)
 
-	_add_stat_row(vbox, "🥇 Mais vitórias:", _format_stat_team(best_wins, "VitoriasAno", ""), Color("#22c55e"))
-	_add_stat_row(vbox, "💥 Mais abandonos:", _format_stat_team(best_dnfs, "DNFsAno", ""), Color("#ef4444"))
-	_add_stat_row(vbox, "🔥 Sequência pontuando:", _format_stat_team(best_streak, "SequenciaPontos", " GPs"), Color("#38bdf8"))
-	_add_stat_row(vbox, "📈 Mais posições ganhas:", _format_stat_team(best_gained, "PosicoesGanhaAno", ""), Color("#22c55e"))
-	_add_stat_row(vbox, "📉 Mais posições perdidas:", _format_stat_team(best_lost, "PosicoesPerdidasAno", ""), Color("#f59e0b"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_WINS"), _format_stat_team(best_wins, "VitoriasAno", ""), Color("#22c55e"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_DNFS"), _format_stat_team(best_dnfs, "DNFsAno", ""), Color("#ef4444"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_STREAK"), _format_stat_team(best_streak, "SequenciaPontos", Database.tr_text("DASH_POINTS_SUFFIX")), Color("#38bdf8"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_POSITIONS_GAINED"), _format_stat_team(best_gained, "PosicoesGanhaAno", ""), Color("#22c55e"))
+	_add_stat_row(vbox, Database.tr_text("DASH_STAT_POSITIONS_LOST"), _format_stat_team(best_lost, "PosicoesPerdidasAno", ""), Color("#f59e0b"))
 
 	scroll.add_child(vbox)
 	parent.add_child(scroll)
@@ -426,11 +426,11 @@ func _find_best_team_stat(teams: Array, key: String, prefer_better_pos: bool) ->
 	return best_team if max_val > 0 else {}
 
 func _format_stat_driver(driver: Dictionary, key: String, suffix: String) -> String:
-	if driver.is_empty(): return "Nenhum ainda"
+	if driver.is_empty(): return Database.tr_text("DASH_STAT_NO_LEADER")
 	return str(driver.get("Nome", "-")) + " (" + str(int(driver.get(key, 0))) + suffix + ")"
 
 func _format_stat_team(team: Dictionary, key: String, suffix: String) -> String:
-	if team.is_empty(): return "Nenhuma ainda"
+	if team.is_empty(): return Database.tr_text("DASH_STAT_NO_LEADER")
 	return str(team.get("Nome", "-")) + " (" + str(int(team.get(key, 0))) + suffix + ")"
 
 func _add_stat_row(container: VBoxContainer, label_text: String, value_text: String, val_color: Color) -> void:
@@ -543,12 +543,12 @@ func _build_teams_content(parent: Control, active_drivers: Array) -> void:
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 6)
 	
-	_add_grid_header(grid, "POS", 28)
-	_add_grid_header(grid, "EQUIPE", 110)
-	_add_grid_header(grid, "PTS", 45)
-	_add_grid_header(grid, "VIT", 30)
-	_add_grid_header(grid, "POD", 30)
-	_add_grid_header(grid, "DNF", 30)
+	_add_grid_header(grid, Database.tr_text("COL_POS"), 28)
+	_add_grid_header(grid, Database.tr_text("COL_TEAM"), 110)
+	_add_grid_header(grid, Database.tr_text("COL_PTS"), 45)
+	_add_grid_header(grid, Database.tr_text("COL_WINS"), 30)
+	_add_grid_header(grid, Database.tr_text("COL_PODIUMS"), 30)
+	_add_grid_header(grid, Database.tr_text("COL_DNFS"), 30)
 	
 	var team_stats: Dictionary = {}
 	for t in Database.teams:
@@ -589,7 +589,7 @@ func _build_teams_content(parent: Control, active_drivers: Array) -> void:
 	for st in sorted_teams:
 		_add_cell(grid, str(t_pos) + "º")
 		_add_cell(grid, str(st["Nome"]))
-		_add_cell(grid, str(st["Pontos"]) + " pts")
+		_add_cell(grid, str(st["Pontos"]) + " " + Database.tr_text("COL_PTS"))
 		_add_cell(grid, str(st["Vitorias"]))
 		_add_cell(grid, str(st["Podios"]))
 		
@@ -612,7 +612,7 @@ func _build_market_content(parent: Control) -> void:
 	parent.add_child(tab_container)
 
 	var tab_contracts = MarginContainer.new()
-	tab_contracts.name = "Contratos"
+	tab_contracts.name = Database.tr_text("DASH_MARKET_TAB_CONTRACTS")
 	tab_contracts.add_theme_constant_override("margin_left", 4)
 	tab_contracts.add_theme_constant_override("margin_top", 4)
 	tab_contracts.add_theme_constant_override("margin_right", 4)
@@ -658,7 +658,8 @@ func _build_market_content(parent: Control) -> void:
 		
 		# Célula Equipe
 		var t_color = Color("#64748b") if team_str == "Aposentado" else (Color("#38bdf8") if team_str == "Free Agent" else Color("#e2e8f0"))
-		_add_micro_cell(grid_c, team_str, t_color)
+		var display_team: String = Database.tr_text("DASH_MARKET_FREE") if team_str == "Free Agent" else (Database.tr_text("DASH_RETIRED") if team_str == "Aposentado" else team_str)
+		_add_micro_cell(grid_c, display_team, t_color)
 		
 		# Célula Contrato
 		var c_color = Color("#64748b") if team_str == "Aposentado" else (Color("#f59e0b") if c_years <= 1 and team_str != "Free Agent" else Color("#94a3b8"))
@@ -674,7 +675,7 @@ func _build_market_content(parent: Control) -> void:
 		_add_micro_cell(grid_c, str(morale_val) + "%", m_color)
 
 	var tab_negotiations = MarginContainer.new()
-	tab_negotiations.name = "Interesses"
+	tab_negotiations.name = Database.tr_text("DASH_MARKET_TAB_INTERESTS")
 	tab_negotiations.add_theme_constant_override("margin_left", 4)
 	tab_negotiations.add_theme_constant_override("margin_top", 4)
 	tab_negotiations.add_theme_constant_override("margin_right", 4)
@@ -703,19 +704,25 @@ func _build_market_content(parent: Control) -> void:
 			rumor_lbl.add_theme_font_size_override("font_size", 11)
 
 			if current_team == "Free Agent":
-				rumor_lbl.text = "• " + d_name + " (Livre): Em busca de assento."
+				rumor_lbl.text = Database.tr_text("DASH_RUMOR_FREE") % d_name
 				rumor_lbl.add_theme_color_override("font_color", Color("#94a3b8"))
 			elif morale < 40:
-				rumor_lbl.text = "• " + d_name + ": Insatisfeito na " + current_team + " (Aberto a propostas)."
+				rumor_lbl.text = Database.tr_text("DASH_RUMOR_UNSATISFIED") % [d_name, current_team]
 				rumor_lbl.add_theme_color_override("font_color", Color("#ef4444"))
 			else:
-				rumor_lbl.text = "• " + d_name + ": Final de contrato na " + current_team + "."
+				rumor_lbl.text = Database.tr_text("DASH_RUMOR_CONTRACT_END") % [d_name, current_team]
 				rumor_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
 
 			vbox_n.add_child(rumor_lbl)
 
+	if vbox_n.get_child_count() == 0:
+		var empty_interests := Label.new()
+		empty_interests.text = Database.tr_text("DASH_MARKET_NO_INTERESTS")
+		empty_interests.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vbox_n.add_child(empty_interests)
+
 	var tab_history = MarginContainer.new()
-	tab_history.name = "Histórico"
+	tab_history.name = Database.tr_text("DASH_MARKET_TAB_HISTORY")
 	tab_history.add_theme_constant_override("margin_left", 4)
 	tab_history.add_theme_constant_override("margin_top", 4)
 	tab_history.add_theme_constant_override("margin_right", 4)
@@ -750,9 +757,9 @@ func _build_market_content(parent: Control) -> void:
 			h_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			h_lbl.add_theme_font_size_override("font_size", 11)
 			
-			var detail = str(item.get("detalhe", ""))
+			var detail = _format_transfer_history_detail(item)
 			var type_str = str(item.get("tipo", ""))
-			h_lbl.text = "• [%s - GP %d] %s" % [
+			h_lbl.text = Database.tr_text("DASH_TRANSFER_HISTORY_ITEM") % [
 				str(item.get("temporada", Database.current_year)),
 				int(item.get("gp_num", 1)),
 				detail
@@ -793,18 +800,45 @@ func _build_market_content(parent: Control) -> void:
 
 	if not has_items:
 		var empty_lbl = Label.new()
-		empty_lbl.text = "Nenhuma transferência registrada nesta temporada."
+		empty_lbl.text = Database.tr_text("DASH_TRANSFER_EMPTY")
 		empty_lbl.add_theme_font_size_override("font_size", 11)
 		empty_lbl.add_theme_color_override("font_color", Color("#64748b"))
 		vbox_h.add_child(empty_lbl)
 
-	# 3. Mensagem padrão caso não exista nenhum evento
-	if not has_items:
-		var empty_lbl = Label.new()
-		empty_lbl.text = "Nenhuma transferência registrada nesta temporada."
-		empty_lbl.add_theme_font_size_override("font_size", 11)
-		empty_lbl.add_theme_color_override("font_color", Color("#64748b"))
-		vbox_h.add_child(empty_lbl)
+func _format_transfer_history_detail(item: Dictionary) -> String:
+	var detail := str(item.get("detalhe", ""))
+	var name := str(item.get("nome", ""))
+	var team := str(item.get("equipe", ""))
+	var years := int(item.get("anos", 1))
+	var event_type := str(item.get("tipo", ""))
+
+	match event_type:
+		"Contratação":
+			if not name.is_empty() and not team.is_empty():
+				return Database.tr_text("DASH_TRANSFER_SIGNED") % [name, team, years]
+		"Promoção":
+			if not name.is_empty() and not team.is_empty():
+				return Database.tr_text("DASH_TRANSFER_PROMOTED") % [name, team]
+		"Renovação":
+			if not name.is_empty() and not team.is_empty():
+				return Database.tr_text("NEWS_RENEWAL") % [name, team, years]
+		"Demissão":
+			if not name.is_empty() and not team.is_empty():
+				return Database.tr_text("DASH_TRANSFER_FIRED") % [name, team]
+		"Rescisão":
+			if not name.is_empty() and not team.is_empty():
+				return Database.tr_text("DASH_TRANSFER_RESIGNED") % [name, team]
+		"Aposentadoria":
+			if not name.is_empty():
+				return Database.tr_text("DASH_TRANSFER_RETIRED") % [name, int(item.get("idade", 25))]
+		"Transferência":
+			if not name.is_empty() and not team.is_empty():
+				return Database.tr_text("DASH_TRANSFER_MOVED") % [name, team]
+		"Estreia":
+			if not name.is_empty() and not team.is_empty():
+				return Database.tr_text("DASH_TRANSFER_DEBUT") % [name, team]
+
+	return detail
 
 func _build_calendar_content(parent: Control, current_track_idx: int) -> void:
 	if parent == null: return
@@ -816,9 +850,9 @@ func _build_calendar_content(parent: Control, current_track_idx: int) -> void:
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 6)
 	
-	_add_grid_header(grid, "GP", 35)
-	_add_grid_header(grid, "CIRCUITO", 130)
-	_add_grid_header(grid, "STATUS", 85)
+	_add_grid_header(grid, Database.tr_text("COL_GP"), 35)
+	_add_grid_header(grid, Database.tr_text("COL_CIRCUIT"), 130)
+	_add_grid_header(grid, Database.tr_text("COL_STATUS"), 85)
 	
 	var total_tracks = Database.tracks.size()
 	var min_idx = max(0, current_track_idx - 1)
@@ -827,14 +861,14 @@ func _build_calendar_content(parent: Control, current_track_idx: int) -> void:
 	for i in range(min_idx, max_idx + 1):
 		var gp_num = i + 1
 		var track = Database.tracks[i]
-		var status_text = "🗓️ Futura"
+		var status_text = Database.tr_text("DASH_CAL_FUTURE")
 		var text_color = Color("#94a3b8")
 		
 		if i < current_track_idx:
-			status_text = "✅ Concluída"
+			status_text = Database.tr_text("DASH_CAL_COMPLETE")
 			text_color = Color("#22c55e")
 		elif i == current_track_idx:
-			status_text = "▶ ATUAL"
+			status_text = Database.tr_text("DASH_CAL_CURRENT")
 			text_color = Color("#ef4444")
 			
 		_add_cell(grid, "GP " + str(gp_num), text_color)
@@ -859,27 +893,27 @@ func _build_track_info_content(parent: Control, track: Dictionary) -> void:
 	vbox_details.add_theme_constant_override("separation", 4)
 
 	var track_lbl = Label.new()
-	track_lbl.text = "📍 " + str(track.get("Nome", "")) + " (" + str(track.get("Voltas", 58)) + " Voltas)"
+	track_lbl.text = Database.tr_text("DASH_TRACK_LAPS") % [str(track.get("Nome", "")), str(track.get("Voltas", 58))]
 	track_lbl.add_theme_font_size_override("font_size", 13)
 	track_lbl.add_theme_color_override("font_color", Color("#ffffff"))
 	vbox_details.add_child(track_lbl)
 
 	var chance_rain = int(float(track.get("ChanceChuva", 0.20)) * 100)
 	var rain_lbl = Label.new()
-	rain_lbl.text = "🌧️ Probabilidade de Chuva: " + str(chance_rain) + "%"
+	rain_lbl.text = Database.tr_text("DASH_RAIN_CHANCE") % str(chance_rain)
 	rain_lbl.add_theme_font_size_override("font_size", 12)
 	rain_lbl.add_theme_color_override("font_color", Color("#38bdf8") if chance_rain > 30 else Color("#94a3b8"))
 	vbox_details.add_child(rain_lbl)
 
 	var wear_lbl = Label.new()
-	wear_lbl.text = "🏎️ Desgaste de Pneus estimado: Média / Alta"
+	wear_lbl.text = Database.tr_text("DASH_TIRE_WEAR")
 	wear_lbl.add_theme_font_size_override("font_size", 12)
 	wear_lbl.add_theme_color_override("font_color", Color("#f59e0b"))
 	vbox_details.add_child(wear_lbl)
 
 	var zones_count = str(track.get("ZonasDRS", track.get("drs_zones", 2)))
 	var ultrapassagem_lbl = Label.new()
-	ultrapassagem_lbl.text = "⚡ Zonas de Ultrapassagem: " + zones_count + " Zonas"
+	ultrapassagem_lbl.text = Database.tr_text("DASH_OVERTAKE_ZONES") % zones_count
 	ultrapassagem_lbl.add_theme_font_size_override("font_size", 12)
 	ultrapassagem_lbl.add_theme_color_override("font_color", Color("#22c55e"))
 	vbox_details.add_child(ultrapassagem_lbl)
@@ -891,7 +925,7 @@ func _build_track_info_content(parent: Control, track: Dictionary) -> void:
 		winner_text += " (" + last_winner_team + ")"
 
 	var winner_lbl = Label.new()
-	winner_lbl.text = "🏆 Última Vitória: " + winner_text
+	winner_lbl.text = Database.tr_text("DASH_LAST_WINNER") % winner_text
 	winner_lbl.add_theme_font_size_override("font_size", 12)
 	winner_lbl.add_theme_color_override("font_color", Color("#38bdf8"))
 	vbox_details.add_child(winner_lbl)
@@ -941,7 +975,7 @@ func _build_tech_power_content(parent: Control) -> void:
 
 	# ABA 1: RANKING DO GRID (POWER INDEX)
 	var tab_grid = MarginContainer.new()
-	tab_grid.name = "Ranking do Grid"
+	tab_grid.name = Database.tr_text("DASH_TECH_GRID_RANK")
 	tab_grid.add_theme_constant_override("margin_left", 6)
 	tab_grid.add_theme_constant_override("margin_top", 6)
 	tab_grid.add_theme_constant_override("margin_right", 6)
@@ -956,9 +990,9 @@ func _build_tech_power_content(parent: Control) -> void:
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 5)
 
-	_add_grid_header(grid, "POS", 30)
-	_add_grid_header(grid, "EQUIPE", 120)
-	_add_grid_header(grid, "POWER INDEX", 90)
+	_add_grid_header(grid, Database.tr_text("COL_POS"), 30)
+	_add_grid_header(grid, Database.tr_text("COL_TEAM"), 120)
+	_add_grid_header(grid, Database.tr_text("DASH_TECH_POWER_INDEX"), 90)
 
 	var teams_power = []
 	for t in Database.teams:
@@ -973,7 +1007,7 @@ func _build_tech_power_content(parent: Control) -> void:
 	for tp in teams_power:
 		_add_cell(grid, str(rank) + "º", Color("#ffffff"))
 		_add_cell(grid, str(tp["Nome"]), Color("#ffffff"))
-		_add_cell(grid, str(snapped(tp["Power"], 0.1)) + " Pts", Color("#38bdf8"))
+		_add_cell(grid, str(snapped(tp["Power"], 0.1)) + " " + Database.tr_text("COL_PTS"), Color("#38bdf8"))
 		rank += 1
 
 	scroll.add_child(grid)
@@ -981,7 +1015,7 @@ func _build_tech_power_content(parent: Control) -> void:
 
 	# ABA 2: LÍDERES POR QUESITO TÉCNICO
 	var tab_top = MarginContainer.new()
-	tab_top.name = "Líderes do Grid"
+	tab_top.name = Database.tr_text("DASH_TECH_GRID_LEADERS")
 	tab_top.add_theme_constant_override("margin_left", 6)
 	tab_top.add_theme_constant_override("margin_top", 6)
 	tab_top.add_theme_constant_override("margin_right", 6)
@@ -1002,11 +1036,11 @@ func _build_tech_power_content(parent: Control) -> void:
 	var best_reliability = _find_best_team_by_stat("Confiabilidade")
 	var best_overall = _find_best_team_by_overall()
 
-	_add_leader_stat_bar(vbox_top, "Melhor Motor", best_engine, "Motor", Color("#ef4444"))
-	_add_leader_stat_bar(vbox_top, "Melhor Aerodinâmica", best_aero, "Aero", Color("#22c55e"))
-	_add_leader_stat_bar(vbox_top, "Melhor Chassi", best_chassis, "Chassi", Color("#facc15"))
-	_add_leader_stat_bar(vbox_top, "Melhor Confiabilidade", best_reliability, "Confiabilidade", Color("#a855f7"))
-	_add_leader_stat_bar(vbox_top, "Melhor Carro (Overall)", best_overall, "Overall", Color("#38bdf8"))
+	_add_leader_stat_bar(vbox_top, Database.tr_text("DASH_TECH_ENGINE"), best_engine, "Motor", Color("#ef4444"))
+	_add_leader_stat_bar(vbox_top, Database.tr_text("DASH_TECH_AERO"), best_aero, "Aero", Color("#22c55e"))
+	_add_leader_stat_bar(vbox_top, Database.tr_text("DASH_TECH_CHASSIS"), best_chassis, "Chassi", Color("#facc15"))
+	_add_leader_stat_bar(vbox_top, Database.tr_text("DASH_TECH_RELIABILITY"), best_reliability, "Confiabilidade", Color("#a855f7"))
+	_add_leader_stat_bar(vbox_top, Database.tr_text("DASH_TECH_OVERALL"), best_overall, "Overall", Color("#38bdf8"))
 
 	scroll_top.add_child(vbox_top)
 	tab_top.add_child(scroll_top)
@@ -1150,9 +1184,9 @@ func _build_news_content(parent: Control, track_name: String, gp_num: int) -> vo
 		var news_content = RichTextLabel.new()
 		news_content.custom_minimum_size.y = 80
 		news_content.add_theme_font_size_override("normal_font_size", 12)
-		news_content.append_text("• Paddock movimentado para as preparações do GP " + str(gp_num) + " em " + track_name + ".\n")
-		news_content.append_text("• Equipes finalizando ajustes técnicos e estratégias de pneus para a sessão de qualificação.\n")
-		news_content.append_text("• Expectativas altas do público e da imprensa sobre a disputa de ritmo entre as equipes.")
+		news_content.append_text((Database.tr_text("DASH_NEWS_FALLBACK_1") % [str(gp_num), track_name]) + "\n")
+		news_content.append_text(Database.tr_text("DASH_NEWS_FALLBACK_2") + "\n")
+		news_content.append_text(Database.tr_text("DASH_NEWS_FALLBACK_3"))
 		vbox.add_child(news_content)
 	else:
 		for item in Database.news_feed:
@@ -1177,8 +1211,8 @@ func _build_fast_sim_content(parent: Control) -> void:
 	hbox_controls.add_theme_constant_override("separation", 8)
 
 	var opt_type = OptionButton.new()
-	opt_type.add_item("Corridas (GP)", 0)
-	opt_type.add_item("Temporadas", 1)
+	opt_type.add_item(Database.tr_text("DASH_FAST_SIM_RACES"), 0)
+	opt_type.add_item(Database.tr_text("DASH_FAST_SIM_SEASONS"), 1)
 	opt_type.custom_minimum_size.x = 110
 	hbox_controls.add_child(opt_type)
 
@@ -1201,7 +1235,7 @@ func _build_fast_sim_content(parent: Control) -> void:
 	)
 
 	var btn_simulate = Button.new()
-	btn_simulate.text = "▶ SIMULAR EM LOTE"
+	btn_simulate.text = Database.tr_text("DASH_BATCH_SIMULATE")
 	btn_simulate.custom_minimum_size.y = 30
 	btn_simulate.add_theme_color_override("font_color", Color("#ffffff"))
 	
@@ -1253,7 +1287,7 @@ func _show_fast_sim_modal(by_season: bool, amount: int) -> void:
 	vbox.add_theme_constant_override("separation", 14)
 
 	var lbl_title = Label.new()
-	lbl_title.text = "CONFIRMAR SIMULAÇÃO ACELERADA"
+	lbl_title.text = Database.tr_text("DASH_BATCH_TITLE")
 	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_title.add_theme_font_size_override("font_size", 15)
 	lbl_title.add_theme_color_override("font_color", Color("#ef4444"))
@@ -1261,9 +1295,9 @@ func _show_fast_sim_modal(by_season: bool, amount: int) -> void:
 
 	var lbl_msg = Label.new()
 	if by_season:
-		lbl_msg.text = "Tem certeza de que deseja simular automaticamente %d temporada(s) completa(s)?" % amount
+		lbl_msg.text = Database.tr_text("DASH_BATCH_SEASONS_CONFIRM") % amount
 	else:
-		lbl_msg.text = "Tem certeza de que deseja simular automaticamente %d corrida(s) (GP)?" % amount
+		lbl_msg.text = Database.tr_text("DASH_BATCH_RACES_CONFIRM") % amount
 
 	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1272,7 +1306,7 @@ func _show_fast_sim_modal(by_season: bool, amount: int) -> void:
 	vbox.add_child(lbl_msg)
 
 	var lbl_sub = Label.new()
-	lbl_sub.text = "Essa ação irá processar os resultados e atualizações de forma acelerada."
+	lbl_sub.text = Database.tr_text("DASH_BATCH_WARNING")
 	lbl_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl_sub.add_theme_font_size_override("font_size", 11)
@@ -1283,7 +1317,7 @@ func _show_fast_sim_modal(by_season: bool, amount: int) -> void:
 	btn_hbox.add_theme_constant_override("separation", 12)
 
 	var btn_confirm = Button.new()
-	btn_confirm.text = "⚡ Sim, Simular"
+	btn_confirm.text = Database.tr_text("DASH_BATCH_YES")
 	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_confirm.custom_minimum_size.y = 38
 	btn_confirm.add_theme_font_size_override("font_size", 12)
@@ -1299,7 +1333,7 @@ func _show_fast_sim_modal(by_season: bool, amount: int) -> void:
 	)
 
 	var btn_cancel = Button.new()
-	btn_cancel.text = "Cancelar"
+	btn_cancel.text = Database.tr_text("DASH_BATCH_CANCEL")
 	btn_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_cancel.custom_minimum_size.y = 38
 	btn_cancel.add_theme_font_size_override("font_size", 12)
@@ -1482,10 +1516,10 @@ func _populate_market_contract_box(grid_container: GridContainer) -> void:
 			lbl_contract.text = "-"
 			lbl_contract.add_theme_color_override("font_color", Color("#64748b"))
 		elif team_name == "Free Agent":
-			lbl_contract.text = "Livre"
+			lbl_contract.text = Database.tr_text("DASH_MARKET_FREE")
 			lbl_contract.add_theme_color_override("font_color", Color("#38bdf8"))
 		else:
-			lbl_contract.text = str(contract_years) + (" ano" if contract_years == 1 else " anos")
+			lbl_contract.text = str(contract_years) + " " + Database.tr_text("DASH_CONTRACT_YEAR" if contract_years == 1 else "DASH_CONTRACT_YEARS")
 			if contract_years == 1:
 				lbl_contract.add_theme_color_override("font_color", Color("#eab308")) # Amarelo alertando último ano
 			else:
@@ -1552,7 +1586,9 @@ class DriversEvolutionChart extends Control:
 					var dist = mouse_p.distance_to(point_pos)
 					if dist < min_dist:
 						min_dist = dist
-						closest_info = str(d.get("Nome", "Piloto")) + " (" + eq + ")\nGP " + str(i + 1) + ": " + str(champ_pos) + "º no Campeonato"
+						closest_info = Database.tr_text("DASH_CHART_TOOLTIP") % [
+							str(d.get("Nome", "Piloto")), eq, i + 1, champ_pos
+						]
 
 		if hover_driver_info != closest_info:
 			hover_driver_info = closest_info
@@ -1582,7 +1618,7 @@ class DriversEvolutionChart extends Control:
 			var norm_y = float(pos - 1) / float(max_position_scale - 1.0)
 			var y = margin_top + (norm_y * plot_h)
 			draw_line(Vector2(margin_left, y), Vector2(rect_size.x - margin_right, y), Color(1, 1, 1, 0.08), 1.0)
-			draw_string(ThemeDB.fallback_font, Vector2(6, y + 4), str(pos) + "º", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#ffffff"))
+			draw_string(ThemeDB.fallback_font, Vector2(6, y + 4), str(pos), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#ffffff"))
 
 		# Eixo X: Marcadores dos GPs
 		var total_tracks = Database.tracks.size() if Database.get("tracks") != null else 24
@@ -1720,10 +1756,10 @@ func _build_dashboard_finances(parent: Control) -> void:
 		hbox.add_child(val)
 		vbox.add_child(hbox)
 
-	add_entry.call("GANHOS NA TEMPORADA", "+$%.1fM" % total_income, Color("#34d399"))
-	add_entry.call("GASTOS NA TEMPORADA", "-$%.1fM" % total_expenses, Color("#ef4444"))
+	add_entry.call(Database.tr_text("DASH_FINANCE_INCOME"), "+$%.1fM" % total_income, Color("#34d399"))
+	add_entry.call(Database.tr_text("DASH_FINANCE_EXPENSES"), "-$%.1fM" % total_expenses, Color("#ef4444"))
 
 	var current_cash = float(Database.user_team.get("orcamento", Database.user_team.get("budget", 0.0)))
-	add_entry.call("CAIXA RESTANTE", "$%.1fM" % current_cash, Color("#38bdf8"))
+	add_entry.call(Database.tr_text("DASH_FINANCE_CASH"), "$%.1fM" % current_cash, Color("#38bdf8"))
 
 	parent.add_child(vbox)

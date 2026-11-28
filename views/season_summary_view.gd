@@ -46,7 +46,7 @@ func _build_summary(summary: Dictionary) -> void:
 	panel.add_child(layout)
 
 	var title := Label.new()
-	title.text = "FIM DA TEMPORADA %d" % int(summary.get("year", Database.current_year))
+	title.text = Database.tr_text("SEASON_SUMMARY_TITLE") % int(summary.get("year", Database.current_year))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 26)
 	title.add_theme_color_override("font_color", Color("#facc15"))
@@ -65,23 +65,23 @@ func _build_summary(summary: Dictionary) -> void:
 
 	var driver_champion: Dictionary = summary.get("driver_champion", {})
 	var constructor_champion: Dictionary = summary.get("constructor_champion", {})
-	_add_line(content, "🏆 Campeão de pilotos: %s — %d pontos" % [
+	_add_line(content, Database.tr_text("SEASON_SUMMARY_DRIVER_CHAMPION") % [
 		str(driver_champion.get("Nome", "Indefinido")),
 		int(driver_champion.get("Pontos", 0))
 	], Color("#ffffff"), 18)
-	_add_line(content, "🏆 Campeã de construtores: %s — %d pontos" % [
+	_add_line(content, Database.tr_text("SEASON_SUMMARY_CONSTRUCTOR_CHAMPION") % [
 		str(constructor_champion.get("Nome", "Indefinida")),
 		int(constructor_champion.get("Pontos", 0))
 	], Color("#ffffff"), 18)
 
 	if str(Database.game_mode) == "manager":
 		var manager_drivers: Array = summary.get("manager_drivers", [])
-		_add_line(content, "Sua equipe: %s" % str(summary.get("manager_team", "Equipe")), Color("#38bdf8"), 15)
+		_add_line(content, Database.tr_text("SEASON_SUMMARY_TEAM") % str(summary.get("manager_team", "Equipe")), Color("#38bdf8"), 15)
 		if manager_drivers.is_empty():
-			_add_line(content, "Não há pilotos da equipe registrados nesta temporada.", Color("#94a3b8"), 13)
+			_add_line(content, Database.tr_text("SEASON_SUMMARY_NO_DRIVERS"), Color("#94a3b8"), 13)
 		else:
 			for driver in manager_drivers:
-				_add_line(content, "%s — %d pts | %d vitórias | %d pódios | %d DNFs" % [
+				_add_line(content, Database.tr_text("SEASON_SUMMARY_DRIVER_STATS") % [
 					str(driver.get("Nome", "Piloto")),
 					int(driver.get("Pontos", 0)),
 					int(driver.get("VitoriasAno", 0)),
@@ -90,18 +90,18 @@ func _build_summary(summary: Dictionary) -> void:
 				], Color("#e2e8f0"), 13)
 
 	content.add_child(HSeparator.new())
-	_add_line(content, "Destaques da temporada", Color("#38bdf8"), 15)
-	_add_stat_line(content, "Mais vitórias", summary.get("wins_leader", {}), "VitoriasAno")
-	_add_stat_line(content, "Mais posições ganhas", summary.get("positions_leader", {}), "PosicoesGanhaAno")
-	_add_stat_line(content, "Mais DNFs", summary.get("dnfs_leader", {}), "DNFsAno")
+	_add_line(content, Database.tr_text("SEASON_SUMMARY_HIGHLIGHTS"), Color("#38bdf8"), 15)
+	_add_stat_line(content, Database.tr_text("SEASON_SUMMARY_MOST_WINS"), summary.get("wins_leader", {}), "VitoriasAno")
+	_add_stat_line(content, Database.tr_text("SEASON_SUMMARY_MOST_POSITIONS"), summary.get("positions_leader", {}), "PosicoesGanhaAno")
+	_add_stat_line(content, Database.tr_text("SEASON_SUMMARY_MOST_DNFS"), summary.get("dnfs_leader", {}), "DNFsAno")
 
 	var standings: Array = summary.get("driver_standings", [])
 	if not standings.is_empty():
 		content.add_child(HSeparator.new())
-		_add_line(content, "Classificação final — pilotos", Color("#38bdf8"), 15)
+		_add_line(content, Database.tr_text("SEASON_SUMMARY_DRIVER_STANDINGS"), Color("#38bdf8"), 15)
 		for i in range(standings.size()):
 			var driver: Dictionary = standings[i]
-			_add_line(content, "P%d  %s (%s) — %d pts" % [
+			_add_line(content, Database.tr_text("SEASON_SUMMARY_STANDING_ROW") % [
 				i + 1,
 				str(driver.get("Nome", "Piloto")),
 				str(driver.get("Equipe", "Equipe")),
@@ -109,7 +109,7 @@ func _build_summary(summary: Dictionary) -> void:
 			], Color("#e2e8f0"), 12)
 
 	var continue_button := Button.new()
-	continue_button.text = "Iniciar próxima temporada"
+	continue_button.text = Database.tr_text("SEASON_SUMMARY_CONTINUE")
 	continue_button.custom_minimum_size.y = 42
 	continue_button.pressed.connect(func():
 		if continue_callback.is_valid():
@@ -120,7 +120,7 @@ func _build_summary(summary: Dictionary) -> void:
 
 func _add_stat_line(parent: VBoxContainer, title: String, driver_data: Variant, stat_key: String) -> void:
 	var driver: Dictionary = driver_data if driver_data is Dictionary else {}
-	_add_line(parent, "%s: %s — %d" % [
+	_add_line(parent, Database.tr_text("SEASON_SUMMARY_STAT_LINE") % [
 		title,
 		str(driver.get("Nome", "—")),
 		int(driver.get(stat_key, 0))

@@ -458,14 +458,14 @@ func _show_manager_difficulty_modal() -> void:
 	margin.add_child(layout)
 
 	var title := Label.new()
-	title.text = "ESCOLHA A DIFICULDADE"
+	title.text = Database.tr_text("DIFFICULTY_TITLE")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color("#ef4444"))
 	layout.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "Os modificadores afetam somente a sua equipe."
+	subtitle.text = Database.tr_text("DIFFICULTY_SUBTITLE")
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_color_override("font_color", Color("#94a3b8"))
 	layout.add_child(subtitle)
@@ -473,28 +473,28 @@ func _show_manager_difficulty_modal() -> void:
 	var difficulties := [
 		{
 			"id": "easy",
-			"name": "FÁCIL",
+			"name": Database.tr_text("DIFFICULTY_EASY_NAME"),
 			"color": Color("#34d399"),
-			"description": "−50% penalidade por teto excedido  |  −75% custo por DNF\n−50% custo de melhorias  |  +10% bônus nas melhorias\n−30% fabricação de chassi/motor  |  +10% chance de contratação de alto OVR\n−10% chance de DNF  |  +15% pagamentos de patrocinadores"
+			"description": Database.tr_text("DIFFICULTY_EASY_DESC")
 		},
 		{
 			"id": "normal",
-			"name": "NORMAL",
+			"name": Database.tr_text("DIFFICULTY_NORMAL_NAME"),
 			"color": Color("#e2e8f0"),
 			"recommended": true,
-			"description": "Dificuldade padrão, sem alterações."
+			"description": Database.tr_text("DIFFICULTY_NORMAL_DESC")
 		},
 		{
 			"id": "hard",
-			"name": "DIFÍCIL",
+			"name": Database.tr_text("DIFFICULTY_HARD_NAME"),
 			"color": Color("e75f03ff"),
-			"description": "+50% penalidade por teto excedido  |  +30% custo por DNF\n+25% custo de melhorias  |  +20% fabricação de chassi/motor\n−15% chance de contratação de alto OVR  |  +1,5% chance de DNF\n−5% pagamentos de patrocinadores"
+			"description": Database.tr_text("DIFFICULTY_HARD_DESC")
 		},
 		{
 			"id": "extreme",
-			"name": "EXTREMO",
+			"name": Database.tr_text("DIFFICULTY_EXTREME_NAME"),
 			"color": Color("#ef4444"),
-			"description": "+100% penalidade por teto excedido  |  +45% custo por DNF\n+33% custo de melhorias  |  +33% fabricação de chassi/motor\n−30% chance de contratação de alto OVR  |  +3% chance de DNF\n−10% pagamentos de patrocinadores"
+			"description": Database.tr_text("DIFFICULTY_EXTREME_DESC")
 		}
 	]
 
@@ -504,7 +504,7 @@ func _show_manager_difficulty_modal() -> void:
 		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		option.text = "%s%s\n%s" % [
 			str(difficulty["name"]),
-			"  • RECOMENDADO" if bool(difficulty.get("recommended", false)) else "",
+			"  " + Database.tr_text("DIFFICULTY_RECOMMENDED") if bool(difficulty.get("recommended", false)) else "",
 			str(difficulty["description"])
 		]
 		option.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -516,7 +516,7 @@ func _show_manager_difficulty_modal() -> void:
 		layout.add_child(option)
 
 	var back_button := Button.new()
-	back_button.text = "VOLTAR"
+	back_button.text = Database.tr_text("BTN_BACK")
 	back_button.custom_minimum_size.y = 38
 	back_button.pressed.connect(func():
 		if is_instance_valid(active_modal):

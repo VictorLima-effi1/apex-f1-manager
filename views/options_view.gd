@@ -10,6 +10,9 @@ var check_reduce_sc: CheckButton
 var opt_language: OptionButton
 var btn_credits: Button
 var credits_modal: Control = null
+var lbl_save_playtime: Label
+var lbl_total_playtime: Label
+var playtime_refresh_elapsed: float = 0.0
 
 # Variáveis locais temporárias (salvam a alteração apenas se clicar em Salvar)
 var temp_ui_scale: float
@@ -40,6 +43,12 @@ func _ready() -> void:
 	
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	build_ui()
+
+func _process(delta: float) -> void:
+	playtime_refresh_elapsed += delta
+	if playtime_refresh_elapsed >= 1.0:
+		playtime_refresh_elapsed = 0.0
+		_refresh_playtime_labels()
 
 func build_ui() -> void:
 	for child in get_children():
@@ -83,9 +92,9 @@ func build_ui() -> void:
 	# --- 1. MODO DE EXIBIÇÃO ---
 	_add_field_label(grid, Database.tr_text("DISPLAY_MODE"))
 	opt_window_mode = OptionButton.new()
-	opt_window_mode.add_item("Janela (Windowed)", 0)
-	opt_window_mode.add_item("Tela Cheia (Fullscreen)", 1)
-	opt_window_mode.add_item("Janela sem Bordas (Borderless)", 2)
+	opt_window_mode.add_item(Database.tr_text("WINDOW_MODE_WINDOWED"), 0)
+	opt_window_mode.add_item(Database.tr_text("WINDOW_MODE_FULLSCREEN"), 1)
+	opt_window_mode.add_item(Database.tr_text("WINDOW_MODE_BORDERLESS"), 2)
 	opt_window_mode.selected = temp_window_mode
 	opt_window_mode.item_selected.connect(func(idx): temp_window_mode = idx)
 	grid.add_child(opt_window_mode)
@@ -158,6 +167,17 @@ func build_ui() -> void:
 	)
 	grid.add_child(opt_language)
 
+	_add_field_label(grid, Database.tr_text("PLAYTIME_SAVE_LABEL"))
+	lbl_save_playtime = Label.new()
+	lbl_save_playtime.add_theme_color_override("font_color", Color("#38bdf8"))
+	grid.add_child(lbl_save_playtime)
+
+	_add_field_label(grid, Database.tr_text("PLAYTIME_TOTAL_LABEL"))
+	lbl_total_playtime = Label.new()
+	lbl_total_playtime.add_theme_color_override("font_color", Color("#38bdf8"))
+	grid.add_child(lbl_total_playtime)
+	_refresh_playtime_labels()
+
 	# --- 6. CRÉDITOS ---
 	_add_field_label(grid, Database.tr_text("SETTINGS_ABOUT"))
 	btn_credits = Button.new()
@@ -195,6 +215,20 @@ func _add_field_label(parent: Control, text: String) -> void:
 	lbl.add_theme_font_size_override("font_size", 14)
 	lbl.add_theme_color_override("font_color", Color("#cbd5e1"))
 	parent.add_child(lbl)
+
+func _refresh_playtime_labels() -> void:
+	if is_instance_valid(lbl_save_playtime):
+		lbl_save_playtime.text = _format_playtime(Database.current_save_playtime_seconds) \
+			if Database.has_active_save else Database.tr_text("PLAYTIME_NO_SAVE")
+	if is_instance_valid(lbl_total_playtime):
+		lbl_total_playtime.text = _format_playtime(Database.total_playtime_seconds)
+
+func _format_playtime(seconds: float) -> String:
+	var total_seconds := maxi(0, int(seconds))
+	var hours := int(total_seconds / 3600)
+	var minutes := int((total_seconds % 3600) / 60)
+	var remaining_seconds := total_seconds % 60
+	return Database.tr_text("PLAYTIME_FORMAT") % [hours, minutes, remaining_seconds]
 
 # --- MODAL DE CRÉDITOS ---
 
@@ -288,7 +322,6 @@ func _save_and_close() -> void:
 
 	# 4. Aplica as novas Opções (Safety Car e Idioma)
 	Database.reduce_speed_on_sc = temp_reduce_sc
-	Database.current_language = temp_language
 	Database.set_language(temp_language)
 
 	_close_options()

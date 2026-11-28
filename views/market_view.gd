@@ -74,13 +74,13 @@ func build_ui() -> void:
 	tables_hbox.add_theme_constant_override("separation", 12)
 	
 	# Tabela 1: Titulares
-	var active_section = _build_table_section("🏎️ PILOTOS COM EQUIPE (TITULARES)", active_drivers, true)
+	var active_section = _build_table_section(Database.tr_text("MARKET_ACTIVE_TITLE"), active_drivers, true)
 	tutorial_active_table = active_section
 	active_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tables_hbox.add_child(active_section)
 	
 	# Tabela 2: Free Agents
-	var free_section = _build_table_section("📋 AGENTES LIVRES (FREE AGENTS)", free_agents, false)
+	var free_section = _build_table_section(Database.tr_text("MARKET_FREE_TITLE"), free_agents, false)
 	tutorial_free_table = free_section
 	free_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tables_hbox.add_child(free_section)
@@ -159,19 +159,19 @@ func _build_table_section(section_title: String, driver_list: Array, is_active_t
 	rows.add_theme_constant_override("separation", 4)
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 6)
-	_add_sortable_header(header, "PILOTO", "Nome", 100, is_active_table)
-	_add_sortable_header(header, "IDADE", "Idade", 40, is_active_table)
-	_add_sortable_header(header, "OVR", "Overall", 40, is_active_table)
-	_add_sortable_header(header, "RITMO", "Ritmo", 40, is_active_table)
-	_add_sortable_header(header, "MORAL", "Moral", 45, is_active_table)
+	_add_sortable_header(header, Database.tr_text("MARKET_DRIVER"), "Nome", 100, is_active_table)
+	_add_sortable_header(header, Database.tr_text("MARKET_AGE"), "Idade", 40, is_active_table)
+	_add_sortable_header(header, Database.tr_text("MARKET_OVR"), "Overall", 40, is_active_table)
+	_add_sortable_header(header, Database.tr_text("MARKET_PACE"), "Ritmo", 40, is_active_table)
+	_add_sortable_header(header, Database.tr_text("MARKET_MORALE"), "Moral", 45, is_active_table)
 	if is_active_table:
-		_add_sortable_header(header, "EQUIPE", "Equipe", 90, true)
-		_add_header_text(header, "CONTRATO", 65)
+		_add_sortable_header(header, Database.tr_text("MARKET_TEAM"), "Equipe", 90, true)
+		_add_header_text(header, Database.tr_text("MARKET_CONTRACT"), 65)
 	else:
-		_add_header_text(header, "SITUAÇÃO", 110)
+		_add_header_text(header, Database.tr_text("MARKET_SITUATION"), 110)
 	var can_negotiate := str(Database.game_mode) == "manager"
 	if can_negotiate:
-		_add_header_text(header, "AÇÃO", 92)
+		_add_header_text(header, Database.tr_text("MARKET_ACTION"), 92)
 	rows.add_child(header)
 
 	for d in driver_list:
@@ -185,7 +185,7 @@ func _build_table_section(section_title: String, driver_list: Array, is_active_t
 		var c_years: int = int(d.get("AnosContrato", 0))
 		var years_str: String = "-"
 		if team != "Free Agent" and team != "Aposentado":
-			years_str = str(c_years) + (" ano" if c_years == 1 else " anos")
+			years_str = str(c_years) + " " + Database.tr_text("YEAR_SINGLE" if c_years == 1 else "YEAR_PLURAL")
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		_add_market_cell(row, d_name, Color("#ffffff"), 100)
@@ -208,8 +208,8 @@ func _build_table_section(section_title: String, driver_list: Array, is_active_t
 		if can_negotiate:
 			var action_button := Button.new()
 			var is_player_driver := _is_player_team(str(d.get("Equipe", "")))
-			action_button.text = "Renovar" if is_player_driver else "Negociar"
-			action_button.tooltip_text = "Abrir negociação de contrato"
+			action_button.text = Database.tr_text("MARKET_RENEW") if is_player_driver else Database.tr_text("MARKET_NEGOTIATE")
+			action_button.tooltip_text = Database.tr_text("MARKET_OPEN_NEGOTIATION")
 			action_button.custom_minimum_size = Vector2(92, 26)
 			action_button.add_theme_font_size_override("font_size", 11)
 			
@@ -221,12 +221,12 @@ func _build_table_section(section_title: String, driver_list: Array, is_active_t
 
 	if not is_active_table:
 		var search = LineEdit.new()
-		search.placeholder_text = "Buscar piloto pelo nome..."
+		search.placeholder_text = Database.tr_text("TEAM_DRIVER_SEARCH")
 		search.clear_button_enabled = true
 		search.custom_minimum_size.y = 34
 		vbox.add_child(search)
 		var no_results = Label.new()
-		no_results.text = "Nenhum piloto encontrado."
+		no_results.text = Database.tr_text("TEAM_DRIVER_NONE_FOUND")
 		no_results.visible = false
 		no_results.add_theme_color_override("font_color", Color("#94a3b8"))
 		vbox.add_child(no_results)
@@ -316,19 +316,19 @@ func _on_negotiate_driver_pressed(target_driver: Dictionary) -> void:
 
 func _show_driver_release_choice(target_driver: Dictionary, manager_team: String, roster: Array) -> void:
 	var dialog := Window.new()
-	dialog.title = "Escolher piloto para liberar"
+	dialog.title = Database.tr_text("MARKET_DRIVER_RELEASE_TITLE")
 	dialog.size = Vector2i(430, 210)
 	dialog.exclusive = true
 	dialog.close_requested.connect(func(): dialog.queue_free())
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 12)
 	var title := Label.new()
-	title.text = "👥 ESCOLHER PILOTO PARA LIBERAR"
+	title.text = Database.tr_text("MARKET_DRIVER_RELEASE_TITLE")
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color("#ef4444"))
 	layout.add_child(title)
 	var prompt := Label.new()
-	prompt.text = "Sua equipe já tem dois pilotos. Escolha quem deixará a vaga para %s." % str(target_driver.get("Nome", "o novo piloto"))
+	prompt.text = Database.tr_text("MARKET_DRIVER_RELEASE_PROMPT") % str(target_driver.get("Nome", ""))
 	prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(prompt)
 	var choice := OptionButton.new()
@@ -337,7 +337,7 @@ func _show_driver_release_choice(target_driver: Dictionary, manager_team: String
 	layout.add_child(choice)
 	var actions := HBoxContainer.new()
 	var confirm := Button.new()
-	confirm.text = "Continuar para negociação"
+	confirm.text = Database.tr_text("MARKET_CONTINUE_NEGOTIATION")
 	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	confirm.pressed.connect(func():
 		var selected_index := choice.get_selected_id()
@@ -347,7 +347,7 @@ func _show_driver_release_choice(target_driver: Dictionary, manager_team: String
 	)
 	actions.add_child(confirm)
 	var cancel := Button.new()
-	cancel.text = "Cancelar"
+	cancel.text = Database.tr_text("EDITOR_CANCEL")
 	cancel.pressed.connect(func(): dialog.queue_free())
 	actions.add_child(cancel)
 	layout.add_child(actions)
@@ -416,7 +416,7 @@ func _build_transfer_history_panel(parent_container: Control) -> void:
 	vbox.add_theme_constant_override("separation", 6)
 	
 	var lbl_title = Label.new()
-	lbl_title.text = "🔄 HISTÓRICO DE TRANSFERÊNCIAS RECENTES"
+	lbl_title.text = Database.tr_text("MARKET_TRANSFER_HISTORY")
 	lbl_title.add_theme_font_size_override("font_size", 12)
 	lbl_title.add_theme_color_override("font_color", Color("#38bdf8"))
 	vbox.add_child(lbl_title)
@@ -469,13 +469,13 @@ func _create_transfer_card(data: Dictionary) -> PanelContainer:
 	vbox.add_child(l_name)
 	
 	var l_info = Label.new()
-	l_info.text = "Idade: %d yrs | Contrato: %d ano(s)" % [int(data.get("idade", 25)), int(data.get("anos", 1))]
+	l_info.text = Database.tr_text("MARKET_DRIVER_INFO") % [int(data.get("idade", 25)), int(data.get("anos", 1))]
 	l_info.add_theme_font_size_override("font_size", 10)
 	l_info.add_theme_color_override("font_color", Color("#94a3b8"))
 	vbox.add_child(l_info)
 	
 	var l_team = Label.new()
-	l_team.text = "✍️ Contratado por: %s" % str(data.get("equipe", "Equipe"))
+	l_team.text = Database.tr_text("MARKET_SIGNED_BY") % str(data.get("equipe", ""))
 	l_team.add_theme_font_size_override("font_size", 10)
 	l_team.add_theme_color_override("font_color", Color("#34d399"))
 	vbox.add_child(l_team)
@@ -486,13 +486,15 @@ func _create_transfer_card(data: Dictionary) -> PanelContainer:
 func _get_driver_situation(d_name: String, team: String) -> Dictionary:
 	if Database.get("driver_market_data") != null and Database.driver_market_data.has(d_name):
 		var data = Database.driver_market_data[d_name]
-		var status_txt = data.get("status", "Sem Contrato (Livre)")
+		var status_txt = str(data.get("status", Database.tr_text("MARKET_NO_CONTRACT")))
+		if status_txt == "Sem Contrato (Livre)":
+			status_txt = Database.tr_text("MARKET_NO_CONTRACT")
 		var col = "#ef4444"
 		if "Interesse" in status_txt or "Negociação" in status_txt:
 			col = "#38bdf8"
 		return {"text": status_txt, "color": col}
 		
-	return {"text": "Sem Contrato (Livre)", "color": "#ef4444"}
+	return {"text": Database.tr_text("MARKET_NO_CONTRACT"), "color": "#ef4444"}
 
 func _build_my_team_contracts_panel(parent_container: Control) -> void:
 	var panel = PanelContainer.new()
@@ -511,7 +513,7 @@ func _build_my_team_contracts_panel(parent_container: Control) -> void:
 	vbox.add_theme_constant_override("separation", 4)
 	
 	var lbl_title = Label.new()
-	lbl_title.text = "📜 GESTÃO DE CONTRATOS DA SUA EQUIPE"
+	lbl_title.text = Database.tr_text("MARKET_TEAM_CONTRACTS")
 	lbl_title.add_theme_font_size_override("font_size", 12)
 	lbl_title.add_theme_color_override("font_color", Color("#38bdf8"))
 	vbox.add_child(lbl_title)
@@ -530,13 +532,13 @@ func _build_my_team_contracts_panel(parent_container: Control) -> void:
 		card.add_child(l_d)
 		
 		var l_c = Label.new()
-		l_c.text = "Contrato: %d Ano(s) Restante(s)" % int(d.get("contrato_anos", d.get("AnosContrato", 1)))
+		l_c.text = Database.tr_text("MARKET_CONTRACT_REMAINING") % int(d.get("contrato_anos", d.get("AnosContrato", 1)))
 		l_c.add_theme_font_size_override("font_size", 11)
 		l_c.add_theme_color_override("font_color", Color("#34d399"))
 		card.add_child(l_c)
 		
 		var btn_renew = Button.new()
-		btn_renew.text = "🔄 Renovar Contrato"
+		btn_renew.text = Database.tr_text("MARKET_RENEW_CONTRACT")
 		btn_renew.add_theme_font_size_override("font_size", 10)
 		btn_renew.pressed.connect(func(): _renew_driver_contract(i))
 		card.add_child(btn_renew)

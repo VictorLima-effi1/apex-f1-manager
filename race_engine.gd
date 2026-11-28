@@ -68,6 +68,11 @@ func format_session_clock(time_sec: float) -> String:
 	var secs = int(time_sec) % 60
 	return "%02d:%02d" % [mins, secs]
 
+func _tr(key: String) -> String:
+	if Database.has_method("tr_text"):
+		return Database.tr_text(key)
+	return key
+
 func _get_base_track_lap_time() -> float:
 	var km = float(track.get("ComprimentoKM", 5.278))
 	var kmh = float(track.get("VelocidadeMediaKMH", 220.0))
@@ -136,15 +141,15 @@ func setup_race(selected_track: Dictionary) -> void:
 	if is_wet_race:
 		rain_intensity = randf_range(1.0, 2.0)
 		water_level = randf_range(15.0, 35.0)
-		weather_state = "🌧️ Chuva Leve"
-		weather_forecast = "🌧️ Chuva Contínua"
-		race_logs.append("🌧️ CLIMA: Início de sessão sob chuva leve (" + str(snapped(water_level, 1.0)) + "% de água na pista).")
+		weather_state = _tr("RACE_WEATHER_LIGHT_RAIN")
+		weather_forecast = _tr("RACE_WEATHER_LIGHT_RAIN")
+		race_logs.append(_tr("RACE_LOG_START_RAIN") % str(snapped(water_level, 1.0)))
 	else:
 		rain_intensity = 0.0
 		water_level = 0.0
-		weather_state = "☀️ Ensolarado"
-		weather_forecast = "☀️ Tempo Limpo"
-		race_logs.append("☀️ CLIMA: Pista seca e tempo limpo para a largada.")
+		weather_state = _tr("RACE_WEATHER_SUNNY")
+		weather_forecast = _tr("RACE_WEATHER_SUNNY")
+		race_logs.append(_tr("RACE_LOG_START_DRY"))
 	if water_level <= 0.0:
 		track_grip = randf_range(0.0, 40.0)
 
@@ -175,6 +180,7 @@ func setup_race(selected_track: Dictionary) -> void:
 			entry["manager_controlled"] = _is_manager_controlled_team(eq_name)
 			entry["pit_requested"] = false
 			entry["pit_requested_tire"] = ""
+			entry["pit_requested_driving_style"] = ""
 			entry["red_flag_strategy_confirmed"] = false
 			entry["pre_race_strategy_confirmed"] = false
 			
@@ -358,7 +364,7 @@ func _advance_quali_session() -> void:
 		active_quali_drivers = next_drivers
 		active_quali_drivers.sort_custom(func(a, b): return a["Nome"] < b["Nome"])
 		quali_phase = "Q2"
-		race_logs.append("🏁 FIM DO Q1: 7 pilotos eliminados.")
+		race_logs.append(_tr("RACE_LOG_Q1_END"))
 		
 	elif quali_phase == "Q2":
 		active_quali_drivers.sort_custom(func(a, b):
@@ -405,7 +411,7 @@ func _advance_quali_session() -> void:
 		active_quali_drivers = next_drivers
 		active_quali_drivers.sort_custom(func(a, b): return a["Nome"] < b["Nome"])
 		quali_phase = "Q3"
-		race_logs.append("🏁 FIM DO Q2: 7 pilotos eliminados.")
+		race_logs.append(_tr("RACE_LOG_Q2_END"))
 		
 	elif quali_phase == "Q3":
 		full_grid.clear()
@@ -437,7 +443,7 @@ func _advance_quali_session() -> void:
 		# --- ZERA A ADERÊNCIA PARA O INÍCIO DA CORRIDA ---
 		if water_level <= 0.0:
 			track_grip = randf_range(0.0, 40.0)
-		race_logs.append("🏁 QUALIFICAÇÃO CONCLUÍDA! Grid de largada pronto.")
+		race_logs.append(_tr("RACE_LOG_QUALI_COMPLETE"))
 
 func _compare_lap_times(time_a: float, time_b: float, name_a: String, name_b: String) -> bool:
 	if time_a >= 900.0 and time_b >= 900.0: return name_a < name_b
@@ -494,7 +500,7 @@ func process_lap() -> Dictionary:
 				break
 		if missing_manager_compound:
 			if not manager_tire_rule_warning_logged:
-				race_logs.append("⚠️ Regra de pneus: chame seus pilotos ao box antes da última volta para usar um segundo composto.")
+				race_logs.append(_tr("RACE_LOG_TIRE_RULE"))
 				manager_tire_rule_warning_logged = true
 			return {"finished": false, "awaiting_manager_pit": true}
 		manager_tire_rule_warning_logged = false
@@ -533,7 +539,7 @@ func process_lap() -> Dictionary:
 			d["is_in_pit"] = false
 			d["dnf"] = true
 			d["abandonou"] = true
-			lap_events.append("⚙️ ABANDONO MECÂNICO: " + d["Nome"] + " (" + d["Equipe"] + ") teve uma falha de motor/câmbio na volta " + str(current_lap) + ".")
+			lap_events.append(_tr("RACE_LOG_MECHANICAL_DNF") % [d["Nome"], d["Equipe"], current_lap])
 			continue
 
 		var compound = str(d.get("tire_compound", "Medium"))
@@ -544,6 +550,10 @@ func process_lap() -> Dictionary:
 		elif safety_car_status == "YELLOW":
 			wear_rate *= 0.7
 		var pace_time_modifier := 0.0
+		if bool(d.get("manager_controlled", false)) and bool(d.get("pit_requested", false)):
+			var pit_strategy_style := str(d.get("pit_requested_driving_style", ""))
+			if not pit_strategy_style.is_empty():
+				d["estilo"] = pit_strategy_style
 		match str(d.get("estilo", "Normal")):
 			"Conservador":
 				pace_time_modifier = 0.35
@@ -569,10 +579,11 @@ func process_lap() -> Dictionary:
 			var manager_requested_pit := bool(d.get("pit_requested", false))
 			needs_pit = remaining_laps > 0 and manager_requested_pit
 			if needs_pit:
-				var requested_compound := str(d.get("pit_requested_tire", ""))
+				var requested_compound := str(d.get("planned_pit_tire", d.get("pit_requested_tire", "")))
 				target_compound = requested_compound if not requested_compound.is_empty() else compound
 				d["pit_requested"] = false
 				d["pit_requested_tire"] = ""
+				d["pit_requested_driving_style"] = ""
 		elif remaining_laps > 0:
 			if ideal_compound in ["Wet", "Inter"] and compound != ideal_compound:
 				needs_pit = true
@@ -616,7 +627,7 @@ func process_lap() -> Dictionary:
 			if randf() < error_chance:
 				var extra_time = randf_range(2.5, 5.0)
 				base_stop_duration += extra_time
-				pit_error_msg = " ⚠️ ERRO NO PIT STOP (+%ss)" % str(snapped(extra_time, 0.1))
+				pit_error_msg = _tr("RACE_LOG_PIT_ERROR") % str(snapped(extra_time, 0.1))
 				
 			var pit_lap_neutralization_multiplier: float = 1.0
 			var pit_lane_loss_multiplier: float = 1.0
@@ -646,7 +657,7 @@ func process_lap() -> Dictionary:
 				if other["Status"] == "Na Pista" and other["TempoTotal"] < d["TempoTotal"]:
 					reenter_pos += 1
 					
-			pit_logs.append("🛠️ Volta %d: %s (%s) — Parada: %ss | Perda no Pit: %ss | Voltou em P%d%s" % [
+			pit_logs.append(_tr("RACE_LOG_PIT_STOP") % [
 				current_lap,
 				d["Nome"],
 				d["Equipe"],
@@ -732,7 +743,7 @@ func process_lap() -> Dictionary:
 			d["dnf"] = true
 			d["abandonou"] = true
 			accident_this_lap = is_crash or accident_this_lap
-			lap_events.append("💥 ABANDONO: " + d["Nome"] + " (" + d["Equipe"] + ") fora no SETOR " + str(accident_sector) + " na volta " + str(current_lap) + ".")
+			lap_events.append(_tr("RACE_LOG_DNF") % [d["Nome"], d["Equipe"], accident_sector, current_lap])
 
 	# Executa os duelos roda a roda em carros com gap < 0.3s
 	if current_lap > 1:
@@ -744,15 +755,15 @@ func process_lap() -> Dictionary:
 		if roll < 0.35:
 			safety_car_status = "SC"
 			safety_car_laps_left = randi_range(2, 3)
-			lap_events.append("🚨 SAFETY CAR ENTROU NA PISTA! (Incidente no Setor " + str(incident_sector) + ")")
+			lap_events.append(_tr("RACE_EVENT_SC") + " (" + str(incident_sector) + ")")
 		elif roll < 0.60:
 			safety_car_status = "VSC"
 			safety_car_laps_left = randi_range(1, 2)
-			lap_events.append("🟡 VIRTUAL SAFETY CAR (VSC) ACIONADO! (Setor " + str(incident_sector) + ")")
+			lap_events.append(_tr("RACE_EVENT_VSC") + " (" + str(incident_sector) + ")")
 		elif roll < 0.85:
 			safety_car_status = "YELLOW"
 			safety_car_laps_left = randi_range(1, 2)
-			lap_events.append("⚠️ BANDEIRA AMARELA NO SETOR " + str(incident_sector) + "!")
+			lap_events.append(_tr("RACE_EVENT_YELLOW") % incident_sector)
 		else:
 			safety_car_status = "RED_FLAG"
 			red_flag_active = true
@@ -761,7 +772,7 @@ func process_lap() -> Dictionary:
 				if bool(driver.get("manager_controlled", false)) and str(driver.get("Status", "")) == "Na Pista":
 					driver["red_flag_strategy_confirmed"] = false
 					driver["red_flag_tire_compound"] = str(driver.get("tire_compound", "Medium"))
-			lap_events.append("🔴 BANDEIRA VERMELHA! Corrida paralisada devido ao acidente no Setor " + str(incident_sector) + ".")
+			lap_events.append(_tr("RACE_EVENT_RED") % incident_sector)
 
 	race_drivers.sort_custom(func(a, b):
 		var a_active = a["Status"] == "Na Pista"
@@ -808,7 +819,7 @@ func process_lap() -> Dictionary:
 		if safety_car_laps_left <= 0:
 			safety_car_status = "NONE"
 			incident_sector = 0
-			lap_events.append("🟢 BANDEIRA VERDE: Pista liberada / SC recolhido.")
+			lap_events.append(_tr("RACE_EVENT_GREEN"))
 
 	race_logs.append_array(lap_events)
 	pit_logs.append_array(lap_pit_events)
@@ -913,7 +924,7 @@ func process_quali_tick(delta: float) -> void:
 				d["quali_retry_allowed"] = false
 				d["force_in_lap"] = true
 				d["quali_lap_duration"] = _get_base_track_lap_time() * 1.08
-				race_logs.append("🏎️ %s deixou os boxes para iniciar uma volta de classificação." % str(d.get("Nome", "Piloto")))
+				race_logs.append(_tr("RACE_LOG_QUALI_LEAVE_PIT") % str(d.get("Nome", "Piloto")))
 			continue
 			
 		d["progress"] = float(d.get("progress", 0.0)) + delta
@@ -953,7 +964,7 @@ func process_quali_tick(delta: float) -> void:
 				d["timer_state"] = randf_range(30.0, 120.0)
 				d["quali_retry_allowed"] = quali_time_elapsed + float(d["timer_state"]) < float(current_limit)
 				d["force_in_lap"] = true
-				race_logs.append("🏁 %s retornou aos boxes após a volta de classificação." % str(d.get("Nome", "Piloto")))
+				race_logs.append(_tr("RACE_LOG_QUALI_RETURN_PIT") % str(d.get("Nome", "Piloto")))
 
 	if quali_checker_flag:
 		var drivers_finished_lap := true
@@ -1005,37 +1016,37 @@ func _process_weather_and_water_accumulation(lap_events: Array, elapsed_time_fac
 			match pending_weather_change:
 				"RAIN_START":
 					rain_intensity = randf_range(1.0, 1.5)
-					weather_state = "🌧️ Chuva Leve"
-					weather_forecast = "🌧️ Chuva em Andamento"
-					lap_events.append("🌧️ COMEÇOU A CHOVER! A umidade começou a subir e a pista perde aderência.")
+					weather_state = _tr("RACE_WEATHER_LIGHT_RAIN")
+					weather_forecast = _tr("RACE_WEATHER_LIGHT_RAIN")
+					lap_events.append(_tr("RACE_EVENT_STARTED_LIGHT_RAIN"))
 				"RAIN_HEAVY":
 					rain_intensity = randf_range(2.0, 3.0)
-					weather_state = "⛈️ Chuva Forte"
-					weather_forecast = "⛈️ Temporal Instável"
-					lap_events.append("⛈️ A CHUVA APERTOU! Intensidade máxima na pista.")
+					weather_state = _tr("RACE_WEATHER_HEAVY_RAIN")
+					weather_forecast = _tr("RACE_WEATHER_HEAVY_RAIN")
+					lap_events.append(_tr("RACE_EVENT_HEAVY_RAIN"))
 				"RAIN_STOP":
 					rain_intensity = 0.0
-					weather_state = "☁️ Nublado"
-					weather_forecast = "☀️ Pista Secando"
-					lap_events.append("☁️ A CHUVA PAROU! A pista começou a secar.")
+					weather_state = _tr("RACE_WEATHER_CLOUDY")
+					weather_forecast = _tr("RACE_WEATHER_SUNNY")
+					lap_events.append(_tr("RACE_EVENT_RAIN_STOPPED"))
 			pending_weather_change = "NONE"
 	else:
 		var chance = track.get("ChanceChuva", 0.20)
 		if rain_intensity == 0.0 and randf() < (chance * 0.005 * elapsed_time_factor):
 			forecast_laps_left = randi_range(3, 6)
 			pending_weather_change = "RAIN_START"
-			weather_forecast = "🌧️ Chuva Prevista"
-			lap_events.append("📡 RADAR METEOROLÓGICO: Nuvens de chuva se aproximando do circuito!")
+			weather_forecast = _tr("RACE_FORECAST_RAIN")
+			lap_events.append(_tr("RACE_LOG_RADAR_RAIN"))
 		elif rain_intensity > 0.0 and randf() < (0.01 * elapsed_time_factor):
 			forecast_laps_left = randi_range(3, 5)
 			if rain_intensity < 2.0 and randf() < 0.4:
 				pending_weather_change = "RAIN_HEAVY"
-				weather_forecast = "⛈️ Tempestade Prevista"
-				lap_events.append("📡 RADAR METEOROLÓGICO: Tempestade se aproximando!")
+				weather_forecast = _tr("RACE_FORECAST_STORM")
+				lap_events.append(_tr("RACE_LOG_RADAR_STORM"))
 			else:
 				pending_weather_change = "RAIN_STOP"
-				weather_forecast = "☀️ Estiagem Prevista"
-				lap_events.append("📡 RADAR METEOROLÓGICO: A chuva deve parar em breve.")
+				weather_forecast = _tr("RACE_FORECAST_DRY")
+				lap_events.append(_tr("RACE_LOG_RADAR_STOP"))
 
 	# One completed lap represents 90 seconds of track evolution.
 	if rain_intensity > 0.0:
@@ -1045,10 +1056,10 @@ func _process_weather_and_water_accumulation(lap_events: Array, elapsed_time_fac
 		track_grip = minf(100.0, track_grip + GRIP_GAIN_PER_DRY_LAP * elapsed_time_factor)
 		if water_level > 0.0:
 			water_level = maxf(0.0, water_level - WATER_DRYING_PER_LAP * elapsed_time_factor)
-			if water_level == 0.0 and weather_state != "☀️ Ensolarado":
-				weather_state = "☀️ Ensolarado"
-				weather_forecast = "☀️ Tempo Limpo"
-				lap_events.append("☀️ A PISTA SECOU COMPLETAMENTE!")
+			if water_level == 0.0 and weather_state != _tr("RACE_WEATHER_SUNNY"):
+				weather_state = _tr("RACE_WEATHER_SUNNY")
+				weather_forecast = _tr("RACE_WEATHER_SUNNY")
+				lap_events.append(_tr("RACE_EVENT_TRACK_DRY"))
 
 func are_manager_red_flag_strategies_confirmed() -> bool:
 	for driver in race_drivers:
@@ -1090,7 +1101,7 @@ func resolve_red_flag_restart() -> bool:
 			race_drivers[i]["TempoTotal"] = accumulated_start_gap
 			accumulated_start_gap += 0.200
 
-	race_logs.append("🟢 RELARGADA EM GRID DE LARGADA REALIZADA NA VOLTA " + str(current_lap) + ".")
+	race_logs.append(_tr("RACE_LOG_RESTART") % current_lap)
 	return true
 
 func _select_next_dry_compound(driver: Dictionary, remaining_laps: int) -> String:
@@ -1133,21 +1144,21 @@ func request_manager_pit_stop(driver_name: String, tire_compound: String = "", d
 		if str(driver.get("Nome", "")).strip_edges().to_lower() != driver_name.strip_edges().to_lower():
 			continue
 		if not bool(driver.get("manager_controlled", false)) or str(driver.get("Status", "")) != "Na Pista":
-			pit_logs.append("⚠️ %s não está disponível para receber uma ordem de box." % driver_name)
+			pit_logs.append(_tr("RACE_LOG_PIT_UNAVAILABLE") % driver_name)
 			return false
 		if current_lap == 0:
 			return confirm_manager_pre_race_strategy(driver_name, tire_compound, driving_style)
 		if pending_red_flag_modal:
 			return confirm_manager_pre_race_strategy(driver_name, tire_compound, driving_style)
 		if bool(driver.get("is_in_pit", false)):
-			pit_logs.append("⚠️ %s já está nos boxes nesta volta." % driver_name)
+			pit_logs.append(_tr("RACE_LOG_PIT_ALREADY") % driver_name)
 			return false
 		if current_lap >= total_laps - 1:
-			pit_logs.append("⚠️ %s não pode parar na última volta." % driver_name)
+			pit_logs.append(_tr("RACE_LOG_PIT_LAST_LAP") % driver_name)
 			return false
 		var requested_compound := _canonical_tire_compound(tire_compound) if not tire_compound.is_empty() else str(driver.get("tire_compound", "Medium"))
 		if not ["Soft", "Medium", "Hard", "Inter", "Wet"].has(requested_compound):
-			pit_logs.append("⚠️ Composto de pneu inválido para %s." % driver_name)
+			pit_logs.append(_tr("RACE_LOG_PIT_INVALID_TIRE") % driver_name)
 			return false
 		var used_dry_compounds := _get_used_dry_compounds(driver)
 		if current_lap >= total_laps - 2 \
@@ -1155,15 +1166,15 @@ func request_manager_pit_stop(driver_name: String, tire_compound: String = "", d
 		and not bool(driver.get("used_rain_tire", false)) \
 		and used_dry_compounds.size() < 2 \
 		and (not _is_dry_tire_compound(requested_compound) or used_dry_compounds.has(requested_compound)):
-			pit_logs.append("⚠️ Na penúltima volta, escolha um composto slick diferente para cumprir a regra dos dois tipos de pneus.")
+			pit_logs.append(_tr("RACE_LOG_PIT_TWO_COMPOUNDS"))
 			return false
 		driver["pit_requested"] = true
 		driver["pit_requested_tire"] = requested_compound
 		driver["planned_pit_tire"] = driver["pit_requested_tire"]
 		if not driving_style.is_empty():
-			driver["estilo"] = driving_style
+			driver["pit_requested_driving_style"] = driving_style
 		return true
-	pit_logs.append("⚠️ Não foi possível localizar %s na corrida." % driver_name)
+	pit_logs.append(_tr("RACE_LOG_PIT_DRIVER_MISSING") % driver_name)
 	return false
 
 func confirm_manager_pre_race_strategy(driver_name: String, tire_compound: String, driving_style: String) -> bool:
